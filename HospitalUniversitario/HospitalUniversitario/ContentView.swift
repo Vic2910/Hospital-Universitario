@@ -8,6 +8,13 @@ struct ContentView: View {
     @State private var showPassword = false
     @State private var code = ""
     @State private var search = ""
+    @State private var selectedSpecialty: UUID?
+    @State private var preferredDate = Date().addingTimeInterval(86400)
+    @State private var preferredFrom = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? Date()
+    @State private var preferredTo = Calendar.current.date(bySettingHour: 10, minute: 0, second: 0, of: Date()) ?? Date()
+    @State private var consultationReason = ""
+    @State private var appointmentKey = UUID()
+    @State private var requestSent = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -287,10 +294,75 @@ struct ContentView: View {
         }
     }
 
+
+    private var requestForm: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            heading("Solicitar cita médica")
+            Text("El hospital confirmará el horario y el médico. La solicitud no es una cita confirmada.")
+                .font(.footnote).foregroundStyle(HospitalTheme.secondary)
+            HospitalCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Paciente").font(.headline)
+                    Text(store.profile?.fullName ?? store.name)
+                    Text("Tu nombre y apellidos provienen del expediente hospitalario. Los datos de edad, teléfono y dirección se administran en tu expediente y no se modifican desde esta solicitud.")
+                        .font(.caption).foregroundStyle(HospitalTheme.secondary)
+                }
+            }
+            HospitalCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Detalles de la consulta").font(.headline)
+                    Picker("Especialidad *", selection: $selectedSpecialty) {
+                        Text("Seleccionar").tag(Optional<UUID>.none)
+                        ForEach(store.appointmentSpecialties) { specialty in
+                            Text(specialty.name).tag(Optional(specialty.id))
+                        }
+                    }
+                    .onChange(of: selectedSpecialty) { _, id in
+                        if let id { Task { await store.loadAppointmentPhysicians(specialty: id) } }
+                    }
+                    if !store.appointmentPhysicians.isEmpty {
+                        Text("Médicos de la especialidad").font(.subheadline.bold())
+                        ForEach(store.appointmentPhysicians) { doctor in
+                            Text(doctor.physician_name).font(.subheadline)
+                        }
+                        Text("La disponibilidad por médico aún no está publicada; estos nombres no representan horarios libres.")
+                            .font(.caption).foregroundStyle(HospitalTheme.secondary)
+                    }
+                    DatePicker("Fecha preferida *", selection: $preferredDate,
+                               in: Date()..., displayedComponents: .date)
+                    DatePicker("Desde *", selection: $preferredFrom, displayedComponents: .hourAndMinute)
+                    DatePicker("Hasta *", selection: $preferredTo, displayedComponents: .hourAndMinute)
+                    Text("Motivo de consulta *").font(.subheadline.bold())
+                    TextEditor(text: $consultationReason).frame(height: 100)
+                        .overlay(RoundedRectangle(cornerRadius: 9).stroke(HospitalTheme.secondary.opacity(0.3)))
+                }
+            }
+            if let notice = store.appointmentNotice {
+                Text(notice).font(.footnote).foregroundStyle(HospitalTheme.wine)
+            }
+            Button("Enviar solicitud") {
+                guard let specialty = selectedSpecialty else { return }
+                Task {
+                    requestSent = await store.sendAppointmentRequest(
+                        specialty: specialty, date: preferredDate, from: preferredFrom,
+                        to: preferredTo, reason: consultationReason, requestKey: appointmentKey)
+                    if requestSent { appointmentKey = UUID() }
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(store.appointmentSending || requestSent || selectedSpecialty == nil ||
+                      consultationReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            if requestSent {
+                Button("Volver a Mis citas") { go("appointments") }
+                    .buttonStyle(.bordered)
+            }
+        }.task { await store.loadAppointmentSpecialties() }
+    }
+
     private var scaffold: some View {
         VStack(alignment: .leading, spacing: 18) {
             heading(screen?.section ?? title)
-            if screen?.layout == "request" || screen?.layout == "consultation" {
+            if screen?.layout == "request" && !isDoctor { requestForm } else if screen?.layout == "consultation" {
                 if screen?.layout == "consultation" { empty("Selecciona un paciente autorizado para continuar.") }
                 ForEach(screen?.fields ?? [], id: \.self) { field in
                     VStack(alignment: .leading, spacing: 8) {
@@ -316,7 +388,7 @@ struct ContentView: View {
                     Button("+ Nueva receta") {}.buttonStyle(.borderedProminent).disabled(true)
                 }
             }
-            if ["request", "consultation", "chart"].contains(screen?.layout ?? "") {
+            if ["consultation", "chart"].contains(screen?.layout ?? "") {
                 Text("Esta vista estará disponible para su uso en la siguiente entrega.").font(.caption).foregroundStyle(HospitalTheme.secondary)
             }
         }
