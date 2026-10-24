@@ -39,6 +39,50 @@ final class HospitalStore: ObservableObject {
         orderedShifts.first { $0.status != "cancelled" && (api?.core.interval($0.period)?.end ?? .distantPast) > Date() }
     }
 
+
+    @Published var appointmentSpecialties: [HospitalAPI.AppointmentSpecialty] = []
+    @Published var appointmentPhysicians: [HospitalAPI.DirectoryPhysician] = []
+    @Published var appointmentNotice: String?
+    @Published var appointmentSending = false
+
+    func loadAppointmentSpecialties() async {
+        guard selectedRole == "patient", let api else { return }
+        do { appointmentSpecialties = try await api.appointmentSpecialties() }
+        catch { appointmentNotice = "No se pudieron cargar especialidades: " + error.localizedDescription }
+    }
+
+    func loadAppointmentPhysicians(specialty: UUID) async {
+        guard let api, let facility = access?.roles.first(where: { $0.code == "patient" })?.facility_id else { return }
+        do { appointmentPhysicians = try await api.appointmentPhysicians(facility: facility, specialty: specialty) }
+        catch { appointmentPhysicians = []; appointmentNotice = "No se pudo consultar el directorio médico." }
+    }
+
+    func sendAppointmentRequest(specialty: UUID, date: Date, from: Date, to: Date, reason: String, requestKey: UUID) async -> Bool {
+        guard !appointmentSending, selectedRole == "patient", let api,
+              let patient = access?.patient_id,
+              let facility = access?.roles.first(where: { $0.code == "patient" })?.facility_id else {
+            appointmentNotice = "Necesitas una cuenta de paciente activa y vinculada."
+            return false
+        }
+        guard !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              date >= Calendar.current.startOfDay(for: Date()), to > from else {
+            appointmentNotice = "Completa el motivo y elige una fecha y horario válidos."
+            return false
+        }
+        appointmentSending = true
+        appointmentNotice = nil
+        defer { appointmentSending = false }
+        do {
+            try await api.requestAppointment(patient: patient, facility: facility, specialty: specialty,
+                                             date: date, from: from, to: to, reason: reason, requestKey: requestKey)
+            appointmentNotice = "Solicitud enviada. El hospital debe confirmar la fecha y asignar el médico."
+            return true
+        } catch {
+            appointmentNotice = "No se pudo enviar la solicitud: " + error.localizedDescription
+            return false
+        }
+    }
+
     func restore() async {
         guard !restored else { return }
         restored = true
