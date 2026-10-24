@@ -173,3 +173,8 @@ El comando anterior no inscribe MFA. La opción `--enroll-totp` está reservada 
 La consulta más reciente del asesor de seguridad informa que la protección de contraseñas filtradas está deshabilitada; no se cambió esa configuración. [Configuración de protección de contraseñas](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection). También persisten seis avisos INFO por RLS sin políticas en tablas de recuperación `hospital_recovery_3fn`, que no se modificaron. [Explicación del aviso](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy).
 
 Las fuentes y decisiones de alcance se conservan en [Contexto iOS](docs/CONTEXTO_IOS.md). El informe anterior es evidencia histórica del backend; sus pruebas no se anuncian como pruebas de esta app.
+
+
+### Solicitud de citas del paciente (rama `feature/paciente-agendar-cita`)
+
+La pantalla **Solicitar atención** permite elegir especialidad, consultar el directorio médico de esa especialidad, indicar fecha y franja preferidas y describir el motivo. Envía una **solicitud pendiente**, no una reserva confirmada, mediante la RPC `request_appointment` del proyecto Supabase; usa el paciente y la sede obtenidos de la sesión, con idempotencia de envío. La ficha de identidad proviene del perfil y no se edita durante la solicitud. No existe aún un endpoint de horarios disponibles por médico ni se ofrece selección de un cupo confirmado. La ejecución y compilación en Xcode aún deben verificarse en Mac.

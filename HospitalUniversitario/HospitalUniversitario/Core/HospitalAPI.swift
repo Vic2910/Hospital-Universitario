@@ -176,6 +176,54 @@ final class HospitalAPI {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
+
+    // El backend registra una solicitud; no reserva automáticamente un cupo médico.
+    struct AppointmentSpecialty: Decodable, Identifiable {
+        let id: UUID
+        let name: String
+    }
+
+    struct DirectoryPhysician: Decodable, Identifiable {
+        let physician_id: UUID
+        let physician_name: String
+        let specialty_id: UUID
+        var id: UUID { physician_id }
+    }
+
+    func appointmentSpecialties() async throws -> [AppointmentSpecialty] {
+        let body = try JSONSerialization.data(withJSONObject: [
+            "p_resource": "specialties", "p_limit": 100, "p_sort": "name"
+        ])
+        let response = try await request("/rest/v1/rpc/read_resource", body: body, token: token())
+        return try JSONDecoder().decode(ResourcePage<AppointmentSpecialty>.self, from: response).data
+    }
+
+    func appointmentPhysicians(facility: UUID, specialty: UUID) async throws -> [DirectoryPhysician] {
+        let body = try JSONSerialization.data(withJSONObject: [
+            "p_facility": facility.uuidString, "p_specialty": specialty.uuidString
+        ])
+        let response = try await request("/rest/v1/rpc/physician_directory", body: body, token: token())
+        return try JSONDecoder().decode([DirectoryPhysician].self, from: response)
+    }
+
+    func requestAppointment(patient: UUID, facility: UUID, specialty: UUID, date: Date, from: Date, to: Date, reason: String, requestKey: UUID) async throws {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "America/El_Salvador")
+        formatter.dateFormat = "yyyy-MM-dd"
+        let day = formatter.string(from: date)
+        formatter.dateFormat = "HH:mm:ss"
+        let start = formatter.string(from: from)
+        let end = formatter.string(from: to)
+        let body = try JSONSerialization.data(withJSONObject: [
+            "p_patient": patient.uuidString, "p_facility": facility.uuidString,
+            "p_specialty": specialty.uuidString, "p_reason": reason,
+            "p_date": day, "p_from": start, "p_to": end,
+            "p_request_key": requestKey.uuidString
+        ])
+        _ = try await request("/rest/v1/rpc/request_appointment", body: body, token: token())
+    }
+
     func factors() async throws -> [MFAFactor] {
         struct AuthUser: Decodable { let factors: [MFAFactor]? }
         let data = try await request("/auth/v1/user", token: token(), method: "GET")
