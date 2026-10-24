@@ -16,3 +16,5 @@ El nombre vigente del producto es **Hospital Universitario**. Las capturas y el 
 La guía de instalación y ejecución está en el [README principal](../README.md). Las instrucciones para agentes de IA están en [AGENTS.md](../AGENTS.md).
 
 No añadas contraseñas, tokens o secretos a esta carpeta. Las credenciales de prueba permanecen únicamente en `.local/`, fuera de Git y del servidor de vista previa.
+
+- [Avance de solicitudes de citas del paciente (24 de octubre de 2026)](BITACORA.md#2026-10-24--solicitudes-de-citas-del-paciente-rama-independiente): cambios, limitaciones y pruebas pendientes.
