@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A24000000000000000000001 /* hospital-core.js in Resources */ = {isa = PBXBuildFile; fileRef = A24000000000000000000011 /* hospital-core.js */; };
+		A24000000000000000000002 /* contract.json in Resources */ = {isa = PBXBuildFile; fileRef = A24000000000000000000012 /* contract.json */; };
+		A24000000000000000000003 /* screens.json in Resources */ = {isa = PBXBuildFile; fileRef = A24000000000000000000013 /* screens.json */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		DB957CE63083F99000D009E8 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,14 +30,26 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A24000000000000000000011 /* hospital-core.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = HospitalUniversitario/Shared/hospital-core.js; sourceTree = SOURCE_ROOT; };
+		A24000000000000000000012 /* contract.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = HospitalUniversitario/Shared/contract.json; sourceTree = SOURCE_ROOT; };
+		A24000000000000000000013 /* screens.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = HospitalUniversitario/Shared/screens.json; sourceTree = SOURCE_ROOT; };
 		DB957CD43083F98F00D009E8 /* HospitalUniversitario.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HospitalUniversitario.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DB957CE53083F99000D009E8 /* HospitalUniversitarioTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HospitalUniversitarioTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DB957CEF3083F99100D009E8 /* HospitalUniversitarioUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HospitalUniversitarioUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A24000000000000000000020 /* Explicit shared resource membership */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (Shared/hospital-core.js, Shared/contract.json, Shared/screens.json,);
+			target = DB957CD33083F98E00D009E8 /* HospitalUniversitario */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		DB957CD63083F98F00D009E8 /* HospitalUniversitario */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (A24000000000000000000020 /* Explicit shared resource membership */,);
 			path = HospitalUniversitario;
 			sourceTree = "<group>";
 		};
@@ -212,6 +230,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A24000000000000000000001 /* hospital-core.js in Resources */,
+				A24000000000000000000002 /* contract.json in Resources */,
+				A24000000000000000000003 /* screens.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -388,7 +409,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = HospitalUniversitario/HospitalUniversitario.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"HospitalUniversitario/Preview Content\"";
@@ -411,11 +431,11 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.unicaes.victorarevalo.HospitalUniversitario;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 2.2;
 			};
 			name = Debug;
@@ -425,7 +445,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = HospitalUniversitario/HospitalUniversitario.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"HospitalUniversitario/Preview Content\"";
@@ -448,11 +467,11 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.unicaes.victorarevalo.HospitalUniversitario;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 2.2;
 			};
 			name = Release;
@@ -469,11 +488,11 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.unicaes.victorarevalo.HospitalUniversitarioTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HospitalUniversitario.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HospitalUniversitario";
 				XROS_DEPLOYMENT_TARGET = 2.2;
 			};
@@ -491,11 +510,11 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.unicaes.victorarevalo.HospitalUniversitarioTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HospitalUniversitario.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HospitalUniversitario";
 				XROS_DEPLOYMENT_TARGET = 2.2;
 			};
@@ -512,11 +531,11 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.unicaes.victorarevalo.HospitalUniversitarioUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = HospitalUniversitario;
 				XROS_DEPLOYMENT_TARGET = 2.2;
 			};
@@ -533,11 +552,11 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.unicaes.victorarevalo.HospitalUniversitarioUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = HospitalUniversitario;
 				XROS_DEPLOYMENT_TARGET = 2.2;
 			};

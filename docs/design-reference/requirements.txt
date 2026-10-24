@@ -1,0 +1,219 @@
+PAGINA 1
+ 
+1 
+PROYECTO FINAL – IMPLEMENTACIÓN DE ARQUITECTURAS 
+Materia: Desarrollo de Aplicaciones Móviles Avanzadas 
+Docente: Ing. Herberth Contreras 
+ 
+PROYECTOS INTEGRADOR: SISTEMA DE GESTIÓN PARA HOSPITAL UNIVERSITARIO 
+1. DESCRIPCIÓN Y REGLAS DE NEGOCIO DEL SISTEMA 
+El objetivo del proyecto es desarrollar un ecosistema multiplataforma (iOS Nativo, Android Nativo y 
+Panel Web Administrativo) para la gestión operativa y clínica de un Hospital Universitario. 
+Modulos y Plataformas 
+• 
+App iOS (Xcode / Swift): Enfocada en la experiencia del usuario móvil y profesional (Doctores y 
+Pacientes). 
+• 
+App Android (Android Studio / Kotlin): Enfocada en operaciones en punto de atención 
+(Recepcionistas, Asistentes/Enfermeros y Doctores). 
+• 
+Web Administrativa (React/Vue/Angular/HTML+JS): Panel central para Administradores y Jefes 
+de Operaciones. 
+Roles de Usuario 
+1. Administrador: Gestión de usuarios, asignación de espacios, control de recursos y métricas. 
+2. Doctor: Consulta general, emisión de órdenes de laboratorio, revisión de expedientes e historial 
+clínico. 
+
+
+PAGINA 2
+ 
+2 
+3. Recepcionista / Asistente: Asignación de citas, control de turnos, registro e ingreso de 
+pacientes. 
+4. Paciente: Consulta de turnos, estado de laboratorio, visualización de historial y solicitudes de 
+atención. 
+ 
+REGLAS NEGOCIO ESPECÍFICAS DEL HOSPITAL 
+1. Infraestructura Hospitalaria (Habitaciones): 
+o 
+3ª Planta – Habitaciones VIP (Individuales): Capacidad exacta de 5 habitaciones (VIP-
+301 a VIP-305). 
+o 
+2ª Planta – Habitaciones Semiprivadas (Compartidas para 2 pacientes): Capacidad 
+exacta de 6 habitaciones (HAB-201 a HAB-206). Total: 12 camas. 
+o 
+Control de ocupación: El sistema no debe permitir sobrecupo ni doble asignación de 
+camas. 
+o 
+Administración de recursos e inventarios. 
+2. Control de Turnos del personal: 
+o 
+Registro y visualización de horarios para doctores, enfermeras, alergistas, emergencia, 
+asistentes y recepcionistas; entre otros. 
+3. Módulo de Consulta General y Laboratorio: 
+o 
+Registro de diagnósticos, recetas y solicitudes de exámenes. 
+o 
+Información de citas de pacientes. 
+o 
+Módulo de resultados de laboratorio con estados: Pendiente, En Proceso, 
+Completado. 
+4. Política de Privacidad e Información Pública/Privada: 
+o 
+Información pública: Estado general de ocupación del hospital, médicos de turno y 
+avisos generales. 
+o 
+Información privada/protegida (sensible): Expediente médico, resultados de 
+laboratorio, asignación específica de habitación de un paciente e información 
+personal. Exclusivo para el médico tratante, paciente y administración autorizada. 
+5. Recurso crítico – Ambulancia: 
+o 
+El hospital cuenta únicamente con 1 Ambulancia privada. 
+o 
+Debe existir un módulo de solicitud/despacho en tiempo real con estados: Disponible, 
+En Servicio, En Mantenimiento. 
+o 
+Información de la emergencia que ha atendido para conocer su bitácora según sea 
+filtrada. 
+
+
+PAGINA 3
+ 
+3 
+2. CRONOGRAMA DE TRABAJO (17 DE OCTUBRE – 21 DE NOVIEMBRE) 
+El desarrollo comprende 6 semanas organizadas en metodologías ágiles (Sprints semanales): 
+SEMANA 
+FECHAS 
+OBJETIVOS Y ENTREGABLES CLAVE 
+Semana 
+1 
+17 oct  
+Planificación y Diseño: Definición de Backend/Base de Datos, 
+arquitectura de la API, diseño de UX/UI en Figma y modelado de datos. 
+Semana 
+2 
+24 oct  
+Core de autenticación y Base de Datos: Login por roles, maquetación 
+base en Xcode/Kotlin/Web, estructura de datos para habitaciones y 
+turnos. 
+Semana 
+3 
+31 oct 
+Módulos principales (Entrega de avance 50%): Consulta general, flujo de 
+laboratorio y panel de administración básico. 
+Semana 
+4 
+07 nov  
+Lógica avanzada: Algoritmo de asignación de habitaciones (Planta 2 y 3), 
+control del recurso único de la ambulancia y permisos de privacidad. 
+Semana 
+5 
+14 nov  
+Pruebas e integración: Conexión completa iOS + Android + Web, 
+pruebas de concurrencia, corrección de errores y pulido visual. 
+Semana 
+6 
+21 de 
+noviembre 
+Entrega Final y defensa del proyecto: Presentación en vivo, 
+demostración de flujos y entrega del repositorio + documentación 
+completa. 
+ 
+3. ESQUEMA DE EVALUACIÓN Y ENTREGAS 
+Entrega de Avance (50% de la Nota) – 31 de octubre 
+• 
+Ponderación: 50% de la nota del Periodo. 
+• 
+Criterios de Evaluación: 
+o 
+Diseño UI/UX en Figma (100% completado): Mapeo de flujos para todas las pantallas 
+de iOS, Android y Web. 
+o 
+Arquitectura de Base de Datos / Backend: Diagrama Entidad-Relación y 
+endpoints/servicios base operativos. 
+o 
+Avance funcional (Mínimo 50%): 
+▪ 
+Autenticación funcional con roles (Login/Register). 
+▪ 
+Maquetación funcional de navegación principal en Xcode (Swift/SwiftUI) y 
+Android Studio (Kotlin). 
+▪ 
+CRUD básico de pacientes y personal de salud. 
+
+
+PAGINA 4
+ 
+4 
+▪ 
+Panel Web mostrando dashboard inicial. 
+ 
+Entrega Final y Defensa – 21 de noviembre 
+• 
+Ponderación: 50% de la nota del Período. 
+• 
+Criterios de Evaluación: 
+o 
+Funcionalidad completa en las 3 Plataformas (40%): 
+▪ 
+Gestión de Consulta General, Administración y Laboratorio. 
+▪ 
+Módulo de asignación lógica de habitaciones (5 VIP en 3ª planta y 6 
+Semiprivadas en 2ª planta). 
+▪ 
+Gestión del estado de la única ambulancia en tiempo real. 
+▪ 
+Correcta aplicación de la política de visibilidad pública vs. datos médicos 
+privados. 
+o 
+Calidad de código y arquitectura (20%): 
+▪ 
+Uso de patrones recomendados: MVVM en iOS/Android, consumo eficiente de 
+APIs/asincronía (Corrutinas en Kotlin, async/await o Combine en Swift). 
+o 
+Defensa técnica en vivo (20%): 
+▪ 
+Demostración sincrónica navegando los flujos entre pacientes (App 
+iOS/Android) y administradores (Web). 
+o 
+Documentación técnica y repositorio (20%). 
+ 
+4. DOCUMENTACIÓN Y ENTREGABLES REQUERIDOS 
+Cada equipo deberá entregar un Repositorio Unificado (GitHub) estructurado y un Documento de 
+Arquitectura (PDF) que contenga: 
+1. Enlace al proyecto en Figma: 
+o 
+Prototipe interactivo completo con componentes para Mobile (iOS y Android) y Web. 
+o 
+Sistema de diseño básico (Paleta de colores accesibles, tipografía, estados de 
+componentes). 
+2. Documento técnico de arquitectura: 
+o 
+Diagrama de Arquitectura de Software: Explicando la interacción entre iOS, Android, 
+Web y Backend. 
+
+
+PAGINA 5
+ 
+5 
+o 
+Diagrama de Base de Datos / Colecciones: Especificando modelos para Doctores, 
+Pacientes, Turnos, Habitaciones, Administración, etc. (VIP/Semiprivadas), Laboratorio 
+y Ambulancia. 
+o 
+Matriz de Control de acceso por Rol (RBAC): Detalle de qué endpoints/vistas puede 
+acceder y modificar cada rol. 
+o 
+Política de Privacidad de datos: Documentación de campos públicos vs. privados en el 
+expediente del paciente. 
+3. Código fuente: 
+o 
+Proyecto Xcode configurado y funcional. 
+o 
+Proyecto Android Studio en Kotlin con Gradle estructurado. 
+o 
+Proyecto Web Administrativo. 
+o 
+README.md principal con instrucciones claras de instalación, configuración de 
+variables de entorno y ejecución de las 3 plataformas. 
+ 

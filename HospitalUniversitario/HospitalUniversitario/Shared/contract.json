@@ -1,0 +1,9 @@
+{
+  "url": "https://kgulityewtcyvjnxeskd.supabase.co",
+  "publishableKey": "sb_publishable_z50sGVNe9Lwaf0Lk-e6Z6g_xnZ8zr8o",
+  "models": {
+    "Room": {"id":"UUID","floor_id":"UUID","room_type_id":"UUID","code":"String","active":"Bool","created_at":"String","updated_at":"String","row_version":"Int64"},
+    "StaffShift": {"id":"UUID","staff_id":"UUID","department_id":"UUID","period":"String","status":"String","created_at":"String","updated_at":"String","row_version":"Int64"},
+    "QueueTicket": {"id":"UUID","queue_id":"UUID","patient_id":"UUID","triage_level_id":"UUID?","number":"Int","status":"String","arrived_at":"String","called_at":"String?","started_at":"String?","finished_at":"String?","created_at":"String","updated_at":"String","row_version":"Int64"}
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "project": "kgulityewtcyvjnxeskd",
+  "checked_at": "2026-10-24T00:14:23.542Z",
+  "transport": "Supabase Auth + PostgREST HTTPS",
+  "accounts": [
+    {
+      "role": "doctor",
+      "email": "medico.demo@hospital.test",
+      "status": "passed",
+      "mfa": "aal1",
+      "rooms": 11,
+      "turns": 0,
+      "summary": "requires_mfa",
+      "refresh": "passed",
+      "revocation": "passed"
+    },
+    {
+      "role": "patient",
+      "email": "paciente.demo@hospital.test",
+      "status": "passed",
+      "mfa": "aal1",
+      "rooms": 11,
+      "turns": 0,
+      "summary": "requires_mfa",
+      "refresh": "passed",
+      "revocation": "passed"
+    }
+  ],
+  "contains_credentials": false
+}

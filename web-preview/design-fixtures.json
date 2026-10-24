@@ -1,0 +1,29 @@
+{
+  "patient": {
+    "name":"María", "fullName":"María López", "email":"maria.lopez@ejemplo.com", "initials":"ML",
+    "metrics":[["2","Próximas citas","appointments"],["1","Resultado nuevo","laboratory"],["3","Recetas activas","prescriptions"],["A-014","Turno actual","turns"]],
+    "queue":{"ticket_id":"00000000-0000-4000-8000-000000000014","number":14,"status":"waiting","display_number":"A-014","serving_number":"A-011","people_ahead":2,"consultation_room":{"name":"Consultorio 3"}},
+    "rows": {
+      "appointments":[["30 oct. · 10:00","Medicina interna · Dr. Ramírez","Confirmada"],["4 nov. · 09:30","Cardiología · Dra. Castillo","Programada"],["12 oct. · 08:30","Consulta general · Atención finalizada","Completada"],["1 oct. · 11:00","Laboratorio · Control rutinario","Completada"]],
+      "chart":[["María López","EXP-001285 · O+ · 67 años","Privado"],["Condiciones registradas","Hipertensión · Seguimiento activo"],["Alergias","Penicilina · Precaución médica"],["Tratamientos actuales","Medicamentos prescritos y vigentes"],["Última consulta","12 oct. · Medicina interna"],["Documentos de salud","Estudios y constancias disponibles"]],
+      "history":[["12 oct. 2026","Consulta general · Medicina interna"],["1 oct. 2026","Laboratorio · Pruebas de control"],["18 sep. 2026","Control de hipertensión arterial"],["2 ago. 2026","Consulta médica de seguimiento"],["14 jul. 2026","Revisión de tratamiento"]],
+      "prescriptions":[["Losartán 50 mg","1 tableta cada 24 horas","Activa"],["Atorvastatina 20 mg","Cada noche","Activa"],["Metformina 850 mg","Según indicación médica","Activa"],["Receta del 12 oct.","Prescripción clínica registrada","Consultar"]],
+      "laboratory":[["Biometría hemática","Orden LAB-2048 · 18 oct.","Completado"],["Química sanguínea","Orden LAB-2049 · 20 oct.","En proceso"],["Perfil lipídico","Orden LAB-2050 · 21 oct.","Pendiente"],["Uroanálisis","Orden LAB-2051 · 12 oct.","Completado"]],
+      "notifications":[["Cita confirmada","Medicina interna · 30 oct. a las 10:00"],["Resultado disponible","Nuevo estudio publicado en laboratorio"],["Recordatorio de cita","Tu cita se aproxima"],["Receta disponible","Se ha registrado una prescripción"],["Aviso institucional","Actualización de información hospitalaria"]]
+    }
+  },
+  "doctor": {
+    "name":"Dr. Ramírez", "fullName":"Dr. Luis Ramírez", "email":"luis.ramirez@hospital.edu", "initials":"LR",
+    "metrics":[["12","Citas programadas","appointments"],["4","Pacientes en espera","patients"],["3","Resultados nuevos","laboratory"],["2","Recetas pendientes","prescriptions"]],
+    "rows": {
+      "patients":[["Carlos Mendoza","EXP-001284 · Consulta programada","En espera"],["María López","EXP-001285 · Control de hipertensión","Activo"],["Juan Pérez","EXP-001286 · Consulta general","En consulta"],["Lucía García","EXP-001287 · Seguimiento clínico","Activo"],["Roberto Díaz","EXP-001288 · Revisión de resultados","Pendiente"]],
+      "appointments":[["08:00 · Carlos Mendoza","Control · Consultorio 3","Confirmada"],["09:30 · María López","Medicina interna · Sala 2","En espera"],["10:30 · Juan Pérez","Consulta general · Sala 1","En curso"],["11:30 · Lucía García","Seguimiento · Consultorio 3","Confirmada"],["14:00 · Roberto Díaz","Revisión de resultados","Pendiente"]],
+      "consultation":[["Carlos Mendoza · EXP-001284","45 años · Consultorio 3 · 10:30"]],
+      "chart":[["Carlos Mendoza","EXP-001284 · 45 años · Tipo O+","Confidencial"],["Alergias","Penicilina · Precaución clínica"],["Diagnósticos","Hipertensión · En seguimiento"],["Antecedentes","Antecedente quirúrgico"],["Medicamentos activos","Losartán 50 mg · Prescrito"],["Evolución médica","Control y valoración reciente"]],
+      "prescriptions":[["Carlos Mendoza","Losartán 50 mg · Vía oral","Vigente"],["María López","Metformina 850 mg · Vía oral","Vigente"],["Juan Pérez","Tratamiento por confirmar","Borrador"],["Lucía García","Paracetamol 500 mg · Vía oral","Vigente"]],
+      "laboratory":[["LAB-2048 · Carlos Mendoza","Biometría hemática · Prioridad alta","Pendiente"],["LAB-2049 · María López","Química sanguínea","En proceso"],["LAB-2050 · Juan Pérez","Perfil lipídico","Completado"],["LAB-2051 · Lucía García","Uroanálisis","Pendiente"],["LAB-2052 · Roberto Díaz","Proteína C reactiva","Completado"]],
+      "notifications":[["Resultado de laboratorio","Nuevo estudio disponible para revisión"],["Cambio de cita","Consulta reprogramada · 11:30"],["Paciente asignado","Nueva atención en agenda"],["Recordatorio de guardia","Guardia nocturna próxima"],["Aviso institucional","Actualización de procedimientos"]]
+    },
+    "schedule":[["Lun 19","07:00–15:00","Mañana"],["Mar 20","07:00–15:00","Mañana"],["Mié 21","07:00–15:00","Mañana"],["Jue 22","15:00–23:00","Tarde"],["Vie 23","07:00–15:00","Mañana"]]
+  }
+}

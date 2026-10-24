@@ -1,0 +1,11 @@
+{
+  "name": "hospital-universitario-preview",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "node --preserve-symlinks --preserve-symlinks-main server.mjs",
+    "test": "node --preserve-symlinks --preserve-symlinks-main ../scripts/test-core.mjs && node --preserve-symlinks --preserve-symlinks-main ../scripts/test-preview.mjs"
+  }
+}

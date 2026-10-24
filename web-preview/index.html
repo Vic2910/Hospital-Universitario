@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Hospital Universitario · Vista previa iPhone</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/shared/hospital-core.js" defer></script>
+  <script src="/api.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <aside class="preview-note">
+    <div class="preview-brand">H<span>+</span></div>
+    <strong>Hospital<br>Universitario</strong>
+    <span>Avance · 24 de octubre<br>iOS + vista previa web</span>
+    <small id="preview-mode">Conexión real a Supabase. Inicia sesión con una cuenta autorizada.</small>
+    <div class="design-controls"><p>Explorar el diseño sin credenciales</p><button id="design-patient" type="button">Paciente</button><button id="design-doctor" type="button">Médico</button><button id="live-mode" type="button">Volver al login real</button></div>
+    <small>Los modos de diseño usan ejemplos locales del prototipo y no acceden a Supabase.</small>
+  </aside>
+  <main class="phone" aria-label="Vista previa de iPhone">
+    <div class="status"><time>9:41</time><span class="island" aria-hidden="true"></span><span aria-label="Wi-Fi y batería">● ▰ ▰</span></div>
+    <div id="app"><p class="empty">Cargando…</p></div>
+    <p id="notice" role="status" aria-live="polite" hidden></p>
+    <div class="home-indicator" aria-hidden="true"></div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,170 @@
+[
+  {
+    "file": "screen-01.png",
+    "name": "iOS · PACIENTE · 01 · Inicio.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-02.png",
+    "name": "iOS · PACIENTE · 02 · Mis citas.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-03.png",
+    "name": "iOS · PACIENTE · 03 · Solicitar atención.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-04.png",
+    "name": "iOS · PACIENTE · 04 · Mi turno.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-05.png",
+    "name": "iOS · PACIENTE · 05 · Expediente.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-06.png",
+    "name": "iOS · PACIENTE · 06 · Historial médico.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-07.png",
+    "name": "iOS · PACIENTE · 07 · Mis recetas.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-08.png",
+    "name": "iOS · PACIENTE · 08 · Laboratorio.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-09.png",
+    "name": "iOS · PACIENTE · 09 · Información pública.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-10.png",
+    "name": "iOS · PACIENTE · 10 · Notificaciones.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-11.png",
+    "name": "iOS · PACIENTE · 11 · Perfil.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-12.png",
+    "name": "iOS · DOCTOR · 01 · Inicio.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-13.png",
+    "name": "iOS · DOCTOR · 02 · Mis pacientes.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-14.png",
+    "name": "iOS · DOCTOR · 03 · Mis citas.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-15.png",
+    "name": "iOS · DOCTOR · 04 · Consultas.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-16.png",
+    "name": "iOS · DOCTOR · 05 · Expedientes.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-17.png",
+    "name": "iOS · DOCTOR · 06 · Recetas.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-18.png",
+    "name": "iOS · DOCTOR · 07 · Laboratorio.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-19.png",
+    "name": "iOS · DOCTOR · 08 · Mi horario.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-20.png",
+    "name": "iOS · DOCTOR · 09 · Notificaciones.png",
+    "size": [
+      393,
+      852
+    ]
+  },
+  {
+    "file": "screen-21.png",
+    "name": "iOS · DOCTOR · 10 · Perfil.png",
+    "size": [
+      393,
+      852
+    ]
+  }
+]
