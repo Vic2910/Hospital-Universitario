@@ -85,7 +85,7 @@ Se crearon, con autorización del usuario, **dos usuarios Supabase Auth de prueb
 | Médico | `medico.demo@hospital.test` | Personal activo, Medicina interna, licencia marcada como demostración |
 | Paciente | `paciente.demo@hospital.test` | Paciente y registro en Sede Central; expediente `DEMO-EXP-001` |
 
-Las contraseñas aleatorias están en **`.local/CREDENCIALES_PRUEBA.md`**, excluido de Git y fuera de la lista de recursos que sirve la web. Usa esas credenciales en el **login real**; los botones del modo de diseño no inician sesión. El dominio reservado `.test` no recibe correo. No se concedió el rol de administrador ni se añadieron datos clínicos.
+Las contraseñas vigentes están en **`.local/CREDENCIALES_PRUEBA.md`**, excluido de Git y fuera de la lista de recursos que sirve la web. El 24 de octubre se sustituyeron, por petición del usuario, las contraseñas iniciales por otras más cortas de 9 y 11 caracteres; se verificaron los dos logins y el rechazo de las anteriores. Usa esas credenciales en el **login real**; los botones del modo de diseño no inician sesión. El dominio reservado `.test` no recibe correo. No se concedió el rol de administrador ni se añadieron datos clínicos.
 
 Las dos cuentas se prepararon mediante una semilla administrativa acotada a estas identidades, con hash bcrypt e identidad email en Auth, reutilizando el trigger existente de perfiles. La autenticación, emisión/renovación de JWT y revocación se probaron después con la API real de Supabase Auth. Este aprovisionamiento de demostración no es un formulario de registro ni reemplaza Auth Admin para personas reales.
 
