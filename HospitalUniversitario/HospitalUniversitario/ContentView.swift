@@ -6,14 +6,12 @@ struct ContentView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var showPassword = false
-    @State private var code = ""
     @State private var search = ""
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         VStack(spacing: 0) {
-            if !store.mfaFactors.isEmpty { mfa }
-            else if store.access == nil { login }
+            if store.access == nil { login }
             else if store.selectedRole == nil { rolePicker }
             else { portal }
             if let message = store.message {
@@ -33,7 +31,8 @@ struct ContentView: View {
             if phase == .active && store.selectedRole != nil { Task { await store.refreshScreen() } }
         }
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
-            if scenePhase == .active && store.selectedRole == "patient" && store.screenID == "turns" {
+            if scenePhase == .active && ((store.selectedRole == "patient" && ["turns", "notifications"].contains(store.screenID)) ||
+                (store.selectedRole == "doctor" && ["home", "patients", "notifications"].contains(store.screenID))) {
                 Task { await store.refreshScreen() }
             }
         }
@@ -72,23 +71,6 @@ struct ContentView: View {
         }
     }
 
-    private var mfa: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            Image(systemName: "lock.shield").font(.largeTitle).foregroundStyle(HospitalTheme.wine)
-            Text("Verifica tu identidad").font(.title.bold())
-            Text("Introduce el código de seis dígitos de tu aplicación de autenticación.")
-            if store.mfaFactors.count > 1 {
-                Picker("Autenticador", selection: $store.selectedFactor) {
-                    ForEach(store.mfaFactors, id: \.id) { factor in Text(factor.id.uuidString).tag(Optional(factor.id)) }
-                }
-            }
-            TextField("000000", text: $code).keyboardType(.numberPad).textContentType(.oneTimeCode)
-                .padding().background(.white, in: RoundedRectangle(cornerRadius: 12))
-            Button("Verificar") { let value = code; code = ""; Task { await store.verify(code: value) } }
-                .buttonStyle(.borderedProminent).disabled(store.busy || code.count != 6)
-            Button("Cancelar") { Task { await store.signOut() } }.disabled(store.busy)
-        }.padding(28).frame(maxHeight: .infinity)
-    }
 
     private var rolePicker: some View {
         VStack(spacing: 24) {
@@ -138,19 +120,29 @@ struct ContentView: View {
     }
 
     @ViewBuilder private var content: some View {
-        switch store.screenID {
-        case "home": home
-        case "more", "health": menu
-        case "turns": if isDoctor { schedule } else { queue }
-        case "rooms": rooms
-        case "profile": profile
-        case "information": information
-        default: scaffold
+        if isDoctor, store.screenID == "prescriptions", let doctor = store.doctor, let modules = store.modules {
+            DoctorPrescriptionView(doctor: doctor, model: modules, search: search, period: store.period, navigate: go)
+        } else if let modules = store.modules,
+           ((!isDoctor && ["appointments", "request", "chart", "history", "prescriptions", "laboratory"].contains(store.screenID)) || store.screenID == "notifications") {
+            MobileModuleView(model: modules, module: store.screenID, role: isDoctor ? "doctor" : "patient", search: search, period: store.period, navigate: go)
+        } else if isDoctor, let doctor = store.doctor,
+           ["home", "patients", "appointments", "consultation", "chart", "laboratory", "notifications"].contains(store.screenID) {
+            DoctorModuleView(model: doctor, screenID: store.screenID, search: search, navigate: go, period: store.period)
+        } else {
+            switch store.screenID {
+            case "home": home
+            case "more", "health": menu
+            case "turns": if isDoctor { schedule } else { queue }
+            case "rooms": rooms
+            case "profile": profile
+            case "information": information
+            default: menu
+            }
         }
     }
 
     private func heading(_ value: String) -> some View { Text(value).font(.system(size: 16, weight: .semibold)).padding(.top, 1) }
-    private func go(_ id: String) { guard !store.busy else { return }; store.screenID = id; search = "" }
+    private func go(_ id: String) { guard !store.busy, store.doctor?.saving != true, store.modules?.saving != true else { return }; store.screenID = id; search = "" }
     private func matches(_ value: String) -> Bool { search.isEmpty || value.localizedCaseInsensitiveContains(search) }
 
     private var home: some View {
@@ -214,9 +206,18 @@ struct ContentView: View {
             } else { empty("No tienes jornadas asignadas.") }
             heading("Agenda semanal")
             ForEach(store.orderedShifts.filter { matches(store.period($0.period)) }) { shift in
-                HospitalCard { Text(store.period(shift.period)).font(.system(size: 12, weight: .medium)); HospitalBadge(text: HospitalLabels.status(shift.status), warning: shift.status != "confirmed") }
+                HospitalCard {
+                    Text(store.period(shift.period)).font(.system(size: 12, weight: .medium))
+                    HospitalBadge(text: HospitalLabels.status(shift.status), warning: shift.status != "confirmed")
+                    if shift.status == "pending", let modules = store.modules {
+                        Button("Confirmar jornada", systemImage: "calendar.badge.checkmark") {
+                            Task { if await modules.confirmShift(id: shift.id, version: Int(shift.row_version)) { await store.refreshScreen() } }
+                        }.disabled(modules.saving)
+                    }
+                }
             }
             if store.shiftsMore { Button("Cargar más") { Task { await store.refreshScreen(more: true) } }.disabled(store.busy) }
+            if let error = store.modules?.error { Text(error).font(.footnote).foregroundStyle(.red) }
         }
     }
 
@@ -264,8 +265,9 @@ struct ContentView: View {
             heading(screen?.section ?? "Mi perfil")
             detail(isDoctor ? "Correo institucional" : "Correo electrónico", value: store.profile?.auth_email ?? "No disponible")
             if isDoctor { detail("Identificación profesional", value: store.profile?.professional?.license_number ?? "Pendiente de verificación") }
-            else { detail("Teléfono", value: store.profile?.contacts.first(where: { $0.kind == "phone" })?.value ?? "Número por configurar") }
-            detail("Seguridad y privacidad", value: "Credenciales y autenticación")
+            if let modules = store.modules {
+                MobileModuleView(model: modules, module: "profile", role: isDoctor ? "doctor" : "patient", search: search, period: store.period, navigate: go)
+            }
             Button("Notificaciones") { go("notifications") }.disabled(store.busy)
             Button("Cerrar sesión") { Task { await store.signOut() } }.frame(maxWidth: .infinity).padding(.vertical, 12).disabled(store.busy)
         }
@@ -284,41 +286,6 @@ struct ContentView: View {
             }
             Button("Consultar habitaciones") { go("rooms") }.disabled(store.busy)
             Text("La información clínica de otros pacientes no es pública.").font(.system(size: 11)).padding(12).background(HospitalTheme.rose)
-        }
-    }
-
-    private var scaffold: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            heading(screen?.section ?? title)
-            if screen?.layout == "request" || screen?.layout == "consultation" {
-                if screen?.layout == "consultation" { empty("Selecciona un paciente autorizado para continuar.") }
-                ForEach(screen?.fields ?? [], id: \.self) { field in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(field).font(.system(size: 12, weight: .medium))
-                        Text(field == "Motivo de consulta" ? "Describe brevemente tu necesidad" : "Seleccionar \(field.lowercased())")
-                            .font(.system(size: 11)).foregroundStyle(HospitalTheme.secondary).frame(maxWidth: .infinity, minHeight: field == "Especialidad" ? 32 : 55, alignment: .leading).padding(12).background(.white, in: RoundedRectangle(cornerRadius: 12))
-                    }
-                }
-                Text("La disponibilidad se confirmará al programar.").font(.caption).padding(12).background(HospitalTheme.rose)
-                Button(screen?.layout == "request" ? "Enviar solicitud" : "Guardar consulta") {}.buttonStyle(.borderedProminent).disabled(true)
-            } else if screen?.layout == "chart" {
-                ForEach(screen?.sections ?? [], id: \.self) { section in detail(section, value: "Información protegida") }
-            } else {
-                if screen?.layout == "laboratory" || screen?.layout == "patients" { Text("Estado: Todos").font(.caption).foregroundStyle(HospitalTheme.secondary) }
-                if screen?.layout == "appointments" && isDoctor { Text("‹　Hoy　›　　Estado: Todas").font(.caption).foregroundStyle(HospitalTheme.secondary) }
-                empty("La consulta de este módulo estará disponible en la siguiente entrega.")
-                ForEach(screen?.sections ?? [], id: \.self) { value in heading(value) }
-                if screen?.layout == "appointments" && !isDoctor {
-                    Button("Solicitar nueva cita") { go("request") }.buttonStyle(.borderedProminent).disabled(store.busy)
-                }
-                if screen?.layout == "prescriptions" && isDoctor {
-                    Text("Verificar alergias y contraindicaciones").font(.caption).padding(12).background(HospitalTheme.rose)
-                    Button("+ Nueva receta") {}.buttonStyle(.borderedProminent).disabled(true)
-                }
-            }
-            if ["request", "consultation", "chart"].contains(screen?.layout ?? "") {
-                Text("Esta vista estará disponible para su uso en la siguiente entrega.").font(.caption).foregroundStyle(HospitalTheme.secondary)
-            }
         }
     }
 

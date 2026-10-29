@@ -4,6 +4,12 @@ El nombre vigente del producto es **Hospital Universitario**. Las capturas y el 
 
 | Documento | Contenido |
 |---|---|
+| [MODULOS_FUNCIONALES_2026-10-28.md](MODULOS_FUNCIONALES_2026-10-28.md) | Estado actual: Medico/Paciente en iOS y web, backend instalado, pruebas y pendientes |
+| [Informe_Hospital_Universitario.md](Informe_Hospital_Universitario.md) | Informe aportado por el usuario para los flujos; contrastado con el esquema real |
+| [sql/mobile-modules.sql](sql/mobile-modules.sql) | RPC de modulos, recetas atomicas y eventos; desplegados |
+| [sql/test-mobile-flows.sql](sql/test-mobile-flows.sql) | Pruebas transaccionales revertidas con claims simulados, sin altas reales |
+| [MODULO_DOCTOR_2026-10-28.md](MODULO_DOCTOR_2026-10-28.md) | Modulo Doctor, archivos Swift, configuracion SDK, SQL propuesto, pruebas y limites reales |
+| [sql/doctor-module.sql](sql/doctor-module.sql) | RPC y eventos del Doctor; corregidos, validados y desplegados |
 | [SESION_2026-10-23.md](SESION_2026-10-23.md) | Contexto consolidado de esta sesión: alcance, implementación, Supabase, cuentas, pruebas y pendientes |
 | [BITACORA.md](BITACORA.md) | Registro de cambios que deben mantener las IA en cada intervención |
 | [CONTEXTO_IOS.md](CONTEXTO_IOS.md) | Análisis de requisitos y pantallas, decisiones iniciales y actualizaciones posteriores |
@@ -16,3 +22,7 @@ El nombre vigente del producto es **Hospital Universitario**. Las capturas y el 
 La guía de instalación y ejecución está en el [README principal](../README.md). Las instrucciones para agentes de IA están en [AGENTS.md](../AGENTS.md).
 
 No añadas contraseñas, tokens o secretos a esta carpeta. Las credenciales de prueba permanecen únicamente en `.local/`, fuera de Git y del servidor de vista previa.
+
+## Decision vigente de acceso
+
+[Acceso con contrasena sin MFA para Medico/Paciente (2026-10-28)](ACCESO_SIN_MFA_2026-10-28.md). Sustituye los requisitos MFA de los informes historicos para estos roles.

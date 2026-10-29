@@ -11,6 +11,17 @@ enum HospitalError: LocalizedError {
 struct BackendConfiguration: Decodable {
     let url: URL
     let publishableKey: String
+
+    static func load(bundle: Bundle = .main) throws -> BackendConfiguration {
+        guard let value = bundle.object(forInfoDictionaryKey: "SUPABASE_URL") as? String,
+              let url = URL(string: value), url.scheme == "https", url.host != nil,
+              !value.contains("$("),
+              let key = bundle.object(forInfoDictionaryKey: "SUPABASE_PUBLISHABLE_KEY") as? String,
+              !key.isEmpty, !key.contains("$("), !key.hasPrefix("sb_secret_") else {
+            throw HospitalError.message("Configura Supabase.local.xcconfig con la URL y la clave pública del hospital.")
+        }
+        return BackendConfiguration(url: url, publishableKey: key)
+    }
 }
 
 /// Uses exactly the same JavaScript policy and request builder as the web preview.
@@ -22,11 +33,11 @@ final class SharedCore {
     init() throws {
         guard let context = JSContext(),
               let script = Bundle.main.url(forResource: "hospital-core", withExtension: "js"),
-              let contract = Bundle.main.url(forResource: "contract", withExtension: "json") else {
+              Bundle.main.url(forResource: "contract", withExtension: "json") != nil else {
             throw HospitalError.message("No se encontraron los recursos compartidos del target.")
         }
         self.context = context
-        configuration = try JSONDecoder().decode(BackendConfiguration.self, from: Data(contentsOf: contract))
+        configuration = try BackendConfiguration.load()
         context.evaluateScript(try String(contentsOf: script, encoding: .utf8))
         if context.exception != nil { throw HospitalError.message("No se pudo cargar el contrato compartido.") }
     }

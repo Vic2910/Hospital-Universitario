@@ -1,0 +1,17 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Vista previa Hospital Universitario",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"--preserve-symlinks",
+				"--preserve-symlinks-main",
+				"web-preview/server.mjs"
+			],
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}

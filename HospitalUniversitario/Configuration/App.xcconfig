@@ -1,0 +1,2 @@
+#include? "Supabase.local.xcconfig"
+INFOPLIST_FILE = Configuration/Info.plist

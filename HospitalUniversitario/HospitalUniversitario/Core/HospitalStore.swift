@@ -16,18 +16,24 @@ final class HospitalStore: ObservableObject {
     @Published private(set) var profile: UserProfile?
     @Published private(set) var overview: HospitalOverview?
     @Published private(set) var queueStatuses: [QueueStatus] = []
-    @Published private(set) var mfaFactors: [MFAFactor] = []
-    @Published var selectedFactor: UUID?
     @Published var screenMessage: String?
     @Published private(set) var roomsMore = false
     @Published private(set) var shiftsMore = false
+    @Published private(set) var doctor: DoctorViewModel?
+    @Published private(set) var modules: MobileModuleViewModel?
     private var roomsCursor: ResourceCursor?
     private var shiftsCursor: ResourceCursor?
     private var api: HospitalAPI?
     private var restored = false
 
     init() {
-        do { api = HospitalAPI(core: try SharedCore()); catalog = try ScreenCatalog.load() }
+        do {
+            let api = HospitalAPI(core: try SharedCore())
+            self.api = api
+            doctor = DoctorViewModel(repository: DoctorRepository(client: api.client))
+            modules = MobileModuleViewModel(repository: MobileModuleRepository(client: api.client, projectURL: api.core.configuration.url))
+            catalog = try ScreenCatalog.load()
+        }
         catch { message = error.localizedDescription }
     }
     var name: String { access?.profile?.preferred_name ?? profile?.fullName ?? "Bienvenido" }
@@ -42,11 +48,11 @@ final class HospitalStore: ObservableObject {
     func restore() async {
         guard !restored else { return }
         restored = true
-        guard (try? RefreshTokenStore.read()) != nil else { return }
+        guard api?.hasStoredSession == true else { return }
         busy = true
         defer { busy = false }
         do { try await resolveAccess() }
-        catch { api?.clearLocal(); reset(); message = error.localizedDescription }
+        catch { await api?.clearLocal(); reset(); message = error.localizedDescription }
     }
     func signIn(email: String, password: String) async {
         guard !busy, let api else { return }
@@ -67,27 +73,11 @@ final class HospitalStore: ObservableObject {
         guard !roles.isEmpty else {
             throw HospitalError.message("Tu cuenta debe estar activa y vinculada a un Médico o Paciente con el rol correspondiente.")
         }
-        let factors = try await api.factors().filter { $0.status == "verified" }
-        if access.aal != "aal2" && !factors.isEmpty {
-            let totp = factors.filter { $0.factor_type == "totp" }
-            guard !totp.isEmpty else { throw HospitalError.message("Esta cuenta requiere un segundo factor no compatible. Contacta al administrador.") }
-            mfaFactors = totp
-            selectedFactor = totp.first?.id
-            return
-        }
-        mfaFactors = []; selectedFactor = nil
         self.access = access
         self.roles = roles
         selectedRole = roles.count == 1 ? roles[0] : nil
     }
 
-    func verify(code: String) async {
-        guard !busy, let api, let selectedFactor else { return }
-        busy = true; message = nil
-        defer { busy = false }
-        do { try await api.verifyTOTP(factor: selectedFactor, code: code); try await resolveAccess() }
-        catch { message = "No se pudo verificar el código. Revisa tu autenticador e inténtalo de nuevo." }
-    }
 
     func selectRole(_ role: String) {
         guard roles.contains(role), !busy else { return }
@@ -101,9 +91,24 @@ final class HospitalStore: ObservableObject {
         do {
             let (fresh, available) = try await api.access()
             guard available.contains(role) else {
-                api.clearLocal(); reset(); throw HospitalError.message("El acceso cambió. Inicia sesión de nuevo.")
+                await api.clearLocal(); reset(); throw HospitalError.message("El acceso cambió. Inicia sesión de nuevo.")
             }
             access = fresh; roles = available
+            if let facility = fresh.roles.first(where: { $0.code == role })?.facility_id, let profile = fresh.profile {
+                modules?.configure(role: role, facility: facility, profile: profile.id, patient: fresh.patient_id)
+            }
+            if (role == "patient" && ["appointments", "request", "chart", "history", "prescriptions", "laboratory", "notifications"].contains(screenID)) || screenID == "notifications" {
+                await modules?.load(screenID, more: more)
+                return
+            }
+            if role == "doctor", let identity = fresh.staff_id,
+               let facility = fresh.roles.first(where: { $0.code == "doctor" })?.facility_id,
+               ["home", "patients", "appointments", "consultation", "chart", "laboratory", "notifications", "prescriptions"].contains(screenID) {
+                doctor?.configure(facility: facility, identity: identity)
+                await doctor?.refresh()
+                if screenID == "prescriptions" { await modules?.load("prescriptions", more: more) }
+                return
+            }
             if profile == nil { profile = try await api.rpc("my_profile") }
             let facility = fresh.roles.first(where: { $0.code == role })?.facility_id
             switch screenID {
@@ -140,36 +145,46 @@ final class HospitalStore: ObservableObject {
             case "information":
                 overview = nil
                 if let facility { overview = try await api.rpc("hospital_overview", parameters: ["p_facility": facility.uuidString]) }
-            case "profile": profile = try await api.rpc("my_profile")
+            case "profile":
+                profile = try await api.rpc("my_profile")
+                await modules?.load("profile")
             default: break
             }
         } catch {
+            if role == "doctor" { doctor?.clear() }
+            modules?.clear()
             rooms = []; shifts = []; tickets = []; queueStatuses = []; summary = nil; overview = nil
             roomsMore = false; shiftsMore = false
-            if let failure = error as? BackendFailure, failure.status == 401 { api.clearLocal(); reset() }
+            if let failure = error as? BackendFailure, failure.status == 401 { await api.clearLocal(); reset() }
             message = error.localizedDescription
         }
     }
     func period(_ value: String) -> String { api?.core.period(value) ?? value }
     func signOut() async {
-        guard !busy else { return }
+        guard !busy, doctor?.saving != true, modules?.saving != true else { return }
         busy = true
-        let warning = await api?.signOut()
+        let api = self.api
         reset()
+        let warning = await api?.signOut()
         message = warning
         busy = false
     }
     func switchRole() {
+        guard doctor?.saving != true, modules?.saving != true else { return }
+        doctor?.clear()
+        modules?.clear()
         selectedRole = nil
         rooms = []; shifts = []; tickets = []; message = nil
         roomsCursor = nil; shiftsCursor = nil; roomsMore = false; shiftsMore = false
         screenID = "home"; summary = nil; profile = nil; overview = nil; queueStatuses = []; screenMessage = nil
     }
     private func reset() {
+        doctor?.clear()
+        modules?.clear()
         access = nil; roles = []; selectedRole = nil
         rooms = []; shifts = []; tickets = []; roomsCursor = nil; shiftsCursor = nil
         roomsMore = false; shiftsMore = false
         screenID = "home"; summary = nil; profile = nil; overview = nil; queueStatuses = []
-        mfaFactors = []; selectedFactor = nil; screenMessage = nil
+        screenMessage = nil
     }
 }

@@ -1,0 +1,3 @@
+// Duplicate as Supabase.local.xcconfig on the Mac. Never use an administrative key.
+SUPABASE_URL = https:/$()/YOUR_PROJECT.supabase.co
+SUPABASE_PUBLISHABLE_KEY = YOUR_PUBLISHABLE_KEY

@@ -1,9 +1,14 @@
 (function (root) {
   'use strict';
   class APIError extends Error {
-    constructor(status) {
+    constructor(status, code) {
       super(({ 400: 'Credenciales o datos inválidos. Revisa el correo y la contraseña.', 401: 'La sesión no es válida. Inicia sesión de nuevo.', 403: 'Tu cuenta no tiene acceso a esta información o requiere verificación.', 422: 'Datos inválidos.', 429: 'Demasiados intentos. Espera antes de volver a intentarlo.' })[status] || 'No se pudo conectar con el hospital. Inténtalo de nuevo.');
       this.status = status;
+      this.code = code;
+      if (code === 'PGRST202') this.message = 'No se pudo encontrar el servicio de este módulo. Actualiza la conexión.';
+      if (status === 409 || ['40001','23505','PT409'].includes(code)) this.message = 'El registro cambió o ya existe. Actualiza antes de continuar.';
+      if (['22023','23514','PT400','PT422'].includes(code)) this.message = 'Revisa los datos y el estado de la atención antes de continuar.';
+      if (status === 403) this.message = 'Tu cuenta no tiene acceso a esta operación. Revisa tu rol, permisos y vínculo con el registro solicitado.';
     }
   }
   class HospitalAPI {
@@ -22,7 +27,10 @@
       let response;
       try { response = await this.fetch(this.contract.url + path, { method, headers, body: method === 'GET' ? undefined : JSON.stringify(body), cache: 'no-store', signal: AbortSignal.timeout(25000) }); }
       catch { throw new Error('No se pudo conectar con el hospital. Revisa la conexión e inténtalo de nuevo.'); }
-      if (!response.ok) throw new APIError(response.status);
+      if (!response.ok) {
+        let detail; try { detail = await response.json(); } catch { /* No clinical response bodies are surfaced. */ }
+        throw new APIError(response.status, detail?.code);
+      }
       if (response.status === 204) return null;
       const text = await response.text();
       return text ? JSON.parse(text) : null;
@@ -57,19 +65,22 @@
       return { access, roles: root.HospitalCore.routes(access) };
     }
     async rpc(name, parameters = {}) {
-      if (!['my_profile', 'my_activity_summary', 'my_queue_status', 'hospital_overview'].includes(name)) throw new Error('Consulta no disponible.');
+      if (!['my_profile', 'my_activity_summary', 'my_queue_status', 'hospital_overview', 'mobile_module',
+        'doctor_workspace', 'doctor_chart', 'doctor_issue_lab_order', 'mobile_issue_prescription',
+        'request_appointment', 'transition_appointment', 'start_consultation', 'save_consultation', 'close_consultation',
+        'update_record', 'create_record', 'update_my_phone', 'set_my_emergency_contact', 'confirm_shift', 'read_resource'].includes(name)) throw new Error('Consulta no disponible.');
       return this.request('/rest/v1/rpc/' + name, parameters, await this.token());
     }
-    async factors() {
-      const user = await this.request('/auth/v1/user', {}, await this.token(), 'GET');
-      return user.factors || [];
+    async changePassword(password) {
+      return this.request('/auth/v1/user', {password}, await this.token(), 'PUT');
     }
-    async verifyTOTP(factor, code) {
-      if (!/^\d{6}$/.test(code)) throw new Error('Introduce el código de seis dígitos de tu autenticador.');
-      if (!/^[0-9a-f-]{36}$/i.test(factor)) throw new Error('Factor inválido.');
-      const token = await this.token(), base = '/auth/v1/factors/' + factor;
-      const challenge = await this.request(base + '/challenge', {}, token);
-      this.accept(await this.request(base + '/verify', { challenge_id: challenge.id, code }, token));
+    async documentURL(id) {
+      if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) throw new Error('Documento inválido.');
+      const response = await this.fetch('/document-access', {method:'POST', headers:{Authorization:'Bearer ' + await this.token(),'Content-Type':'application/json'}, body:JSON.stringify({document_id:id}), cache:'no-store', signal:AbortSignal.timeout(25000)});
+      if (!response.ok) throw new APIError(response.status);
+      const result = await response.json(), url = new URL(result.url);
+      if (url.protocol !== 'https:' || url.origin !== new URL(this.contract.url).origin || !url.pathname.startsWith('/storage/v1/object/sign/hospital-files/')) throw new Error('El documento no devolvió un enlace seguro.');
+      return url.href;
     }
     async read(resource, cursor, owner) {
       if (resource === 'staff_shifts' && (!cursor || !this.shiftWindow)) this.shiftWindow = root.HospitalCore.weekWindow();

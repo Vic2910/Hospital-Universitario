@@ -2,8 +2,8 @@
   'use strict';
   const $ = selector => document.querySelector(selector);
   const app = $('#app'), notice = $('#notice');
-  let api, catalog, fixtures, access = null, roles = [], role = null, page = 'home', search = '', busy = false, design = false;
-  let profile = null, summary = null, overview = null, items = [], queue = [], cursor = null, more = false, factors = [], factor = null;
+  let api, modules, catalog, fixtures, access = null, roles = [], role = null, page = 'home', search = '', busy = false, design = false;
+  let profile = null, summary = null, overview = null, items = [], queue = [], cursor = null, more = false;
   let screenNote = '';
   const statuses = { pending: 'Pendiente', confirmed: 'Confirmado', cancelled: 'Cancelado', waiting: 'En espera', called: 'Llamado', in_service: 'En atención', completed: 'Finalizado' };
   const glyphs = { home: '⌂', patients: '♙', appointments: '▦', consultation: '✚', health: '♡', profile: '♙', more: '☰', request: '✚', chart: '▤', laboratory: '⚗', prescriptions: '▤' };
@@ -31,24 +31,22 @@
   }
   function matches(value) { return !search || value.toLocaleLowerCase('es').includes(search.toLocaleLowerCase('es')); }
   function definition() { return catalog?.[role]?.find(screen => screen.id === page); }
-  function clearData() { profile = summary = overview = null; items = []; queue = []; cursor = null; more = false; screenNote = ''; }
-  function reset() { access = null; roles = []; role = null; page = 'home'; factors = []; factor = null; clearData(); }
+  function clearData() { modules?.clear(); profile = summary = overview = null; items = []; queue = []; cursor = null; more = false; screenNote = ''; }
+  function reset() { access = null; roles = []; role = null; page = 'home'; clearData(); }
   async function run(action) {
     if (busy) return;
     busy = true; message(null); render();
-    try { await action(); } catch (error) { message(error.message || 'No se pudo completar la operación.'); }
+    try { await action(); } catch (error) {
+      if (error.status === 401) { api.clear(); reset(); }
+      if (error.status === 403) modules?.clear();
+      message(error.message || 'No se pudo completar la operación.');
+    }
     finally { busy = false; render(); }
   }
   async function resolve() {
     const current = await api.access();
     if (!current.roles.length) throw new Error('Tu cuenta debe estar activa y vinculada a un Médico o Paciente con el rol correspondiente.');
-    const enrolled = (await api.factors()).filter(item => item.status === 'verified');
-    if (current.access.aal !== 'aal2' && enrolled.length) {
-      factors = enrolled.filter(item => item.factor_type === 'totp');
-      if (!factors.length) throw new Error('Esta cuenta requiere un segundo factor no compatible. Contacta al administrador.');
-      factor = factors[0].id; return;
-    }
-    factors = []; factor = null; access = current.access; roles = current.roles;
+    access = current.access; roles = current.roles;
     role = roles.length === 1 ? roles[0] : null; page = 'home';
   }
   async function load(append = false) {
@@ -59,6 +57,8 @@
       access = current.access; roles = current.roles; screenNote = '';
       if (!profile) profile = await api.rpc('my_profile');
       const facility = access.roles.find(item => item.code === role)?.facility_id;
+      modules.configure(access,role,facility);
+      if (modules.supports(role,page)) { await modules.load(page,append); return; }
       if (page === 'home') {
         summary = null;
         const from = new Date(); from.setHours(0, 0, 0, 0);
@@ -96,7 +96,6 @@
   function render() {
     app.replaceChildren();
     document.body.classList.toggle('authenticated', !!role);
-    if (factors.length) return renderMFA();
     if (!access) return renderLogin();
     if (!role) return renderRoles();
     renderPortal();
@@ -125,21 +124,6 @@
       });
     });
     view.append(form, el('p', 'Tu perfil y tus permisos son asignados por el hospital.', 'login-footer')); app.append(view);
-  }
-  function renderMFA() {
-    const view = el('section', null, 'role-picker');
-    view.append(el('div', '◇', 'mark'), el('h2', 'Verifica tu identidad'), el('p', 'Introduce el código de seis dígitos de tu aplicación de autenticación.'));
-    const form = el('form');
-    if (factors.length > 1) {
-      const select = el('select'); select.setAttribute('aria-label', 'Autenticador');
-      for (const item of factors) { const option = el('option', item.friendly_name || item.id); option.value = item.id; select.append(option); }
-      select.value = factor; select.addEventListener('change', () => { factor = select.value; }); form.append(select);
-    }
-    const field = el('input'); Object.assign(field, { name: 'totp', id: 'totp', placeholder: '000000', inputMode: 'numeric', autocomplete: 'one-time-code', pattern: '[0-9]{6}', required: true, maxLength: 6 }); field.setAttribute('aria-label', 'Código del autenticador');
-    const submit = el('button', 'Verificar', 'primary'); submit.type = 'submit'; submit.disabled = busy;
-    form.append(field, submit);
-    form.addEventListener('submit', event => { event.preventDefault(); if (!form.reportValidity()) return; const code = field.value; field.value = ''; run(async () => { await api.verifyTOTP(factor, code); await resolve(); if (role) await load(); }); });
-    view.append(form, button('Cancelar', logout, 'text-button')); app.append(view);
   }
   function renderRoles() {
     const view = el('section', null, 'role-picker'); view.append(el('h2', 'Selecciona tu perfil'));
@@ -175,7 +159,7 @@
     return nav;
   }
   function heading(content, text) { content.append(el('h2', text, 'section-title')); }
-  function empty(content, text) { content.append(row(text || 'La consulta de este módulo estará disponible en la siguiente entrega.')); }
+  function empty(content, text) { content.append(row(text || 'No hay registros que coincidan con esta consulta.')); }
   function dataRows(content, rows, icons = true) {
     for (const values of rows.filter(values => matches(values.join(' ')))) content.append(row(values[0], values[1], values[2], icons));
   }
@@ -184,6 +168,10 @@
     if (busy) content.append(el('p', 'Cargando…', 'loading'));
     if (screenNote) content.append(el('p', screenNote, 'scope-note'));
     const screen = definition();
+    if (!design && modules.supports(role,page) && page !== 'profile') {
+      modules.configure(access,role,access.roles.find(item => item.code === role)?.facility_id);
+      return modules.render(content,page,search);
+    }
     if (page === 'home') return home(content);
     if (page === 'more' || page === 'health') return menu(content);
     if (page === 'rooms') return rooms(content);
@@ -247,6 +235,9 @@
     }
     heading(content, 'Agenda semanal');
     for (const values of rows.filter(values => matches(values.join(' ')))) { const card = row(values[0],values[1],values[2]); card.className += ' schedule-row'; content.append(card); }
+    if (!design) for (const shift of items.filter(item => item.status === 'pending')) content.append(button('Confirmar jornada · ' + formatPeriod(shift.period),() => run(async () => {
+      await api.rpc('confirm_shift',{p_id:shift.id,p_expected_version:shift.row_version}); await load(); message('Jornada confirmada.');
+    }),'module-action'));
     if (!rows.length && !busy) empty(content, 'No hay turnos para mostrar.'); loadMore(content);
   }
   function formatPeriod(period) {
@@ -284,8 +275,12 @@
     card.append(el('div', initials, 'avatar'), details); content.append(card); heading(content, definition().section);
     content.append(row(role === 'doctor' ? 'Correo institucional' : 'Correo electrónico', email));
     if (role === 'doctor') content.append(row('Especialidad', design ? 'Medicina interna' : 'Verificación institucional'), row('Identificación profesional', profile?.professional?.license_number || 'Verificación institucional'));
-    else content.append(row('Teléfono', profile?.contacts?.find(item => item.kind === 'phone')?.value || 'Número por configurar'), row('Contacto de emergencia', 'Información por actualizar'));
-    content.append(row('Seguridad y privacidad','Credenciales y autenticación'), button('Notificaciones　›', () => go('notifications'), 'menu-row'), button('Cerrar sesión', logout, 'logout'));
+    else if (design) content.append(row('Teléfono', 'Número por configurar'), row('Contacto de emergencia', 'Información por actualizar'));
+    if (!design) {
+      modules.configure(access,role,access.roles.find(item => item.code === role)?.facility_id);
+      modules.render(content,'profile',search);
+    }
+    content.append(button('Notificaciones　›', () => go('notifications'), 'menu-row'), button('Cerrar sesión', logout, 'logout'));
   }
   function information(content) {
     heading(content, 'Información del hospital');
@@ -310,7 +305,7 @@
       input.disabled = !design; input.setAttribute('aria-label',label); group.append(input); content.append(group);
     }
     content.append(el('p',screen.layout === 'request' ? 'La disponibilidad se confirmará al programar.' : 'Verifica los datos antes de guardar.','rose-note'));
-    const action = button(screen.layout === 'request' ? 'Enviar solicitud' : 'Guardar consulta', () => {}, 'primary'); action.disabled = true; content.append(action,el('p','Esta operación estará disponible en la siguiente entrega.','scope-note'));
+    const action = button(screen.layout === 'request' ? 'Enviar solicitud' : 'Guardar consulta', () => {}, 'primary'); action.disabled = true; content.append(action);
   }
   function setModeLabel() {
     $('#preview-mode').textContent = design ? 'MODO DISEÑO · Datos de ejemplo locales. Sin sesión y sin conexión a Supabase.' : 'Conexión real a Supabase. Inicia sesión con una cuenta autorizada.';
@@ -318,7 +313,7 @@
   }
   async function enterDesign(candidate) {
     if (busy) return;
-    if (!design && (access || factors.length)) { message('Cierra tu sesión antes de abrir el modo de diseño.'); return; }
+    if (!design && access) { message('Cierra tu sesión antes de abrir el modo de diseño.'); return; }
     await run(async () => {
       if (!fixtures) fixtures = await (await fetch('/design-fixtures.json')).json();
       reset(); design = true; role = candidate; roles = [candidate];
@@ -329,6 +324,7 @@
     const [configResponse, screensResponse] = await Promise.all([fetch('/shared/contract.json',{cache:'no-store'}), fetch('/shared/screens.json',{cache:'no-store'})]);
     if (!configResponse.ok || !screensResponse.ok) throw new Error('No se pudo cargar la configuración.');
     api = new HospitalAPI(await configResponse.json()); catalog = await screensResponse.json();
+    modules = new HospitalModules(api,{el,button,row,run,message,go,period:formatPeriod,busy:() => busy});
     if (sessionStorage.getItem(api.storageKey)) {
       busy = true;
       try { await resolve(); if (role) await load(); } catch (error) { api.clear(); reset(); message(error.message); }
@@ -340,5 +336,5 @@
   $('#live-mode').addEventListener('click', () => { if (!design || busy) return; design = false; reset(); message(null); setModeLabel(); render(); });
   render();
   document.addEventListener('visibilitychange', () => { if (!document.hidden && role && !design && !busy) run(() => load()); });
-  setInterval(() => { if (!document.hidden && role === 'patient' && page === 'turns' && !design && !busy) run(() => load()); },30000);
+  setInterval(() => { if (!document.hidden && !design && !busy && ((role === 'patient' && ['turns','notifications'].includes(page)) || (role === 'doctor' && ['home','patients','notifications'].includes(page)))) run(() => load()); },30000);
 })();

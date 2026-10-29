@@ -66,5 +66,3 @@ struct HospitalOverview: Decodable {
     let information: [Notice]
     let on_duty: [OnDuty]
 }
-
-struct MFAFactor: Decodable { let id: UUID; let factor_type: String; let status: String }

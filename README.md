@@ -2,9 +2,21 @@
 
 El [índice de documentación](docs/README.md) reúne el [contexto completo de esta sesión](docs/SESION_2026-10-23.md) y la [bitácora](docs/BITACORA.md). Las IA que modifiquen el proyecto deben documentar sus cambios según [AGENTS.md](AGENTS.md). El nombre visible vigente es **Hospital Universitario**.
 
+## Modulos funcionales - 28 de octubre
+
+**Decision vigente de autenticacion:** por solicitud expresa, Medico y Paciente acceden con correo y contrasena, sin MFA. Se retiro el desafio en web/iOS y se aplico [mobile-password-access.sql](docs/sql/mobile-password-access.sql) en Supabase. Al reinstalar el backend, ejecutar este SQL despues de los scripts de modulos. Se mantienen sesion vigente, perfil activo, permisos, RLS y vinculos; otros roles conservan sus controles anteriores. Esta decision sustituye las menciones MFA historicas que siguen mas abajo. [Detalle y pruebas](docs/ACCESO_SIN_MFA_2026-10-28.md).
+
+La ampliacion actual conecta los modulos de **Medico y Paciente en iOS y en la vista previa web**. Incluye consultas con diagnostico del catalogo y cierre firmado, ordenes y recetas atomicas, expediente/historial, citas y solicitudes del paciente, resultados publicados, notificaciones, ajustes de perfil y confirmacion de jornadas. Se mantiene el diseno y la estructura existentes. iOS usa **supabase-swift 2.28.0** con la sesion compartida.
+
+**Preparacion obligatoria en Mac:** configurar `HospitalUniversitario/Configuration/Supabase.local.xcconfig` siguiendo la plantilla del mismo directorio y resolver Swift Packages. iOS lee URL/clave publica desde Info.plist/build settings, sin fallback al contrato web. No usar claves administrativas. El archivo local esta ignorado por Git.
+
+Las funciones de [doctor-module.sql](docs/sql/doctor-module.sql) y [mobile-modules.sql](docs/sql/mobile-modules.sql) **ya estan desplegadas en Supabase**. Los flujos se probaron con filas y claims de sesion transitorios dentro de PostgreSQL y se revirtieron; no quedaron ejemplos clinicos instalados. MFA y vinculos siguen siendo obligatorios. Los catalogos reales de medicamentos/estudios estan vacios y deben ser proporcionados por la institucion; no se rellenaron con ejemplos.
+
+La [guia actual de modulos funcionales](docs/MODULOS_FUNCIONALES_2026-10-28.md) detalla archivos, flujos, SQL, pruebas y limites reales. Pasaron 11 pruebas del nucleo y 14 recorridos DOM, ademas de pruebas SQL transaccionales y una comprobacion de receta/layout en navegador con repositorio simulado. **No se compilo Swift en Windows.** Falta validar en Mac y completar un recorrido HTTPS con credenciales reales/MFA; esta copia no contiene las credenciales locales.
+
 **Alcance confirmado: app iOS en SwiftUI y vista previa web local para Windows.** Kotlin y el panel administrativo quedan fuera de esta entrega por indicación del usuario.
 
-Se implementaron el login por roles, la navegación y maquetación base de las 21 pantallas iOS exportadas, y los modelos/servicios de habitaciones y turnos sobre el esquema existente de Supabase. Los formularios clínicos están maquetados, con las operaciones de guardado deshabilitadas para mantener el alcance del avance.
+El avance original implemento login, navegacion y maquetacion base de 21 pantallas. La solicitud posterior del usuario amplia ese alcance a sus flujos funcionales para Medico y Paciente, sin agregar administracion ni otras plataformas.
 
 ## Ejecutar en Windows
 
@@ -27,14 +39,19 @@ La superficie interior del iPhone mide 393 × 852 cuando hay espacio suficiente;
 
 ## Qué funciona con Supabase
 
-Proyecto: **Hospital Universitario**, referencia `kgulityewtcyvjnxeskd`. Se inspeccionaron las tablas y funciones reales antes de implementar los modelos. No se crearon tablas duplicadas ni se ejecutaron nuevas migraciones.
+Proyecto: **Hospital Universitario**, referencia `kgulityewtcyvjnxeskd`. Se inspeccionaron tablas, funciones, restricciones y RLS reales. Se agregaron las funciones y eventos documentados para movil sin duplicar tablas ni relajar politicas.
 
 | Bloque | Comportamiento |
 |---|---|
 | Autenticación | Correo/contraseña; validación de perfil activo, rol y vínculo; restauración y renovación de sesión; cierre `scope=local` |
 | Roles | `doctor` → Médico; `patient` → Paciente; elección de perfil cuando la cuenta tiene ambos; Inicio como primera pantalla |
 | MFA | Desafío/verificación TOTP si la cuenta tiene un autenticador previamente configurado; no muestra datos del portal antes de verificarlo |
-| Inicio | Perfil real y métricas autorizadas por `my_activity_summary`; muestra `—` cuando el resumen requiere una autorización adicional |
+| Inicio | Resumen autorizado del Paciente por `my_activity_summary`; jornada propia del Medico por `doctor_workspace`; no inventa contadores si falta autorizacion |
+| Citas y solicitudes | Consulta propia, solicitud con preferencias y cancelacion permitida con motivo/version; recepcion conserva la programacion y el check-in |
+| Consultas del Medico | Inicio, nota, busqueda de diagnostico, borrador y cierre firmado con versiones |
+| Recetas y laboratorio | Emision atomica del Medico; lecturas propias del Paciente y solo resultados publicados |
+| Expediente e historial | Lecturas autorizadas, detalle, texto, fechas/horas y cursores |
+| Notificaciones y perfil | Buzon propio, marcar leida, preferencias, telefono, emergencia del Paciente y cambio de contrasena |
 | Habitaciones | `read_resource('rooms', ...)`, 25 filas por página, búsqueda local y cargar más; muestra código y estado activo |
 | Turnos del médico | `staff_shifts`, filtrados por el `staff_id` de la cuenta y la semana local de lunes a lunes; jornadas ordenadas y próxima jornada vigente |
 | Turno del paciente | `queue_tickets`, filtrados por el paciente; `my_queue_status` devuelve número visible, personas anteriores, turno atendido y consultorio autorizado |
@@ -43,7 +60,7 @@ Proyecto: **Hospital Universitario**, referencia `kgulityewtcyvjnxeskd`. Se insp
 
 El turno de atención se actualiza cada 30 segundos mientras esa pantalla está visible y la app está en primer plano. También se consulta al volver al primer plano. En iOS se puede deslizar hacia abajo para actualizar. No se inventa un tiempo estimado de espera cuando el servidor no lo calcula.
 
-Las otras pantallas corresponden a **maquetación y navegación base**: citas, pacientes, solicitud de atención, consultas, expediente, historial, recetas, laboratorio y notificaciones. La app real no presenta los ejemplos del prototipo como datos reales. Las operaciones clínicas, altas, reservas y edición quedan para avances posteriores.
+Las pantallas originales que anunciaban una entrega posterior ahora consultan los servicios de los flujos descritos arriba. El modo de diseno sigue siendo de solo lectura y no se importan sus ejemplos como datos reales. Compilacion y pruebas SwiftUI en Mac siguen pendientes.
 
 ## Diseño y pantallas
 
@@ -54,7 +71,7 @@ El ZIP aportado contiene 11 pantallas de Paciente y 10 de Médico. Se usaron com
 
 Las rutas **Más** y **Salud** reúnen las pantallas secundarias. Habitaciones es una consulta complementaria en Más, necesaria para demostrar este bloque; no se presenta como una pantalla exportada de Figma. El ZIP no incluye un login iOS, por lo que se adaptó la identidad visual para ese acceso.
 
-Las imágenes de `docs/design-reference/` son referencias de trabajo: **no se utilizan como fondos para simular pantallas**. No se ha acreditado igualdad píxel a píxel: las capturas no incluyen fuentes, componentes o recursos originales, y este entorno no ofrece un navegador conectado para validación visual.
+Las imagenes de `docs/design-reference/` son referencias, no fondos para simular pantallas. Se comprobo el formulario web de recetas en navegador a 1280x900 y 390x844 sin desbordamiento horizontal. No se acredita igualdad pixel a pixel de las 21 pantallas ni una revision visual de SwiftUI.
 
 ## Modelos y reglas compartidos
 
@@ -100,7 +117,7 @@ El administrador debe crear cuentas con correo confirmado y completar sus víncu
 
 La autorización final sigue en las funciones y políticas RLS del servidor. `my_access` se consulta antes de mostrar el portal y de cargar sus datos. La base comprueba la sesión y las asignaciones vigentes. El cliente no confía en roles elegidos libremente ni en `user_metadata`.
 
-La app no guarda la contraseña. El archivo local de aprovisionamiento sí conserva las contraseñas de estas dos cuentas de prueba, para que el usuario pueda utilizarlas. El token de acceso vive en memoria; el de renovación se guarda en **Keychain** en iOS y **sessionStorage** en el navegador. Si falla el cierre remoto, se descarta la sesión local y se muestra un aviso. El contrato solo contiene URL y clave pública publicable; nunca `service_role`.
+La app no guarda la contrasena. El archivo local de aprovisionamiento conserva las de las dos cuentas de prueba. En iOS, supabase-swift persiste la sesion en **Keychain** y renueva sus tokens; en web el acceso vive en memoria y la renovacion en **sessionStorage**. Si falla el cierre remoto, se descarta la sesion local y se muestra un aviso. El contrato conserva URL/clave publica para la web; iOS usa su configuracion local de compilacion. Nunca incluir `service_role`.
 
 El servidor de vista previa escucha exclusivamente en `127.0.0.1`, sirve una lista explícita de recursos y aplica CSP y `no-store`. `localhost` y `127.0.0.1` tienen almacenamiento distinto en el navegador.
 
@@ -108,8 +125,8 @@ El servidor de vista previa escucha exclusivamente en `127.0.0.1`, sirve una lis
 
 1. Copia el repositorio completo y abre `HospitalUniversitario/HospitalUniversitario.xcodeproj` en **Xcode 16.2 o posterior**, con un simulador iOS 18.2 o posterior instalado.
 2. Selecciona el esquema compartido **HospitalUniversitario** y un simulador iPhone. Para simulador no hace falta elegir un equipo de firma. Para dispositivo físico, configura tu equipo en Signing & Capabilities.
-3. Ejecuta `⌘R`. No necesitas copiar archivos manualmente ni instalar paquetes: los Swift pertenecen al grupo sincronizado del target y los tres recursos compartidos tienen pertenencia explícita a Copy Bundle Resources.
-4. Ejecuta `⌘U`. Las cinco pruebas del target `HospitalUniversitarioTests` comprueban recursos en el bundle, roles, filtros de propietario, campos nulos y respuestas de turno.
+3. Configura el xcconfig local y resuelve el paquete Supabase segun la guia del Doctor; despues ejecuta `⌘R`. Los Swift pertenecen al grupo sincronizado del target y los tres recursos compartidos tienen pertenencia explicita a Copy Bundle Resources.
+4. Ejecuta `⌘U`. Ademas de las cinco pruebas originales y cinco del Doctor, se agregaron dos de contratos moviles (decimales, nulos y cursor). Las pruebas Swift no se han ejecutado en Windows.
 5. Con cuentas preparadas, verifica ambos roles, TOTP, doble perfil, cuenta pendiente/suspendida, contraseña errónea, cierre/reapertura, habitaciones, turnos vacíos y pérdida de conexión.
 
 Comprobación opcional por terminal:
@@ -119,7 +136,7 @@ xcodebuild -list -project HospitalUniversitario/HospitalUniversitario.xcodeproj
 xcodebuild -project HospitalUniversitario/HospitalUniversitario.xcodeproj -scheme HospitalUniversitario -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
 ```
 
-**Dependencias SPM:** ninguna. SwiftUI, Foundation/URLSession, Security/Keychain y JavaScriptCore vienen en el SDK de Apple. La app usa las [API REST de Supabase Auth](https://supabase.com/docs/reference/self-hosting-auth) y [RPC Postgres](https://supabase.com/docs/guides/database/functions). No es necesario resolver paquetes ni ejecutar Node desde Xcode.
+**Dependencias SPM:** supabase-swift, version exacta 2.28.0, producto Supabase, requiere resolver paquetes en Mac y conservar el lockfile generado. Autenticacion/sesion/MFA y RPC del Doctor utilizan el SDK; las lecturas anteriores conservan su transporte REST con el token de la misma sesion. SwiftUI, Foundation, Security/Keychain y JavaScriptCore siguen siendo frameworks del SDK de Apple. No es necesario ejecutar Node desde Xcode.
 
 ## Archivos y pertenencia a targets
 
@@ -168,7 +185,7 @@ node --preserve-symlinks --preserve-symlinks-main scripts/test-real-login.mjs
 
 El comando anterior no inscribe MFA. La opción `--enroll-totp` está reservada para una autorización adicional expresa y no se ha ejecutado. `scripts/prepare-test-accounts.mjs` solo preparó los archivos locales de la semilla; no debe usarse para sobrescribir identidades existentes.
 
-**Límites de verificación:** Windows no dispone del SDK de Apple: no se ejecutó `xcodebuild` ni las pruebas Swift. No hay navegador conectado para automatización visual; las pruebas DOM no sustituyen una captura real. La prueba real de Auth/HTTP ya pasó para ambos roles; la inscripción TOTP y los resúmenes con `aal2` permanecen pendientes.
+**Limites vigentes:** Windows no dispone del SDK de Apple: no se ejecuto xcodebuild ni las pruebas Swift. La comprobacion reciente en navegador uso un repositorio de prueba; las verificaciones HTTPS nuevas fueron sin sesion y las pruebas clinicas SQL usaron claims simulados con rollback. Las pruebas Auth reales descritas en el informe historico pertenecen a la sesion anterior, no a esta ampliacion. El recorrido con credenciales/MFA reales y la validacion nativa siguen pendientes.
 
 La consulta más reciente del asesor de seguridad informa que la protección de contraseñas filtradas está deshabilitada; no se cambió esa configuración. [Configuración de protección de contraseñas](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection). También persisten seis avisos INFO por RLS sin políticas en tablas de recuperación `hospital_recovery_3fn`, que no se modificaron. [Explicación del aviso](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy).
 

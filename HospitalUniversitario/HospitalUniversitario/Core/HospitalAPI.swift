@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import Supabase
 
 /// Auth tokens never enter UserDefaults or the shared contract.
 enum RefreshTokenStore {
@@ -20,25 +21,7 @@ enum RefreshTokenStore {
         }
         return String(data: data, encoding: .utf8)
     }
-    static func save(_ token: String) throws {
-        let values = [kSecValueData as String: Data(token.utf8)]
-        let status = SecItemUpdate(query as CFDictionary, values as CFDictionary)
-        if status == errSecItemNotFound {
-            var request = query
-            request[kSecValueData as String] = Data(token.utf8)
-            request[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-            guard SecItemAdd(request as CFDictionary, nil) == errSecSuccess else {
-                throw HospitalError.message("No se pudo guardar la sesión en el llavero.")
-            }
-        } else if status != errSecSuccess { throw HospitalError.message("No se pudo actualizar la sesión.") }
-    }
     static func clear() { SecItemDelete(query as CFDictionary) }
-}
-
-struct AuthSession: Decodable {
-    let access_token: String
-    let refresh_token: String
-    let expires_in: Double
 }
 
 struct AccessProfile: Decodable {
@@ -84,9 +67,7 @@ struct BackendFailure: Error, LocalizedError {
 @MainActor
 final class HospitalAPI {
     let core: SharedCore
-    private var session: AuthSession?
-    private var expiry = Date.distantPast
-    private var refreshTask: Task<AuthSession, Error>?
+    let client: SupabaseClient
     private var shiftWindow: String?
     private let transport: URLSession
 
@@ -95,7 +76,16 @@ final class HospitalAPI {
         let config = URLSessionConfiguration.ephemeral
         config.urlCache = nil
         config.timeoutIntervalForRequest = 25
-        transport = URLSession(configuration: config)
+        let transport = URLSession(configuration: config)
+        self.transport = transport
+        client = SupabaseClient(supabaseURL: core.configuration.url,
+            supabaseKey: core.configuration.publishableKey,
+            options: .init(auth: .init(storageKey: "hospital-universitario-session"),
+                global: .init(session: transport)))
+    }
+
+    var hasStoredSession: Bool {
+        client.auth.currentSession != nil || (try? RefreshTokenStore.read()) != nil
     }
 
     private func request(_ path: String, body: Data = Data("{}".utf8), token: String? = nil, method: String = "POST") async throws -> Data {
@@ -114,41 +104,17 @@ final class HospitalAPI {
         return data
     }
 
-    private func accept(_ value: AuthSession) throws {
-        try RefreshTokenStore.save(value.refresh_token)
-        session = value
-        expiry = Date().addingTimeInterval(value.expires_in - 60)
-    }
-
     func signIn(email: String, password: String) async throws {
-        let body = try JSONSerialization.data(withJSONObject: ["email": email.trimmingCharacters(in: .whitespacesAndNewlines), "password": password])
-        let data = try await request("/auth/v1/token?grant_type=password", body: body)
-        let value = try JSONDecoder().decode(AuthSession.self, from: data)
-        do { try accept(value) }
-        catch {
-            _ = try? await request("/auth/v1/logout?scope=local", body: Data("{}".utf8), token: value.access_token)
-            throw error
-        }
+        _ = try await client.auth.signIn(email: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
+        RefreshTokenStore.clear()
     }
 
     func token() async throws -> String {
-        if let session, expiry > Date() { return session.access_token }
-        if let refreshTask { return try await refreshTask.value.access_token }
-        guard let refresh = try RefreshTokenStore.read() else { throw BackendFailure(status: 401) }
-        let task = Task { @MainActor in
-            let body = try JSONSerialization.data(withJSONObject: ["refresh_token": refresh])
-            let data: Data
-            do { data = try await self.request("/auth/v1/token?grant_type=refresh_token", body: body) }
-            catch let failure as BackendFailure where [400, 401, 403].contains(failure.status) {
-                throw BackendFailure(status: 401)
-            }
-            let value = try JSONDecoder().decode(AuthSession.self, from: data)
-            try self.accept(value)
-            return value
+        if client.auth.currentSession == nil, let refresh = try RefreshTokenStore.read() {
+            _ = try await client.auth.refreshSession(refreshToken: refresh)
+            RefreshTokenStore.clear()
         }
-        refreshTask = task
-        defer { refreshTask = nil }
-        return try await task.value.access_token
+        return try await client.auth.session.accessToken
     }
 
     func access() async throws -> (HospitalAccess, [String]) {
@@ -176,25 +142,6 @@ final class HospitalAPI {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    func factors() async throws -> [MFAFactor] {
-        struct AuthUser: Decodable { let factors: [MFAFactor]? }
-        let data = try await request("/auth/v1/user", token: token(), method: "GET")
-        return try JSONDecoder().decode(AuthUser.self, from: data).factors ?? []
-    }
-
-    func verifyTOTP(factor: UUID, code: String) async throws {
-        struct Challenge: Decodable { let id: UUID }
-        guard code.count == 6, code.allSatisfy({ $0.isASCII && $0.isNumber }) else {
-            throw HospitalError.message("Introduce el código de seis dígitos de tu autenticador.")
-        }
-        let token = try await token()
-        let base = "/auth/v1/factors/" + factor.uuidString
-        let challengeData = try await request(base + "/challenge", token: token)
-        let challenge = try JSONDecoder().decode(Challenge.self, from: challengeData)
-        let body = try JSONSerialization.data(withJSONObject: ["challenge_id": challenge.id.uuidString, "code": code])
-        let data = try await request(base + "/verify", body: body, token: token)
-        try accept(JSONDecoder().decode(AuthSession.self, from: data))
-    }
 
     private func read<T: Decodable>(_ resource: String, cursor: ResourceCursor?, owner: UUID? = nil) async throws -> ResourcePage<T> {
         if resource == "staff_shifts" && (cursor == nil || shiftWindow == nil) { shiftWindow = try core.weekWindow() }
@@ -209,16 +156,15 @@ final class HospitalAPI {
     func signOut() async -> String? {
         var warning: String?
         do {
-            let accessToken = try await token()
-            _ = try await request("/auth/v1/logout?scope=local", body: Data("{}".utf8), token: accessToken)
+            try await client.auth.signOut(scope: .local)
         } catch { warning = "Se cerró la sesión en este dispositivo. No se pudo confirmar el cierre remoto." }
-        clearLocal()
+        RefreshTokenStore.clear()
+        shiftWindow = nil
         return warning
     }
 
-    func clearLocal() {
-        session = nil
-        expiry = .distantPast
+    func clearLocal() async {
+        try? await client.auth.signOut(scope: .local)
         shiftWindow = nil
         RefreshTokenStore.clear()
     }
