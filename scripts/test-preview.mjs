@@ -28,6 +28,11 @@ class Element {
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
 const response = (body,status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body, text: async () => body == null ? '' : JSON.stringify(body) });
+export async function openAttentionRequest(ui) {
+  await ui.click('Salud');
+  assert.ok(ui.get('sched-submit'),'Salud abre directamente Solicitar atención');
+  assert.equal(ui.app.textContent.includes('Tu información de salud'),false,'Sin menú intermedio');
+}
 export function createApp(roleCodes = ['doctor'], options = {}) {
   const body = new Element('body');
   for (const id of ['app','notice','preview-mode','design-patient','design-doctor','live-mode','design-reception']) { const node = new Element(id.startsWith('design-') || id === 'live-mode' ? 'button' : 'div'); node.id = id; if (id === 'notice') node.hidden = true; body.append(node); }
@@ -116,7 +121,7 @@ console.log('8 recorridos aprobados; 20 pantallas comprobadas.');
   const ui = createApp(['patient']); await settle();
   ui.get('design-patient').listeners.click(); await settle();
   assert.match(ui.get('preview-mode').textContent,/MODO DISEÑO/);
-  await ui.click('Mis citas'); await ui.click('Solicitar atención');
+  await openAttentionRequest(ui);
   assert.match(ui.app.textContent, /Preparemos tu próxima cita/);
   assert.equal(ui.get('sched-nombres').value, 'Gaby');
   assert.equal(ui.get('sched-apellidos').value, 'Diaz');
@@ -133,7 +138,7 @@ console.log('8 recorridos aprobados; 20 pantallas comprobadas.');
   assert.ok(selected('symptom-10')); assert.equal(selected('symptom-0'), false); assert.equal(selected('symptom-1'), false);
   await ui.click('Tos'); assert.equal(selected('symptom-10'), false);
   await ui.click('Tos'); assert.equal(selected('symptom-1'), false);
-  await ui.input('Preferencia de horario','Mañana','change');await ui.input('Motivo de consulta', 'Consulta de prueba');
+  await ui.click('Mañana · AM');await ui.input('Motivo de consulta', 'Consulta de prueba');
   for (let index = 0; index < 6; index++) {
     await choose('specialty-' + index);
     assert.equal(ui.get('sched-submit').disabled, true, 'Cambiar especialidad borra el horario');
@@ -157,7 +162,7 @@ console.log('8 recorridos aprobados; 20 pantallas comprobadas.');
   assert.equal(ui.calls.length, calls, 'Editar y preparar no llama a la API');
   ui.get('live-mode').listeners.click(); await settle();
   ui.get('design-patient').listeners.click(); await settle();
-  await ui.click('Mis citas'); await ui.click('Solicitar atención');
+  await openAttentionRequest(ui);
   assert.equal(ui.get('sched-nombres').value, 'Gaby', 'Borrador descartado al salir');
   assert.equal(ui.calls.some(call => call.url.startsWith(contract.url)), false);
   console.log('OK Agendar cita (design): datos, síntomas, seis especialidades, validación y simulación sin API');
@@ -172,7 +177,7 @@ console.log('8 recorridos aprobados; 20 pantallas comprobadas.');
     if (url.endsWith('/request_appointment')) { const request = {...params,id:'00000000-0000-4000-8000-000000000099',status:'pending'}; requests.push(request); return {body:{id:request.id,status:'pending'}}; }
   };
   const ui = createApp(['patient'],{transport}); await ui.login();
-  await ui.click('Mis citas'); await ui.click('Solicitar atención');
+  await openAttentionRequest(ui);
   assert.match(ui.app.textContent, /Preparemos tu próxima cita/);
   assert.match(ui.app.textContent, /la central de citas del hospital/);
   assert.equal(ui.app.all().some(node => node.id === 'sched-nombres'), false, 'Sin campos editables de datos en modo sesión');
@@ -181,7 +186,7 @@ console.log('8 recorridos aprobados; 20 pantallas comprobadas.');
   assert.ok(pick('specialty-0') && pick('specialty-1'), 'Especialidades del catálogo real');
   assert.equal(ui.get('sched-submit').disabled, true);
   await ui.input('Fecha preferida', tomorrow(), 'change');
-  await ui.input('Preferencia de horario', 'Mañana', 'change');
+  await ui.click('Mañana · AM');
   await ui.input('Motivo de consulta', 'Consulta de prueba');
   pick('specialty-0').listeners.click(); await settle();
   await ui.click('Tos');
@@ -198,7 +203,7 @@ console.log('8 recorridos aprobados; 20 pantallas comprobadas.');
   assert.equal(ui.get('sched-submit').disabled, true);
   assert.match(ui.app.textContent, /Mis solicitudes/);
   await ui.input('Motivo de consulta', 'Otra consulta'); assert.equal(ui.get('sched-feedback').hidden, true);
-  await ui.input('Preferencia de horario', 'Tarde', 'change');
+  await ui.click('Tarde · PM');
   await ui.click('Solicitar atención');
   const second = ui.calls.findLast(item => item.url.endsWith('/request_appointment'));
   assert.equal(second.params.p_from, '13:00'); assert.equal(second.params.p_to, '17:00');

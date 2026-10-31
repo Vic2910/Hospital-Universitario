@@ -20,6 +20,7 @@ final class HospitalStore: ObservableObject {
     @Published private(set) var roomsMore = false
     @Published private(set) var shiftsMore = false
     @Published private(set) var doctor: DoctorViewModel?
+    @Published private(set) var patientLaboratory: MobileModuleViewModel?
     @Published private(set) var modules: MobileModuleViewModel?
     private var roomsCursor: ResourceCursor?
     private var shiftsCursor: ResourceCursor?
@@ -32,6 +33,7 @@ final class HospitalStore: ObservableObject {
             self.api = api
             doctor = DoctorViewModel(repository: DoctorRepository(client: api.client))
             modules = MobileModuleViewModel(repository: MobileModuleRepository(client: api.client, projectURL: api.core.configuration.url))
+            patientLaboratory = MobileModuleViewModel(repository: MobileModuleRepository(client: api.client, projectURL: api.core.configuration.url))
             catalog = try ScreenCatalog.load()
         }
         catch { message = error.localizedDescription }
@@ -126,14 +128,16 @@ final class HospitalStore: ObservableObject {
             access = fresh; roles = available
             if let facility = fresh.roles.first(where: { $0.code == role })?.facility_id, let profile = fresh.profile {
                 modules?.configure(role: role, facility: facility, profile: profile.id, patient: fresh.patient_id)
+                patientLaboratory?.configure(role: role, facility: facility, profile: profile.id, patient: fresh.patient_id)
             }
-            if role == "patient" && ["request", "schedule"].contains(screenID) {
+            if role == "patient" && ["request", "schedule", "health"].contains(screenID) {
                 if profile == nil { profile = try await api.rpc("my_profile") }
                 await modules?.load("request")
                 return
             }
             if (role == "patient" && ["appointments", "request", "chart", "history", "prescriptions", "laboratory", "notifications"].contains(screenID)) || screenID == "notifications" {
                 await modules?.load(screenID, more: more)
+                if role == "patient" && screenID == "chart" && modules?.page != nil { await patientLaboratory?.load("laboratory") }
                 return
             }
             if role == "doctor", let identity = fresh.staff_id,
@@ -189,7 +193,7 @@ final class HospitalStore: ObservableObject {
             }
         } catch {
             if role == "doctor" { doctor?.clear() }
-            modules?.clear()
+            modules?.clear(); patientLaboratory?.clear()
             rooms = []; shifts = []; tickets = []; queueStatuses = []; summary = nil; overview = nil
             roomsMore = false; shiftsMore = false
             if let failure = error as? BackendFailure, failure.status == 401 { await api.clearLocal(); reset() }
@@ -209,7 +213,7 @@ final class HospitalStore: ObservableObject {
     func switchRole() {
         guard doctor?.saving != true, modules?.saving != true else { return }
         doctor?.clear()
-        modules?.clear()
+        modules?.clear(); patientLaboratory?.clear()
         selectedRole = nil
         rooms = []; shifts = []; tickets = []; message = nil
         roomsCursor = nil; shiftsCursor = nil; roomsMore = false; shiftsMore = false
@@ -217,7 +221,7 @@ final class HospitalStore: ObservableObject {
     }
     private func reset() {
         doctor?.clear()
-        modules?.clear()
+        modules?.clear(); patientLaboratory?.clear()
         access = nil; roles = []; selectedRole = nil
         rooms = []; shifts = []; tickets = []; roomsCursor = nil; shiftsCursor = nil
         roomsMore = false; shiftsMore = false

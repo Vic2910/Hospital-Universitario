@@ -56,3 +56,11 @@ No añadas contraseñas, tokens o secretos a esta carpeta. Las credenciales de p
 - [Conexión de Doctor/Paciente a Supabase y datos de ejemplo creados en la base](CONECTAR_SUPABASE_DATOS_DEMO_2026-10-31.md).
 
 - [Registro de pacientes conectado a Supabase (DUI y teléfono)](REGISTRO_REAL_SUPABASE_2026-10-31.md).
+
+- [Perfil del Paciente e Información general: ubicación, contacto y especialidades](PERFIL_INFORMACION_GENERAL_2026-10-30.md).
+
+- [Laboratorios del expediente Doctor: cronología sin filtros y detalle interno de resultados](LABORATORIOS_EXPEDIENTE_2026-10-31.md).
+
+- [Mi expediente y Mis laboratorios del Paciente: diseño, datos propios y resultados publicados](MI_EXPEDIENTE_LABORATORIOS_PACIENTE_2026-10-31.md).
+
+- [Resolución de fusión Git y validaciones (2026-10-31)](FUSION_GIT_2026-10-31.md).

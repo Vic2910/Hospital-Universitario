@@ -20,20 +20,31 @@
       const field=label=>item.details?.find(value=>value.label.toLowerCase()===label.toLowerCase())?.value;
       return{id:item.id,date:item.event_at,time:period(field('Horario')||''),name:profile?.person?[profile.person.given_names,profile.person.family_names].join(' '):'No hay datos reales',age:field('Edad')||'No hay datos reales',dui:field('DUI')||'No hay datos reales',phone:field('Teléfono')||profile?.contacts?.find(item=>item.kind==='phone')?.value||'No hay datos reales',email:profile?.auth_email||'No hay datos reales',specialty:item.title,doctor:field('Medico')||'No hay datos reales',room:field('Consultorio')||'No hay datos reales',reason:field('Motivo de la consulta')||item.subtitle||'No hay datos reales',symptoms:field('Síntomas')||'No hay datos reales',state:item.status};
     });}
-    render(parent,{appointments,demonstration,renderConnected,requests}){
-      const{el,button,repaint,go}=this.ui,next=[...appointments].filter(item=>Date.parse(item.date)>=Date.now()).sort((a,b)=>Date.parse(a.date)-Date.parse(b.date))[0];
-      const field=(parent,label,value)=>{const row=el('div',null,'consult-field');row.append(el('span',label),el('p',value));parent.append(row);};
-      if(this.selected&&next){
-        const ticket=el('section',null,'consult-ticket');ticket.setAttribute('role','region');ticket.setAttribute('aria-label','Detalle de mi próxima cita');const check=el('span','\u2713','consult-ticket-check');check.setAttribute('aria-hidden','true');ticket.append(check,el('h2','Detalle de consulta','consult-ticket-title'),el('p',demonstration?'Datos de ejemplo · Sin reserva real':'Cita asignada','sched-hint'));
-        const when=el('div',null,'consult-ticket-date');when.append(el('span','Fecha y hora'),el('strong',new Intl.DateTimeFormat('es-GT',{dateStyle:'full'}).format(new Date(next.date))));when.append(el('strong',next.time||new Intl.DateTimeFormat('es-GT',{timeStyle:'short'}).format(new Date(next.date))));ticket.append(when);
-        const details=el('div',null,'consult-ticket-fields');
-        for(const[label,value]of[['Paciente',next.name],['Edad',next.age],['Teléfono',next.phone],['Motivo de la consulta',next.reason],['Síntomas',next.symptoms],['Especialidad',next.specialty],['Médico',next.doctor],['Consultorio',next.room],['DUI',next.dui],['Correo',next.email]])field(details,label,value);
-        ticket.append(details,button('Volver a Mis citas',()=>{this.selected=false;repaint();},'consult-ticket-primary'));parent.append(ticket);return;
+    render(parent,{appointments,demonstration,renderConnected}){
+      const{el,button,repaint}=this.ui,next=[...appointments].filter(item=>Date.parse(item.date)>=Date.now()).sort((a,b)=>Date.parse(a.date)-Date.parse(b.date))[0];
+      const close=()=>{this.selected=false;repaint();};
+      if(!this.selected){
+        const card=button(null,()=>{this.selected=true;repaint();},'patient-assigned-entry');card.setAttribute('aria-label','Cita asignada');
+        const icon=el('span','\u25a6','patient-assigned-entry-icon');icon.setAttribute('aria-hidden','true');const text=el('span',null,'patient-assigned-entry-text');text.append(el('strong','Cita asignada'),el('small','Consulta los detalles de tu atención'));const arrow=el('span','\u203a','patient-assigned-entry-arrow');arrow.setAttribute('aria-hidden','true');card.append(icon,text,arrow);parent.append(card);return;
       }
-      const card=el('article',null,'sched-card');card.append(el('h2','Próxima cita','section-title'));
-      if(next){card.append(el('strong',next.name),el('strong',dateText(next.date)),el('p',next.specialty),el('p',next.doctor),el('p',next.room),el('span','Cita asignada','clinical-lab-state is-completed'));if(demonstration)card.append(el('small','Cita de ejemplo · Sin reserva real','sched-hint'));field(card,'Edad',next.age);field(card,'Teléfono',next.phone);field(card,'Motivo de la consulta',next.reason);field(card,'Síntomas',next.symptoms);card.append(button('Ver detalle de la cita',()=>{this.selected=true;repaint();},'module-action'));}else card.append(el('p','Todavía no tienes una próxima cita asignada.','sched-hint'));parent.append(card,button('Solicitar atención',()=>go('request'),'primary'));
-      if(requests){const queue=el('article',null,'sched-card');queue.append(el('h2','Mis solicitudes de ejemplo','section-title'),el('p','Recepción debe asignar la cita. La preferencia no confirma disponibilidad.','sched-hint'));
-      for(const request of requests){const row=el('article',null,'doctor-visit');row.append(el('strong',request.specialty),el('span',request.state==='pending'?'Pendiente':request.state==='scheduled'?'Cita asignada':request.state==='rejected'?'Rechazada':'Cancelada','clinical-lab-state '+(request.state==='pending'?'is-pending':'is-completed')),el('p',request.reason),el('small','Solicitada: '+dateText(request.createdAt)),el('small','Preferencia: '+request.preference+' · '+request.preferredSlot));queue.append(row);}parent.append(queue);}if(renderConnected)renderConnected(parent);
+      const ticket=el('section',null,'clinical-ticket patient-assigned-ticket');ticket.setAttribute('role','region');ticket.setAttribute('aria-label','Detalle de mi cita asignada');
+      const nav=el('div',null,'clinical-ticket-nav');nav.append(button('Volver',close,'text-button'),el('span','MIS CITAS'));ticket.append(nav);
+      const check=el('span',next?'\u2713':'\u25a6','clinical-ticket-icon');check.setAttribute('aria-hidden','true');ticket.append(check,el('h2',next?'Cita médica asignada':'Sin cita asignada','clinical-ticket-title'));
+      const field=(parent,label,value)=>{const row=el('div',null,'consult-field');row.append(el('span',label),el('p',value||'No hay datos reales'));parent.append(row);};
+      if(next){
+        ticket.append(el('p','Estos son los datos de tu próxima atención.','patient-assigned-intro'));
+        const when=el('div',null,'clinical-ticket-context');when.append(el('span','Fecha y hora de tu cita'),el('strong',new Intl.DateTimeFormat('es-GT',{dateStyle:'full'}).format(new Date(next.date))),el('strong',next.time||new Intl.DateTimeFormat('es-GT',{timeStyle:'short'}).format(new Date(next.date))));ticket.append(when);
+        for(const[title,fields]of[['Datos de la cita',[['Especialidad',next.specialty],['Médico',next.doctor],['Consultorio',next.room]]],['Datos del paciente',[['Paciente',next.name],['Edad',next.age],['DUI',next.dui],['Teléfono',next.phone],['Correo',next.email]]],['Motivo de la atención',[['Motivo de la consulta',next.reason],['Síntomas',next.symptoms]]]]){
+          const group=el('section',null,'patient-assigned-group');group.append(el('h3',title));for(const[label,value]of fields)field(group,label,value);ticket.append(group);
+        }
+        if(demonstration)ticket.append(el('p','Cita de ejemplo · Sin reserva real','clinical-ticket-note'));
+      }else ticket.append(el('p','Todavía no tienes una próxima cita asignada. Recepción confirmará la fecha y hora cuando programe tu atención.','patient-assigned-intro'));
+      if(renderConnected){const manage=el('details',null,'patient-assigned-management');manage.append(el('summary','Gestionar mis citas'));renderConnected(manage);ticket.append(manage);}
+      ticket.append(button('Volver a Mis citas',close,'consult-ticket-primary'));parent.append(ticket);
+    }
+    renderRequests(parent){
+      const{el}=this.ui,queue=el('details',null,'sched-card');queue.append(el('summary','Mis solicitudes de ejemplo'));
+      for(const request of this.requests){const row=el('article',null,'doctor-visit');row.append(el('strong',request.specialty),el('span',({pending:'Pendiente',scheduled:'Cita asignada',rejected:'Rechazada',cancelled:'Cancelada'})[request.state],'clinical-lab-state '+(request.state==='pending'?'is-pending':'is-completed')),el('p',request.reason),el('small','Solicitada: '+dateText(request.createdAt)),el('small','Preferencia: '+request.preference));queue.append(row);}parent.append(queue);
     }
     renderReception(parent){
       const{el,button,repaint,exitReception}=this.ui;parent.append(el('h2','Recepción · Demostración local','section-title'),el('p','Solo solicitudes precargadas/locales. No concede permisos ni escribe en Supabase.','consult-demo'));

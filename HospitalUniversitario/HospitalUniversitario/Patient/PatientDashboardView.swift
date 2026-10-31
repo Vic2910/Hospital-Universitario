@@ -38,7 +38,7 @@ struct PatientDashboardView: View {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 PatientQuickAccessCard(icono: "calendar", titulo: "Mis citas") { navigate("appointments") }
                 PatientQuickAccessCard(icono: "testtube.2", titulo: "Laboratorios") { navigate("laboratory") }
-                PatientQuickAccessCard(icono: "doc.text", titulo: "Expedientes") { navigate("chart") }
+                PatientQuickAccessCard(icono: "doc.text", titulo: "Mi expediente") { navigate("chart") }
                 PatientQuickAccessCard(icono: "pills", titulo: "Recetas") { navigate("prescriptions") }
             }
         }

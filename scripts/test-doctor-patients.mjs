@@ -17,13 +17,13 @@ for(const mode of ['design','session']){
   assert.match(ui.app.textContent,/ana.reyes@ejemplo.test/);await ui.click('Volver');assert.equal(matches().length,1,'Conserva filtros al volver');
   await ui.click('Todos');assert.equal(matches().length,3);await ui.click('Hoy');assert.equal(matches().length,2);
   await ui.click('Seleccionar a María López');
-  for(const text of ['67 años','0123-45678','7123-4567','Consulta de seguimiento','Revisión de resultados','Notas y recetas','Laboratorios del expediente','Hemoglobina de ejemplo'])assert.ok(ui.app.textContent.includes(text),text);
+  for(const text of ['67 años','0123-45678','7123-4567','Consulta de seguimiento','Revisión de resultados','Notas y recetas','Laboratorios del expediente'])assert.ok(ui.app.textContent.includes(text),text);
   assert.equal(ui.app.textContent.includes('Consulta ajena'),false,'No muestra consultas de otro médico');
   assert.equal(ui.app.textContent.includes('Consulta general'),false,'No mezcla el historial de otro paciente');
   await ui.click('Añadir observación');await ui.input('Observación','Nota compartida desde Pacientes');await ui.submit('Guardar');
   await ui.click('Seleccionar a María López');assert.match(ui.app.textContent,/Nota compartida desde Pacientes/);
   await ui.click('Laboratorios');assert.ok(ui.button('Solicitar exámenes'),'Sale de la ficha al cambiar de módulo');
-  await ui.click('Ver expediente');assert.match(ui.app.textContent,/Nota compartida desde Pacientes/);
+  assert.equal(ui.app.all().some(node=>node.tagName==='button'&&['Ver expediente','Ver solicitudes y resultados'].includes(node.textContent)),false);await ui.click('Más');await ui.click(ui.app.all().find(node=>node.tagName==='button'&&node.textContent.startsWith('Expedientes')).textContent);await ui.click('Abrir expediente completo');assert.match(ui.app.textContent,/Nota compartida desde Pacientes/);
   assert.equal(ui.calls.some(call=>/doctor_issue_lab_order|save_consultation/.test(call.url)),false);
   if(mode==='design')assert.equal(ui.calls.some(call=>call.url.startsWith('https:')),false);
   console.log('OK Pacientes '+mode+': DUI/nombre/fecha, coincidencias, ficha interna, historial propio, filtros conservados y seguimiento compartido');

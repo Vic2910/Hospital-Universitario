@@ -73,29 +73,71 @@ struct PatientAppointmentsView: View {
         return .init(appointment: value, date: date, specialty: item.title, doctor: field("Medico") ?? "No hay datos reales", room: field("Consultorio") ?? "No hay datos reales", dui: field("DUI") ?? "No hay datos reales", email: field("Correo") ?? profile?.auth_email ?? "No hay datos reales")
     }
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            if let next, showDetail {
-                DoctorConsultationTicketView(appointment: next.appointment, day: next.date, time: period(next.appointment.period), demonstration: false, close: { showDetail = false }, embedded: true,
-                    closeLabel: "Volver a Mis citas", context: [.init(label: "Especialidad", value: next.specialty), .init(label: "Médico", value: next.doctor), .init(label: "Consultorio", value: next.room), .init(label: "DUI", value: next.dui), .init(label: "Correo", value: next.email)])
-            } else {
-                PatientFormCard(titulo: "Próxima cita", icono: "calendar") {
-                    if let next {
-                        Text(next.date.formatted(date: .abbreviated, time: .shortened)).font(.title3.weight(.bold)).foregroundStyle(HospitalTheme.wine)
-                        Text(next.appointment.patient_name).font(.headline)
-                        HStack { DoctorConsultationField(label: "Edad", value: DoctorConsultationFields.age(next.appointment.age)); DoctorConsultationField(label: "Teléfono", value: DoctorConsultationFields.value(next.appointment.phone)) }
-                        DoctorConsultationField(label: "Motivo de la consulta", value: DoctorConsultationFields.value(next.appointment.reason))
-                        DoctorConsultationField(label: "Síntomas", value: DoctorConsultationFields.symptoms(next.appointment.symptoms))
-                        Text(next.specialty).font(.subheadline.weight(.semibold)); Text(next.doctor).font(.footnote)
-                        Text(next.room).font(.footnote); HospitalBadge(text: "Cita asignada")
-                        Button("Ver detalle de la cita") { showDetail = true }.buttonStyle(.bordered)
-                    } else { Text("Todavía no tienes una próxima cita asignada.").font(.footnote) }
-                }
-                Button("Solicitar atención") { navigate("request") }.buttonStyle(HospitalPrimaryButtonStyle())
-                if !modules.items.isEmpty || modules.error != nil || modules.loading {
-                    MobileModuleView(model: modules, module: "appointments", role: "patient", search: search, period: period, navigate: navigate)
-                }
+        Group {
+            if showDetail { assignedTicket }
+            else {
+                Button { showDetail = true } label: {
+                    HStack(spacing: 16) {
+                        Image(systemName: "calendar.badge.checkmark").font(.system(size: 25)).foregroundStyle(HospitalTheme.wine)
+                            .frame(width: 56, height: 56).background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 17))
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Cita asignada").font(.system(size: 18, weight: .bold)).foregroundStyle(HospitalTheme.ink)
+                            Text("Consulta los detalles de tu atención").font(.footnote).foregroundStyle(HospitalTheme.secondary)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right").font(.subheadline.weight(.semibold)).foregroundStyle(HospitalTheme.wine)
+                    }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 22))
+                        .overlay(RoundedRectangle(cornerRadius: 22).stroke(HospitalTheme.rose, lineWidth: 1))
+                }.buttonStyle(.plain).accessibilityLabel("Cita asignada").accessibilityHint("Abre los datos de tu próxima cita")
             }
         }
+    }
+    private var assignedTicket: some View {
+        VStack(spacing: 22) {
+            HStack {
+                Button { showDetail = false } label: { Label("Volver", systemImage: "chevron.left").font(.subheadline.weight(.semibold)) }
+                Spacer()
+                Text("MIS CITAS").font(.caption2.weight(.bold)).tracking(1).foregroundStyle(HospitalTheme.secondary)
+            }.tint(HospitalTheme.wine)
+            Image(systemName: next == nil ? "calendar" : "checkmark").font(.system(size: 44, weight: .medium)).foregroundStyle(.white)
+                .frame(width: 92, height: 92).background(HospitalTheme.wine, in: Circle())
+            Text(next == nil ? "Sin cita asignada" : "Cita médica asignada").font(.system(size: 27, weight: .bold)).multilineTextAlignment(.center)
+            if let next {
+                Text("Estos son los datos de tu próxima atención.").font(.subheadline).foregroundStyle(HospitalTheme.secondary).multilineTextAlignment(.center)
+                VStack(spacing: 8) {
+                    Text("Fecha y hora de tu cita").font(.caption).foregroundStyle(HospitalTheme.secondary)
+                    Text(next.date.formatted(date: .complete, time: .omitted)).font(.headline)
+                    Text(period(next.appointment.period)).font(.title3.weight(.bold))
+                }.frame(maxWidth: .infinity).padding(20).background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 18))
+                PatientFormCard(titulo: "Datos de la cita", icono: "stethoscope") {
+                    DoctorConsultationField(label: "Especialidad", value: next.specialty)
+                    DoctorConsultationField(label: "Médico", value: next.doctor)
+                    DoctorConsultationField(label: "Consultorio", value: next.room)
+                }
+                PatientFormCard(titulo: "Datos del paciente", icono: "person") {
+                    DoctorConsultationField(label: "Paciente", value: next.appointment.patient_name)
+                    HStack { DoctorConsultationField(label: "Edad", value: DoctorConsultationFields.age(next.appointment.age)); DoctorConsultationField(label: "DUI", value: next.dui) }
+                    DoctorConsultationField(label: "Teléfono", value: DoctorConsultationFields.value(next.appointment.phone))
+                    DoctorConsultationField(label: "Correo", value: next.email)
+                }
+                PatientFormCard(titulo: "Motivo de la atención", icono: "heart.text.square") {
+                    DoctorConsultationField(label: "Motivo de la consulta", value: DoctorConsultationFields.value(next.appointment.reason))
+                    DoctorConsultationField(label: "Síntomas", value: DoctorConsultationFields.symptoms(next.appointment.symptoms))
+                }
+            } else {
+                Text(modules.loading ? "Estamos consultando tus citas." : "Todavía no tienes una próxima cita asignada. Recepción confirmará la fecha y hora cuando programe tu atención.").font(.subheadline).foregroundStyle(HospitalTheme.secondary).multilineTextAlignment(.center)
+            }
+            if !modules.items.isEmpty || modules.error != nil {
+                DisclosureGroup("Gestionar mis citas") {
+                    MobileModuleView(model: modules, module: "appointments", role: "patient", search: search, period: period, navigate: navigate)
+                }.font(.subheadline).tint(HospitalTheme.wine)
+            }
+            Button("Volver a Mis citas") { showDetail = false }
+                .font(.headline).foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 54)
+                .background(Color(red: 33/255, green: 150/255, blue: 243/255), in: RoundedRectangle(cornerRadius: 12)).buttonStyle(.plain)
+        }.padding(22).frame(maxWidth: .infinity).background(.white, in: RoundedRectangle(cornerRadius: 24))
+            .overlay(RoundedRectangle(cornerRadius: 24).stroke(HospitalTheme.rose, lineWidth: 1))
     }
 }
 struct ReceptionAppointmentExampleView: View {

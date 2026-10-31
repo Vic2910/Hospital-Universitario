@@ -279,3 +279,32 @@ Las vistas de Doctor y Paciente (iOS y web) quedaron conectadas a los módulos r
 La base de datos contiene ahora datos de demostración clínicos ficticios ligados a las cuentas demo existentes («Médico DE PRUEBA» / «Paciente de prueba»): tres citas (una pasada, la próxima confirmada y una futura), un encuentro cerrado con nota clínica firmada y diagnóstico, una receta emitida con dos medicamentos, una orden de laboratorio con dos resultados liberados, perfil clínico (alergia, condición resuelta, antecedente, contactos de emergencia), vínculo de cuidado médico–paciente, catálogos, consultorios, jornada del médico, cola del día y un aviso público. No se crearon cuentas ni se modificó esquema, RPC o políticas.
 
 Verificación ejecutada contra Supabase con claims simulados en transacciones revertidas (`docs/sql/test-mobile-flows.sql`): módulos completos del Paciente (citas, solicitud, expediente, historial, recetas, laboratorio, notificaciones y perfil), idempotencia de `request_appointment`, módulos del Doctor (recetas y perfil) y rechazo de suplantación de rol y de cuentas sin vínculo. Nota: el Doctor solo ve recetas de pacientes con un `care_assignments` vigente; ese vínculo está incluido en la siembra. Localmente se aprobaron `scripts/test-preview.mjs`, `python scripts/check-project.py` y `git diff --check`. La compilación Swift en Mac y el login real con credenciales siguen pendientes. [Detalle](docs/CONECTAR_SUPABASE_DATOS_DEMO_2026-10-31.md).
+
+**Ajuste de Mis citas (2026-10-30):** su entrada queda reducida a la tarjeta **Cita asignada**. Al pulsarla se abre el ticket interno basado en la captura 180312, con todos los campos, Volver arriba y botón azul para regresar. Solicitar atención se abre desde **Más**; su preferencia usa dos tarjetas **Mañana · AM / Tarde · PM**. La cola local se consulta al final de ese formulario y la gestión/cancelación conectada dentro del detalle de la cita. Esta distribución sustituye la anterior entrada con datos expandidos y solicitudes. [Detalle del ajuste y pruebas](docs/CITAS_SOLICITUDES_PACIENTE_2026-10-30.md).
+
+
+**Salud del Paciente (2026-10-30):** la pestaña Salud abre directamente el formulario Solicitar atención, reemplazando su menú anterior. El envío continúa como Pendiente en el flujo local de Recepción de demostración; aún no tiene persistencia/envío real a Recepción. Se conservan los accesos anteriores al mismo formulario.
+
+
+**Perfil e Información general (2026-10-30):** Perfil del Paciente muestra nombre completo, correo y teléfono propios con cards de contacto. Información general incorpora ubicación de referencia de UNICAES Santa Ana, mapa, contactos institucionales verificados y especialidades publicadas o de demostración identificadas. Se conservan avisos, ocupación y habitaciones. El perfil del Doctor mantiene nombre/apellido. [Archivos, fuentes y verificaciones](docs/PERFIL_INFORMACION_GENERAL_2026-10-30.md).
+
+
+**Laboratorios del expediente Doctor (2026-10-31):** el expediente muestra exámenes del paciente en cards cronológicas, más recientes primero y sin filtros en ese bloque. Ver examen abre un ticket interno con datos, estado, resultados/valores/referencias cuando estén publicados y Volver al expediente. Observaciones y recetas siguen vinculadas al examen; el prototipo mantiene sus datos locales identificados. [Archivos y verificaciones](docs/LABORATORIOS_EXPEDIENTE_2026-10-31.md).
+
+
+**Separación Laboratorio/Expedientes Doctor (2026-10-31):** Laboratorio ofrece únicamente Solicitar exámenes para el paciente seleccionado. Los estudios se consultan en Expedientes mediante Ver detalle; los resultados se muestran solo con estado Completado. Pendiente/En Proceso muestran su estado sin resultados. Se mantienen los datos locales y la lógica de publicación existentes. [Detalle y pruebas](docs/LABORATORIOS_EXPEDIENTE_2026-10-31.md).
+
+
+**Expedientes Doctor (2026-10-31):** se retira el botón Solicitud de laboratorio; la creación queda en Laboratorio. Datos personales usa cabecera con iniciales/nombre, cuadrícula de identidad y filas de correo/teléfono/expediente, en SwiftUI y web, conservando los datos y acciones existentes. [Detalle y verificaciones](docs/LABORATORIOS_EXPEDIENTE_2026-10-31.md).
+
+
+**Detalle de examen (2026-10-31):** paciente primero con solo nombre, edad y teléfono; después información del examen y tarjetas de resultados con valor, unidad y referencia. El expediente completo conserva los demás datos personales. [Implementación y pruebas](docs/LABORATORIOS_EXPEDIENTE_2026-10-31.md).
+
+
+**Mi expediente y laboratorios del Paciente (2026-10-31):** diseño de ticket y cards coherente con el Doctor, acceso directo a estudios propios por fecha, estados, Ver detalle y resultados solo publicados. Mi expediente incluye los laboratorios sin reemplazar las secciones/documentos existentes. Solo lectura, paginación, documentos autorizados y actualización manual; ejemplos aislados del modo de diseño. [Archivos y verificaciones](docs/MI_EXPEDIENTE_LABORATORIOS_PACIENTE_2026-10-31.md).
+
+
+**Paridad visual del expediente (2026-10-31):** Doctor y Paciente comparten el mismo componente de datos personales, con Nombre/Apellido/Edad/DUI y correo/teléfono/expediente. Laboratorios del Paciente replica las cards de la referencia, con fecha destacada, estado, explicación y Ver detalle. Se verificó la igualdad de la tarjeta para el mismo paciente de demostración, conservando el acceso propio en sesión real. [Detalle y archivos](docs/MI_EXPEDIENTE_LABORATORIOS_PACIENTE_2026-10-31.md).
+
+
+**Integración de ramas (2026-10-31):** se conservan el registro y los módulos conectados del commit local junto con el perfil, expediente, laboratorios y ticket de citas del remoto. Salud abre Solicitar atención con catálogo/fecha reales en sesión y ejemplos solo en diseño; la preferencia AM/PM se mantiene en SwiftUI/web. Perfil conserva los ajustes conectados bajo la tarjeta de identidad. Las instrucciones históricas que sitúan Solicitar atención dentro de Mis citas quedan sustituidas por Salud o Más. [Resolución y verificaciones](docs/FUSION_GIT_2026-10-31.md).

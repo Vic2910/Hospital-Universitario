@@ -15,7 +15,7 @@
         {id:'p3',givenName:'Ana',familyName:'Reyes',email:'ana.reyes@ejemplo.test',age:28,dui:'0345-67890',phone:'7345-6789',record:'DEMO-103',consultationTurn:'A-016'}];
       this.patientFilterDate=false;this.patientDate=dateKey(new Date());
       this.visits=[['p1','doctor-demo',0,'Consulta de seguimiento','Seguimiento registrado en el ejemplo.','Finalizada'],['p1','doctor-demo',-7,'Revisión de resultados','Resultados revisados en el ejemplo.','Finalizada'],['p2','doctor-demo',0,'Consulta general','Valoración registrada en el ejemplo.','En curso'],['p3','doctor-demo',1,'Primera consulta','Pendiente de atención.','Programada'],['p1','otro-doctor',0,'Consulta ajena que debe excluirse','No mostrar','Finalizada']].map(([patientID,doctorID,offset,reason,plan,status])=>{const day=new Date();day.setHours(9,0,0,0);day.setDate(day.getDate()+offset);return{id:root.crypto.randomUUID(),patientID,doctorID,date:day.toISOString(),reason,plan,status};});
-      this.entries=[]; this.modal=''; this.weight=''; this.height=''; this.requestDate=new Date().toISOString();this.activeDoctorID='doctor-demo';this.entryKind='Observación';this.entryText='';this.medication='';this.rxDetails={dose:'',unit:'',frequency:'',route:'',duration:'',quantity:''};this.linkedRequest=null;
+      this.entries=[]; this.modal='';this.activeLabID=null;this.labReturnModal='record'; this.weight=''; this.height=''; this.requestDate=new Date().toISOString();this.activeDoctorID='doctor-demo';this.entryKind='Observación';this.entryText='';this.medication='';this.rxDetails={dose:'',unit:'',frequency:'',route:'',duration:'',quantity:''};this.linkedRequest=null;
       this.selected = ''; this.query = ''; this.preparing = false; this.exam = ''; this.observation = ''; this.confirmation = ''; this.category = 'Todos'; this.filterDate = false; this.date = dateKey(new Date());
       this.requests = HospitalClinicalLabsDesign.states.map((state,index) => {
         const day = new Date(); if(index === 2) day.setDate(day.getDate()-1);
@@ -67,7 +67,7 @@
       request.resultValues=values.map(value=>({...value}));request.result=narrative;request.releasedAt=publishedAt;request.state='Completado';this.ui.repaint?.();return true;
     }
     render(parent,{role,page}) {
-      if(role==='patient'&&page==='chart')this.modal='record';
+      if(role==='patient'&&['chart','laboratory'].includes(page)&&!this.modal)this.modal=page==='chart'?'record':'results';
       const {el,button,repaint,go}=this.ui;
       const card=title=>{const node=el('article',null,'sched-card clinical-lab-card');node.append(el('h2',title,'section-title'));return node;};
       const detail=(parent,label,value)=>{const node=el('div',null,'consult-field');node.append(el('span',label),el('p',value));parent.append(node);};
@@ -80,23 +80,21 @@
       const openEntry=(kind,id=null)=>{this.entryKind=kind;this.entryText='';this.medication='';this.rxDetails={dose:'',unit:'',frequency:'',route:'',duration:'',quantity:''};this.linkedRequest=id;this.modal='entry';repaint();};
       const entryButtons=(node,id=null)=>{if(role==='doctor')node.append(button('Añadir observación',()=>openEntry('Observación',id),'module-action'),button('Añadir receta',()=>openEntry('Receta',id),'module-action'));};
       const labList=(container,patient)=>{
-        const labs=card('Laboratorios del expediente');detail(labs,'Paciente',this.fullName(patient));
-        field(labs,'Tipo de laboratorio','text',this.category,value=>{this.category=value;repaint();},['Todos','Orina','Heces','Sangre','Otros'].map(value=>[value,value]));
-        const toggleLabel=el('label',null,'doctor-toggle'),toggle=el('input');toggle.type='checkbox';toggle.checked=this.filterDate;toggle.setAttribute('aria-label','Filtrar laboratorios por fecha');toggle.addEventListener('change',()=>{this.filterDate=toggle.checked;repaint();});toggleLabel.append(toggle,el('span','Filtrar laboratorios por fecha'));labs.append(toggleLabel);
-        if(this.filterDate)field(labs,'Fecha de laboratorio','date',this.date,value=>{this.date=value;paint();});
-        const list=el('div',null,'clinical-lab-list');
-        const paint=()=>{
-          list.replaceChildren();const rows=this.requests.filter(request=>request.patient.id===patient.id&&(this.category==='Todos'||request.exam.category===this.category)&&(!this.filterDate||dateKey(new Date(request.requestedAt))===this.date)).sort((a,b)=>b.requestedAt.localeCompare(a.requestedAt));
-          if(!rows.length)list.append(el('p','No hay laboratorios para este paciente con los filtros seleccionados.','sched-hint'));
-          for(const request of rows){
-            const row=el('article',null,'doctor-visit');row.append(el('strong',request.exam.name),el('p',stamp(request.requestedAt),'sched-hint'),el('span',request.state,'clinical-lab-state '+(request.state==='Completado'?'is-completed':request.state==='En Proceso'?'is-processing':'is-pending')));
-            const details=el('details');details.append(el('summary','Ver detalle'));demographics(details,request.patient);
-            for(const[label,value]of[['Doctor solicitante',request.doctorName],['Clínica',request.clinicName],['Fecha de solicitud',stamp(request.requestedAt)],['Turno de consulta',request.consultationTurn],['Motivo del examen',request.observation],['Peso',request.weightKg?request.weightKg+' kg':'No hay datos reales'],['Altura',request.heightCm?request.heightCm+' cm':'No hay datos reales'],['Resultado',request.result||'Resultado aún no disponible']])detail(details,label,value);
-            if(request.releasedAt)detail(details,'Publicado',stamp(request.releasedAt));
-            if(request.resultValues?.length){const table=el('table',null,'clinical-result-table');const head=el('tr');for(const label of['Prueba','Valor','Unidad','Referencia'])head.append(el('th',label));table.append(head);for(const value of request.resultValues){const line=el('tr');for(const text of[value.name,value.value,value.unit,value.reference])line.append(el('td',text||'No hay datos reales'));table.append(line);}details.append(table);}
-            entryButtons(details,request.id);row.append(details);list.append(row);
-          }
-        };paint();labs.append(list);container.append(labs);
+        const labs=card('Laboratorios del expediente'),inRecord=this.modal==='record'||role==='patient';labs.append(el('p','Más recientes primero · Solicitudes y resultados del paciente','sched-hint'));
+        if(!inRecord){
+          field(labs,'Tipo de laboratorio','text',this.category,value=>{this.category=value;repaint();},['Todos','Orina','Heces','Sangre','Otros'].map(value=>[value,value]));
+          const label=el('label',null,'doctor-toggle'),toggle=el('input');toggle.type='checkbox';toggle.checked=this.filterDate;toggle.setAttribute('aria-label','Filtrar laboratorios por fecha');toggle.addEventListener('change',()=>{this.filterDate=toggle.checked;repaint();});label.append(toggle,el('span','Filtrar laboratorios por fecha'));labs.append(label);
+          if(this.filterDate)field(labs,'Fecha de laboratorio','date',this.date,value=>{this.date=value;repaint();});
+        }
+        const list=el('div',null,'clinical-lab-timeline'),rows=this.requests.filter(request=>request.patient.id===patient.id&&(inRecord||((this.category==='Todos'||request.exam.category===this.category)&&(!this.filterDate||dateKey(new Date(request.requestedAt))===this.date)))).sort((a,b)=>Date.parse(b.requestedAt)-Date.parse(a.requestedAt));
+        if(!rows.length)list.append(el('p','Este paciente todavía no tiene exámenes registrados.','sched-hint'));
+        for(const request of rows){
+          const row=el('article',null,'clinical-lab-history-card');row.setAttribute('data-request-id',request.id);row.setAttribute('data-requested-at',request.requestedAt);
+          const heading=el('div',null,'clinical-lab-history-heading'),date=el('div',null,'clinical-lab-date-badge');date.append(el('strong',new Date(request.requestedAt).getDate().toString()),el('span',new Intl.DateTimeFormat('es-GT',{month:'short'}).format(new Date(request.requestedAt))));const title=el('div');title.append(el('h3',request.exam.name),el('p',stamp(request.requestedAt),'sched-hint'));heading.append(date,title);
+          row.append(heading,el('span',request.state,'clinical-lab-state '+(request.state==='Completado'?'is-completed':request.state==='En Proceso'?'is-processing':'is-pending')),el('p',request.state==='Completado'?((request.result?.trim()||request.resultValues?.length)?'Resultado disponible para revisión':'Informe pendiente de publicación'):request.state==='En Proceso'?'El laboratorio está procesando el examen':'Solicitud pendiente de procesamiento','sched-hint'));
+          const open=button('Ver detalle',()=>{this.activeLabID=request.id;this.labReturnModal=this.modal;this.modal='lab-detail';repaint();},'clinical-lab-open');open.setAttribute('aria-label','Ver detalle: '+request.exam.name);row.append(open);list.append(row);
+        }
+        labs.append(list);container.append(labs);
       };
       parent.append(el('p','Prototipo local · Solicitudes y expediente de ejemplo · Sin escritura en Supabase','consult-demo'));
       if(!this.modal){
@@ -130,20 +128,22 @@
       const patient=this.patient(role);
       if(!patient){parent.append(card('Selecciona un paciente para continuar'));return;}
       const summary=card(this.fullName(patient));detail(summary,'DUI',patient.dui);detail(summary,'Expediente',patient.record);
-      if(page==='laboratory'&&role==='doctor')summary.append(button('Solicitar exámenes',()=>{this.begin(role);repaint();},'primary'),button('Ver expediente',()=>{this.modal='record';go('chart');},'module-action'));
-      else{summary.append(button('Abrir expediente completo',()=>{this.modal='record';repaint();},'primary'));if(role==='doctor')summary.append(button('Solicitud de laboratorio',()=>{this.begin(role);repaint();},'module-action'));}
-      if(page==='laboratory')summary.append(button('Ver solicitudes y resultados',()=>{this.modal='results';repaint();},'module-action'));
+      if(page==='laboratory'&&role==='doctor')summary.append(button('Solicitar exámenes',()=>{this.begin(role);repaint();},'primary'));
+      else{summary.append(button('Abrir expediente completo',()=>{this.modal='record';repaint();},'primary'));}
+      if(page==='laboratory'&&role!=='doctor')summary.append(button('Ver solicitudes y resultados',()=>{this.modal='results';repaint();},'module-action'));
       if(page!=='patients')parent.append(summary);
       if(this.confirmation){const notice=el('p',this.confirmation,'consult-demo');notice.setAttribute('role','status');parent.append(notice);}
+      if(role==='patient'&&page==='laboratory'&&!this.modal)this.modal='results';
       if(!this.modal)return;
       parent.replaceChildren(); parent.scrollTop=0;
-      const dialog=el('section',null,'clinical-ticket');dialog.tabIndex=-1;dialog.setAttribute('role','region');dialog.setAttribute('aria-label',this.modal==='record'?'Expediente completo':this.modal==='request'?'Solicitar exámenes':this.modal==='results'?'Solicitudes y resultados':'Formulario de '+this.entryKind);
-      const close=()=>{this.modal='';this.preparing=false;if(role==='patient'&&page==='chart')go('home');else repaint();};
+      const dialog=el('section',null,'clinical-ticket');dialog.tabIndex=-1;dialog.setAttribute('role','region');dialog.setAttribute('aria-label',this.modal==='lab-detail'?'Detalle de examen':this.modal==='record'?(role==='patient'?'Mi expediente':'Expediente completo'):this.modal==='request'?'Solicitar exámenes':this.modal==='results'?(role==='patient'?'Mis laboratorios':'Solicitudes y resultados'):'Formulario de '+this.entryKind);
+      const close=()=>{if(this.modal==='lab-detail'){this.modal=this.labReturnModal||'record';this.activeLabID=null;repaint();return;}this.modal='';this.preparing=false;if(role==='patient'&&['chart','laboratory'].includes(page))go('home');else repaint();};
       const top=el('div',null,'clinical-ticket-nav');top.append(button('Volver',close,'text-button'),el('span',this.modal==='request'?'PASO 2 DE 2':'FICHA CLÍNICA'));dialog.append(top);
-      const icon=el('span','\u2713','clinical-ticket-icon');icon.setAttribute('aria-hidden','true');
-      const heading=this.modal==='record'?'Expediente completo':this.modal==='request'?'Solicitar exámenes':this.modal==='results'?'Solicitudes y resultados':this.entryKind;
-      dialog.append(icon,el('h2',heading,'clinical-ticket-title'),el('p',this.fullName(patient),'clinical-ticket-patient'));
-      const context=el('div',null,'clinical-ticket-context');context.append(el('strong',this.modal==='request'?stamp(this.requestDate):patient.record),el('span',this.modal==='request'?this.doctorName:'DUI: '+patient.dui));dialog.append(context);
+      const selectedLab=this.requests.find(item=>item.id===this.activeLabID&&item.patient.id===patient.id);
+      const icon=el('span',this.modal==='lab-detail'&&selectedLab?.state!=='Completado'?'◷':'\u2713','clinical-ticket-icon');icon.setAttribute('aria-hidden','true');
+      const heading=this.modal==='lab-detail'?'Detalle de examen':this.modal==='record'?(role==='patient'?'Mi expediente':'Expediente completo'):this.modal==='request'?'Solicitar exámenes':this.modal==='results'?(role==='patient'?'Mis laboratorios':'Solicitudes y resultados'):this.entryKind;
+      if(this.modal!=='lab-detail')dialog.append(icon);dialog.append(el('h2',heading,'clinical-ticket-title'));if(this.modal!=='lab-detail')dialog.append(el('p',this.fullName(patient),'clinical-ticket-patient'));
+      const context=el('div',null,'clinical-ticket-context');context.append(el('strong',this.modal==='lab-detail'?(selectedLab?stamp(selectedLab.requestedAt):'No hay datos reales'):this.modal==='request'?stamp(this.requestDate):patient.record),el('span',this.modal==='lab-detail'?(selectedLab?.exam.name||'No hay datos reales'):this.modal==='request'?this.doctorName:'DUI: '+patient.dui));if(this.modal!=='lab-detail')dialog.append(context);
       dialog.append(el('small','Datos locales de ejemplo · Sin envío al hospital','clinical-ticket-note'));
       if(this.modal==='request'){
         const form=el('form',null,'clinical-lab-form');
@@ -164,10 +164,29 @@
         }
         field(form,this.entryKind==='Receta'?'Observaciones':'Observación','textarea',this.entryText,value=>{this.entryText=value;valid();}).required=true;
         save=el('button','Guardar','primary');save.type='submit';valid();form.append(save);form.addEventListener('submit',event=>{event.preventDefault();if(this.saveEntry(role))repaint();});dialog.append(form);
+      }else if(this.modal==='lab-detail'){
+        const request=selectedLab;
+        if(!request)dialog.append(el('p','Este examen no está disponible para el paciente seleccionado.','sched-hint'));
+        else{
+          const personal=card('Paciente');personal.className+=' lab-detail-patient';
+          const identity=el('div',null,'lab-detail-identity'),avatar=el('span',[request.patient.givenName,request.patient.familyName].map(value=>value?.trim()?.[0]||'').join('')||'?','record-person-avatar');avatar.setAttribute('aria-hidden','true');identity.append(avatar);detail(identity,'Nombre completo',this.fullName(request.patient));personal.append(identity);
+          const contact=el('div',null,'lab-detail-contact');detail(contact,'Edad',request.patient.age>=0?request.patient.age+' años':'No hay datos reales');detail(contact,'Teléfono',request.patient.phone);personal.append(contact);dialog.append(personal);
+          const info=card('Información del examen');info.className+=' lab-detail-exam';info.append(el('h3',request.exam.name,'clinical-lab-detail-name'),el('span',request.state,'clinical-lab-state '+(request.state==='Completado'?'is-completed':request.state==='En Proceso'?'is-processing':'is-pending')));
+          const date=el('div',null,'clinical-ticket-context');date.append(el('span','Fecha de solicitud'),el('strong',stamp(request.requestedAt)));info.append(date);
+          for(const[label,value]of[['Tipo de examen',request.exam.category],['Doctor solicitante',request.doctorName],['Turno',request.consultationTurn],['Clínica',request.clinicName],['Motivo del examen',request.observation]])detail(info,label,value);dialog.append(info);
+          const result=card('Resultado del examen');result.className+=' lab-detail-result';
+          if(request.state==='Completado'){
+            if(request.releasedAt)detail(result,'Fecha de publicación',stamp(request.releasedAt));
+            for(const value of request.resultValues||[]){const item=el('div',null,'clinical-result-value');item.append(el('span',value.name),el('small','Valor obtenido','clinical-result-label'),el('strong',(value.value||'No hay datos reales')+' '+(value.unit||'')),el('small','Referencia: '+(value.reference||'No hay datos reales')));result.append(item);}
+            detail(result,'Observación del laboratorio',request.result||'No hay un informe publicado todavía');
+          }else{result.append(el('h3',request.state),el('p',request.state==='En Proceso'?'El examen se está procesando. Los resultados aparecerán aquí cuando se publiquen.':'La solicitud está registrada y espera procesamiento. Todavía no hay resultados publicados.','sched-hint'));}
+          dialog.append(result);entryButtons(dialog,request.id);
+        }
+        dialog.append(button(this.labReturnModal==='record'?'Volver al expediente':'Volver a laboratorios',close,'consult-ticket-primary'));
       }else if(this.modal==='results'){labList(dialog,patient);
       }else{
-        const personal=card('Datos personales');demographics(personal,patient);dialog.append(personal);
-        const history=card('Historial clínico de mis consultas');history.append(el('p','Solo tus consultas con este paciente. Las próximas citas no son antecedentes clínicos.','sched-hint'));
+        const personal=card('Datos personales');personal.append(root.HospitalClinicalIdentity(el,patient));dialog.append(personal);
+        const history=card(role==='patient'?'Historial clínico':'Historial clínico de mis consultas');history.append(el('p',role==='patient'?'Consultas registradas en tu expediente.':'Solo tus consultas con este paciente. Las próximas citas no son antecedentes clínicos.','sched-hint'));
         const visits=this.ownVisits(patient.id).filter(visit=>visit.status!=='Programada');
         if(!visits.length)history.append(el('p','Sin consultas previas registradas.','sched-hint'));
         for(const visit of visits){const row=el('article',null,'patient-history-row');row.append(el('span',stamp(visit.date),'patient-history-date'),el('strong',visit.reason),el('p',visit.plan),el('span',visit.status,'patient-visit-state'));history.append(row);}dialog.append(history);
@@ -178,5 +197,51 @@
       parent.append(dialog);
     }
   }
+  root.HospitalClinicalIdentity=(el,patient)=>{
+    const clean=value=>String(value??'').trim()||'No hay datos reales',content=el('div',null,'record-person-content'),identity=el('div',null,'record-person-identity'),avatar=el('span',[patient.givenName,patient.familyName].map(value=>value?.trim()?.[0]||'').join('')||'?','record-person-avatar'),text=el('div');avatar.setAttribute('aria-hidden','true');text.append(el('h3',clean(patient.fullName||[patient.givenName,patient.familyName].filter(Boolean).join(' '))),el('p','Paciente · Información registrada'));identity.append(avatar,text);content.append(identity);
+    const grid=el('div',null,'record-person-grid');for(const[label,value]of[['Nombre',patient.givenName],['Apellido',patient.familyName],['Edad',typeof patient.age==='number'?(patient.age>=0?patient.age+' años':null):patient.age],['DUI',patient.dui]]){const block=el('div',null,'record-person-field');block.append(el('span',label),el('strong',clean(value)));grid.append(block);}content.append(grid);
+    for(const[label,value,symbol]of[['Correo electrónico',patient.email,'@'],['Teléfono',patient.phone,'☎'],['Expediente',patient.record,'▤']]){const line=el('div',null,'record-person-contact'),icon=el('span',symbol,'record-person-contact-icon'),text=el('div');icon.setAttribute('aria-hidden','true');text.append(el('span',label),el('strong',clean(value)));line.append(icon,text);content.append(line);}return content;
+  };
   root.HospitalClinicalLabsDesign=HospitalClinicalLabsDesign;
+})(typeof window!=='undefined'?window:globalThis);
+
+(function(root){
+  'use strict';
+  class HospitalPatientClinical {
+    constructor(ui){this.ui=ui;this.reset();}
+    reset(){this.selected=null;this.page=null;}
+    render(parent,{page,profile,scope}){
+      const{el,button,repaint,go,model,laboratory,run}=this.ui,main=model(),source=page==='chart'?laboratory():main;
+      if(this.page!==page||this.scope!==scope){this.selected=null;this.page=page;this.scope=scope;}
+      if(this.ui.busy()){parent.append(el('p','Cargando tu información…','loading'));return;}
+      if(!main.data){parent.append(el('p','No pudimos cargar tu información. Intenta de nuevo.','scope-note'),button('Reintentar',this.ui.retry,'module-action'));return;}
+      const fields=page==='chart'?(main.data.sections||[]).flatMap(section=>section.fields):[],clean=value=>typeof value==='string'&&value.trim()?value.trim():'No hay datos reales';
+      const value=label=>fields.find(item=>item.label.toLowerCase()===label.toLowerCase())?.value;
+      const name=clean(value('Nombre')||(profile?.person?[profile.person.given_names,profile.person.family_names].join(' '):null)),age=clean(value('Edad')),phone=clean(value('Teléfono')||profile?.contacts?.find(item=>item.kind==='phone')?.value);
+      const stamp=text=>Number.isFinite(Date.parse(text))?new Intl.DateTimeFormat('es-GT',{dateStyle:'long',timeStyle:'short'}).format(new Date(text)):'No hay datos reales';
+      const completed=item=>['released','completed'].includes(item.status),state=item=>({pending:'Pendiente',in_progress:'En Proceso',processing:'En Proceso',released:'Completado',completed:'Completado',cancelled:'Cancelado'})[item.status]||'Estado no disponible';
+      const badge=item=>el('span',state(item),'clinical-lab-state '+(completed(item)?'is-completed':item.status==='pending'?'is-pending':'is-processing'));
+      const records=[...source.items].sort((a,b)=>(Date.parse(b.event_at)||0)-(Date.parse(a.event_at)||0)),selected=records.find(item=>item.id===this.selected);
+      const ticket=el('section',null,'clinical-ticket patient-own-chart');ticket.setAttribute('role','region');ticket.setAttribute('aria-label',selected?'Detalle de examen':page==='chart'?'Mi expediente completo':'Mis laboratorios');
+      const close=()=>{if(this.selected){this.selected=null;repaint();}else go('home');},nav=el('div',null,'clinical-ticket-nav');nav.append(button('Volver',close,'text-button'),el('span','ACCESO PERSONAL'));ticket.append(nav);
+      const card=title=>{const node=el('section',null,'clinical-lab-card');node.append(el('h3',title));return node;};
+      const field=(parent,label,text)=>{const row=el('div',null,'consult-field');row.append(el('span',label),el('p',clean(text)));parent.append(row);};
+      const person=full=>{const node=card(full?'Datos personales':'Paciente');if(full){node.append(root.HospitalClinicalIdentity(el,{givenName:profile?.person?.given_names||value('Nombres'),familyName:profile?.person?.family_names||value('Apellido'),fullName:name,age,dui:value('DUI'),email:profile?.auth_email,phone,record:value('Expediente')}));return node;}node.className+=full?'':' lab-detail-patient';const identity=el('div',null,'lab-detail-identity'),avatar=el('span',name==='No hay datos reales'?'?':name.split(' ').slice(0,2).map(item=>item[0]).join(''),'record-person-avatar');avatar.setAttribute('aria-hidden','true');identity.append(avatar);field(identity,'Nombre completo',name);node.append(identity);const contact=el('div',null,'lab-detail-contact');field(contact,'Edad',age);field(contact,'Teléfono',phone);node.append(contact);if(full){field(node,'Correo',profile?.auth_email);field(node,'DUI',value('DUI'));field(node,'Expediente',value('Expediente'));}return node;};
+      const document=(node,item,owner)=>{if(!item.document_id)return;const signed=owner.documents.get(item.document_id);if(signed&&signed.expires>Date.now()){const a=el('a','Abrir documento autorizado','module-action');a.href=signed.url;a.target='_blank';a.rel='noopener noreferrer';node.append(a);}else node.append(button('Autorizar documento',()=>run(async()=>{const url=await owner.api.documentURL(item.document_id);owner.documents.set(item.document_id,{url,expires:Date.now()+50000});}),'module-action'));};
+      if(selected){
+        ticket.append(el('h2','Detalle de examen','clinical-ticket-title'),person(false));
+        const info=card('Información del examen');info.className+=' lab-detail-exam';info.append(el('h3',selected.title,'clinical-lab-detail-name'),badge(selected));const date=el('div',null,'clinical-ticket-context');date.append(el('span','Fecha de solicitud'),el('strong',stamp(selected.event_at)));info.append(date);field(info,'Motivo del examen',selected.details?.find(item=>item.label==='Indicaciones')?.value);ticket.append(info);
+        const result=card('Resultado del examen');result.className+=' lab-detail-result';if(completed(selected)){const values=(selected.details||[]).filter(item=>item.label!=='Indicaciones');for(const item of values){const row=el('div',null,'clinical-result-value');row.append(el('span',item.label),el('small','Valor publicado','clinical-result-label'),el('strong',clean(item.value)));result.append(row);}if(!values.length)result.append(el('p','No hay un informe publicado todavía.','sched-hint'));document(result,selected,source);}else result.append(el('h3',state(selected)),el('p','Los resultados aparecerán aquí cuando el laboratorio los publique.','sched-hint'));ticket.append(result,button(page==='chart'?'Volver a mi expediente':'Volver a mis laboratorios',close,'consult-ticket-primary'));
+      }else{
+        const icon=el('span',page==='chart'?'\u2713':'⚗','clinical-ticket-icon');icon.setAttribute('aria-hidden','true');ticket.append(icon,el('h2',page==='chart'?'Mi expediente':'Mis laboratorios','clinical-ticket-title'),el('p','Tu información médica · Acceso personal de solo lectura','clinical-ticket-note'));
+        if(page==='chart'){ticket.append(person(true));for(const section of main.data.sections||[]){const group=card(section.title);for(const item of section.fields)field(group,item.label,item.value);if(!section.fields.length)group.append(el('p','Sin registros publicados.','sched-hint'));ticket.append(group);}for(const item of main.items){const group=card(item.title);for(const detail of item.details||[])field(group,detail.label,detail.value);document(group,item,main);ticket.append(group);}if(main.data.has_more)ticket.append(button('Cargar más documentos',()=>run(()=>main.load('chart',true)),'module-action'));}
+        const labs=card('Laboratorios del expediente');labs.append(el('p','Más recientes primero · Solicitudes y resultados del paciente','sched-hint'));
+        if(!source.data)labs.append(el('p','No pudimos cargar tus laboratorios.','scope-note'),button('Reintentar laboratorios',()=>run(()=>source.load('laboratory')),'module-action'));
+        else if(!records.length)labs.append(el('p','Todavía no tienes exámenes registrados.','sched-hint'));
+        for(const item of records){const row=el('article',null,'clinical-lab-history-card');row.setAttribute('data-requested-at',item.event_at);const heading=el('div',null,'clinical-lab-history-heading'),date=el('div',null,'clinical-lab-date-badge'),title=el('div');if(Number.isFinite(Date.parse(item.event_at))){date.append(el('strong',new Date(item.event_at).getDate().toString()),el('span',new Intl.DateTimeFormat('es-GT',{month:'short'}).format(new Date(item.event_at))));heading.append(date);}title.append(el('h3',item.title),el('p',stamp(item.event_at),'sched-hint'));heading.append(title);row.append(heading,badge(item),el('p',completed(item)?'Resultado disponible para revisión':item.status==='pending'?'Solicitud pendiente de procesamiento':item.status==='cancelled'?'Solicitud cancelada':'El laboratorio está procesando el examen','sched-hint'));const open=button('Ver detalle',()=>{this.selected=item.id;repaint();},'clinical-lab-open');open.setAttribute('aria-label','Ver detalle: '+item.title);row.append(open);labs.append(row);}labs.append(button('Actualizar laboratorios',()=>run(()=>source.load('laboratory')),'text-button'));if(source.data?.has_more)labs.append(button('Cargar más laboratorios',()=>run(()=>source.load('laboratory',true)),'module-action'));ticket.append(labs);
+      }
+      parent.append(ticket);
+    }
+  }
+  root.HospitalPatientClinical=HospitalPatientClinical;
 })(typeof window!=='undefined'?window:globalThis);

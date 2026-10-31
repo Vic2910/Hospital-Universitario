@@ -8,9 +8,9 @@
     {"id":"history","title":"Historial médico","subtitle":"Atenciones y eventos clínicos anteriores","search":"Buscar historial médico…","tab":"health","layout":"timeline","section":"Línea de tiempo"},
     {"id":"prescriptions","title":"Mis recetas","subtitle":"Prescripciones emitidas por tus médicos","search":"Buscar mis recetas…","tab":"health","layout":"prescriptions","section":"Tratamientos vigentes","sections":["Recetas anteriores"]},
     {"id":"laboratory","title":"Laboratorio","subtitle":"Consulta de solicitudes y resultados","search":"Buscar laboratorio…","tab":"health","layout":"laboratory","section":"Mis estudios"},
-    {"id":"information","title":"Información pública","subtitle":"Servicios y avisos hospitalarios","search":"Buscar información pública…","tab":"more","layout":"information","section":"Información del hospital"},
+    {"id":"information","title":"Información general","subtitle":"Ubicación, servicios y contacto","search":"Buscar información pública…","tab":"more","layout":"information","section":"Información del hospital"},
     {"id":"notifications","title":"Notificaciones","subtitle":"Avisos relacionados con tu atención","search":"Buscar notificaciones…","tab":"more","layout":"notifications","section":"Recientes"},
-    {"id":"profile","title":"Mi perfil","subtitle":"Nombre y apellido de tu registro","search":"Buscar mi perfil…","tab":"profile","layout":"profile","section":"Información personal"}
+    {"id":"profile","title":"Mi perfil","subtitle":"Tu información personal y de contacto","search":"Buscar mi perfil…","tab":"profile","layout":"profile","section":"Información personal"}
   ],
   "doctor": [
     {"id":"home","title":"Hola","subtitle":"Resumen de tu jornada clínica","search":"Buscar servicios…","tab":"home","layout":"home","section":"Resumen del día"},
