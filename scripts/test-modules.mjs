@@ -15,28 +15,12 @@ assert.equal(unverifiedDoctor.calls.some(call => call.url.endsWith('/mobile_modu
 console.log('OK Medico AAL1: dashboard y notificaciones sin exigir MFA');
 const item = (action,status = 'confirmed') => ({id,title:'Registro de prueba',subtitle:'Detalle de prueba',status,event_at:new Date().toISOString(),row_version:7,details:[],action,document_id:null});
 
-let requested = false;
-const patient = createApp(['patient'],{transport:async (url,params) => {
-  if (url.endsWith('/mobile_module')) {
-    const page = emptyPage();
-    if (params.p_module === 'request') { page.options = [{id:second,name:'Especialidad de prueba',kind:'specialty'}]; if (requested) page.items = [item(null,'pending')]; }
-    return {body:page};
-  }
-  if (url.endsWith('/request_appointment')) { requested = true; return {body:{id}}; }
-}});
-await patient.login(); await patient.click('Más'); await patient.click('Solicitar atención　›');
-await patient.input('Especialidad',second,'change'); await patient.input('Motivo de consulta','Consulta de prueba');
-await patient.submit('Enviar solicitud',true);
-const requests = patient.calls.filter(call => call.url.endsWith('/request_appointment'));
-assert.equal(requests.length,1,'Duplicate click must not send twice');
-assert.equal(requests[0].params.p_patient,id);
-assert.equal(requests[0].params.p_facility,id);
-assert.equal(requests[0].params.p_specialty,second);
-assert.match(requests[0].params.p_date,/^\d{4}-\d{2}-\d{2}$/);
-assert.equal(requests[0].params.p_from,'08:00');
-assert.match(patient.app.textContent,/Pendiente/);
-assert.equal(patient.app.textContent.includes('siguiente entrega'),false);
-console.log('OK Solicitud: propietario, sede, especialidad, preferencias y doble envío bloqueado');
+const patient = createApp(['patient']);
+await patient.login(); await patient.click('Mis citas'); await patient.click('Solicitar atención');
+assert.ok(patient.get('sched-submit'));
+assert.equal(patient.app.textContent.includes('Enviar solicitud'),false);
+assert.equal(patient.calls.some(call=>call.params?.p_module==='request'),false);
+console.log('OK Solicitar atención reutiliza el formulario único y no envía ejemplos a Supabase');
 
 let cancelled = false;
 const appointments = createApp(['patient'],{transport:async (url) => {
@@ -91,11 +75,11 @@ await doctor.click('Más'); await doctor.click('Recetas　›');
 await doctor.input('Dosis','1'); await doctor.input('Paciente / turno','','change'); await doctor.input('Paciente / turno',id,'change');
 assert.equal(doctor.app.all().find(node => node.attributes['aria-label'] === 'Dosis').value,'','Prescription fields must reset when selecting a patient');
 await doctor.input('Medicamento',id,'change'); await doctor.input('Unidad de dosis',second,'change'); await doctor.input('Vía',third,'change');
-await doctor.input('Dosis','0.5'); await doctor.input('Cada cuántas horas','8'); await doctor.input('Cantidad a dispensar','3'); await doctor.input('Indicaciones','Solo prueba de interfaz');
+await doctor.input('Dosis','0.5'); await doctor.input('Cada cuántas horas','8'); await doctor.input('Cantidad a dispensar','3'); await doctor.input('Observaciones','Solo prueba de interfaz');await doctor.input('Inicio','2026-10-30');await doctor.input('Durante (días)','10');
 await doctor.submit('Añadir medicamento'); await doctor.click('Confirmar emisión');
 const prescription = doctor.calls.find(call => call.url.endsWith('/mobile_issue_prescription'));
 assert.equal(prescription.params.p_encounter,third); assert.equal(prescription.params.p_items.length,1);
-assert.equal(prescription.params.p_items[0].dose,0.5); assert.equal(prescription.params.p_items[0].ends_on,null);
+assert.equal(prescription.params.p_items[0].dose,0.5); assert.equal(prescription.params.p_items[0].ends_on,'2026-11-08');assert.equal(prescription.params.p_items[0].starts_on,'2026-10-30');assert.equal(prescription.params.p_items[0].instructions,'Solo prueba de interfaz');assert.equal(Object.hasOwn(prescription.params.p_items[0],'days'),false);
 assert.equal('id' in prescription.params.p_items[0],false); assert.equal('prescriber_id' in prescription.params,false);
 assert.match(doctor.app.textContent,/Emitida/);
 console.log('OK Receta: medicamento, dosis decimal, unidad, vía, cantidad y emisión vinculada');

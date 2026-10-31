@@ -16,13 +16,13 @@ struct MobileModuleView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            if module == "chart" && role == "patient" { patientChartHeading }
             if model.loading || model.saving { ProgressView(model.saving ? "Guardando…" : "Cargando…") }
             if let error = model.error {
                 Text(error).font(.footnote).foregroundStyle(.red)
                 Button("Reintentar", systemImage: "arrow.clockwise") { Task { await model.load(module) } }
             }
             if let confirmation = model.confirmation { Text(confirmation).font(.footnote).foregroundStyle(HospitalTheme.wine) }
-            if module == "request" { appointmentRequest }
             if module == "profile" { profileSettings }
             if ["appointments", "history", "laboratory", "prescriptions", "notifications"].contains(module) {
                 Toggle("Filtrar por fecha y hora", isOn: $model.filterDates)
@@ -53,12 +53,12 @@ struct MobileModuleView: View {
                     DisclosureGroup("Ver detalle") {
                         ForEach(Array(item.details.enumerated()), id: \.offset) { _, field in fieldView(field) }
                     }.font(.footnote)
-                    if item.action == "cancel_appointment" {
+                    if module != "chart" && item.action == "cancel_appointment" {
                         Button("Cancelar cita", systemImage: "calendar.badge.minus", role: .destructive) {
                             cancellationReason = ""; cancelling = item
                         }
                     }
-                    if item.action == "mark_read" {
+                    if module != "chart" && item.action == "mark_read" {
                         Button("Marcar como leída", systemImage: "checkmark") { Task { await model.markRead(item) } }
                     }
                     if let document = item.document_id {
@@ -69,12 +69,18 @@ struct MobileModuleView: View {
                 }
             }
             if model.items.isEmpty && model.page != nil && module != "profile" && !model.loading {
-                HospitalCard { Text("No hay registros que coincidan con esta consulta.").font(.footnote).foregroundStyle(HospitalTheme.secondary) }
+                HospitalCard { Text(module == "chart" && role == "patient" ? "No hay documentos publicados en tu expediente." : "No hay registros que coincidan con esta consulta.").font(.footnote).foregroundStyle(HospitalTheme.secondary) }
             }
             if model.page?.has_more == true {
                 Button("Cargar más", systemImage: "chevron.down") { Task { await model.load(module, more: true) } }
             }
-            if module == "appointments" { Button("Solicitar atención", systemImage: "calendar.badge.plus") { navigate("request") } }
+        }
+        .padding(module == "chart" && role == "patient" ? 20 : 0)
+        .background {
+            if module == "chart" && role == "patient" {
+                RoundedRectangle(cornerRadius: 24).fill(.white)
+                    .overlay(RoundedRectangle(cornerRadius: 24).stroke(HospitalTheme.rose, lineWidth: 1))
+            }
         }
         .disabled(model.loading || model.saving)
         .alert("Cancelar cita", isPresented: Binding(get: { cancelling != nil }, set: { if !$0 { cancelling = nil } })) {
@@ -88,21 +94,28 @@ struct MobileModuleView: View {
         .onDisappear { password = ""; repeatedPassword = "" }
     }
 
-    private var appointmentRequest: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Picker("Especialidad", selection: $model.specialty) {
-                Text("Seleccionar especialidad").tag(nil as UUID?)
-                ForEach((model.page?.options ?? []).filter { $0.kind == "specialty" }) { option in Text(option.name).tag(Optional(option.id)) }
+    private func ownChartValue(_ label: String) -> String {
+        let text = model.page?.sections.flatMap(\.fields).first { $0.label.localizedCaseInsensitiveCompare(label) == .orderedSame }?.value.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return text.isEmpty ? "No hay datos reales" : text
+    }
+    private var patientChartHeading: some View {
+        VStack(spacing: 22) {
+            HStack {
+                Button("Volver") { navigate("home") }.font(.subheadline.weight(.semibold)).tint(HospitalTheme.wine)
+                    .frame(minHeight: 44)
+                Spacer()
+                Text("FICHA CLÍNICA").font(.caption.weight(.semibold)).foregroundStyle(HospitalTheme.secondary)
             }
-            if model.page?.options.isEmpty == true { Text("No hay especialidades disponibles en el catálogo.").font(.footnote) }
-            TextField("Motivo de consulta", text: $model.reason, axis: .vertical).lineLimit(3...6).textFieldStyle(.roundedBorder)
-            DatePicker("Fecha preferida", selection: $model.preferredDay, in: Date()..., displayedComponents: .date)
-            DatePicker("Desde", selection: $model.preferredFrom, displayedComponents: .hourAndMinute)
-            DatePicker("Hasta", selection: $model.preferredTo, displayedComponents: .hourAndMinute)
-            Text("La disponibilidad se confirmará al programar.").font(.footnote).foregroundStyle(HospitalTheme.secondary)
-            Button("Enviar solicitud", systemImage: "paperplane") { Task { await model.requestAppointment() } }
-                .buttonStyle(.borderedProminent).disabled(!model.canRequest || model.page == nil)
-        }
+            Image(systemName: "checkmark").font(.system(size: 34, weight: .bold)).foregroundStyle(.white)
+                .frame(width: 82, height: 82).background(HospitalTheme.wine, in: Circle()).accessibilityHidden(true)
+            Text("Expediente completo").font(.system(size: 27, weight: .bold)).multilineTextAlignment(.center).accessibilityAddTraits(.isHeader)
+            Text(ownChartValue("Nombre")).font(.headline).foregroundStyle(HospitalTheme.secondary).multilineTextAlignment(.center)
+            VStack(spacing: 10) {
+                Text(ownChartValue("Expediente")).font(.headline)
+                Text("DUI: \(ownChartValue("DUI"))").font(.footnote)
+            }.padding(18).frame(maxWidth: .infinity).background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 16))
+            Text("Tu información médica · Acceso personal de solo lectura").font(.caption).foregroundStyle(HospitalTheme.secondary).multilineTextAlignment(.center)
+        }.padding(.bottom, 12).frame(maxWidth: .infinity)
     }
 
     private var profileSettings: some View {
@@ -161,6 +174,7 @@ struct DoctorPrescriptionView: View {
     @State private var starts = Date()
     @State private var ends = Date()
     @State private var hasEnd = false
+    @State private var duration = ""
     @State private var confirmIssue = false
 
     var body: some View {
@@ -186,7 +200,12 @@ struct DoctorPrescriptionView: View {
                 optionPicker("Unidad de dosis", kind: "unit", selection: $unit)
                 optionPicker("Vía", kind: "route", selection: $route)
                 TextField("Cantidad a dispensar", text: $quantity).keyboardType(.decimalPad)
-                TextField("Indicaciones", text: $instructions, axis: .vertical).lineLimit(2...5)
+                TextField("Observaciones", text: $instructions, axis: .vertical).lineLimit(2...5)
+                TextField("Durante (días)", text: $duration).keyboardType(.numberPad)
+                    .onChange(of: duration) { _, _ in
+                        if let days = Int(duration), days > 0, days <= 36500, let date = Calendar.current.date(byAdding: .day, value: days - 1, to: starts) { ends = date; hasEnd = true }
+                    }
+                Text("Puedes indicar los días de duración o la fecha final. Sin ambos, queda hasta nueva indicación.").font(.caption).foregroundStyle(HospitalTheme.secondary)
                 DatePicker("Inicio", selection: $starts, displayedComponents: .date)
                 Toggle("Fecha de finalización", isOn: $hasEnd)
                 if hasEnd { DatePicker("Fin", selection: $ends, in: starts..., displayedComponents: .date) }
@@ -195,7 +214,12 @@ struct DoctorPrescriptionView: View {
                     HStack {
                         VStack(alignment: .leading) {
                             Text(model.page?.options.first { $0.id == line.medication_id }?.name ?? "Medicamento").font(.subheadline)
-                            Text("\(NSDecimalNumber(decimal: line.dose).stringValue) · cada \(NSDecimalNumber(decimal: line.interval_hours).stringValue) horas").font(.caption)
+                            DoctorConsultationField(label: "Dosis", value: NSDecimalNumber(decimal: line.dose).stringValue + " " + (model.page?.options.first { $0.id == line.dose_unit_id }?.name ?? ""))
+                            DoctorConsultationField(label: "Cada", value: NSDecimalNumber(decimal: line.interval_hours).stringValue + " horas")
+                            DoctorConsultationField(label: "Vía", value: model.page?.options.first { $0.id == line.route_id }?.name ?? "No disponible")
+                            DoctorConsultationField(label: "Durante", value: durationLabel(line))
+                            DoctorConsultationField(label: "Cantidad", value: NSDecimalNumber(decimal: line.quantity).stringValue)
+                            DoctorConsultationField(label: "Observaciones", value: line.instructions)
                         }
                         Spacer()
                         Button { model.prescriptionLines.removeAll { $0.id == line.id } } label: { Image(systemName: "trash") }.accessibilityLabel("Quitar medicamento")
@@ -218,9 +242,16 @@ struct DoctorPrescriptionView: View {
         }
         .onChange(of: doctor.selectedAppointmentID) { _, _ in
             medication = nil; unit = nil; route = nil; dose = ""; interval = ""; quantity = ""; instructions = ""
-            starts = Date(); ends = starts; hasEnd = false
+            starts = Date(); ends = starts; hasEnd = false; duration = ""
         }
-        .onChange(of: starts) { _, value in if ends < value { ends = value } }
+        .onChange(of: starts) { _, value in
+            if let days = Int(duration), days > 0, days <= 36500, let end = Calendar.current.date(byAdding: .day, value: days - 1, to: value) { ends = end }
+            else if ends < value { ends = value }
+        }
+        .onChange(of: ends) { _, value in
+            if let days = Int(duration), let expected = Calendar.current.date(byAdding: .day, value: days - 1, to: starts), MobileFormatting.day(value) != MobileFormatting.day(expected) { duration = "" }
+        }
+        .onChange(of: hasEnd) { _, value in if !value { duration = "" } }
         .confirmationDialog("¿Emitir y firmar esta receta?", isPresented: $confirmIssue, titleVisibility: .visible) {
             Button("Emitir receta") { if let encounter = doctor.activeConsultation { Task { await model.issuePrescription(encounter: encounter.id) } } }
             Button("Cancelar", role: .cancel) { }
@@ -235,15 +266,22 @@ struct DoctorPrescriptionView: View {
     private var validLine: Bool {
         medication != nil && unit != nil && route != nil && decimal(dose) != nil && decimal(interval) != nil
             && decimal(quantity) != nil && !instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && instructions.count <= 2000 && (!hasEnd || ends >= starts)
+            && instructions.count <= 2000 && (!hasEnd || MobileFormatting.day(ends) >= MobileFormatting.day(starts))
+            && (duration.isEmpty || (duration.range(of: #"^\d{1,5}$"#, options: .regularExpression) != nil && (Int(duration) ?? 0) > 0 && (Int(duration) ?? 0) <= 36500))
     }
     private func addLine() {
         guard validLine, let medication, let unit, let route, let dose = decimal(dose),
               let interval = decimal(interval), let quantity = decimal(quantity) else { return }
         model.prescriptionLines.append(PrescriptionLine(medication_id: medication, dose: dose, dose_unit_id: unit,
             route_id: route, interval_hours: interval, instructions: instructions,
-            starts_on: MobileFormatting.day(starts), ends_on: hasEnd ? MobileFormatting.day(ends) : nil, quantity: quantity))
-        self.medication = nil; self.dose = ""; self.interval = ""; self.quantity = ""; instructions = ""
+            starts_on: MobileFormatting.day(starts), ends_on: duration.isEmpty ? (hasEnd ? MobileFormatting.day(ends) : nil) : Calendar.current.date(byAdding: .day, value: (Int(duration) ?? 1) - 1, to: starts).map(MobileFormatting.day), quantity: quantity))
+        self.medication = nil; self.dose = ""; self.interval = ""; self.quantity = ""; instructions = ""; duration = ""
+    }
+    private func durationLabel(_ line: PrescriptionLine) -> String {
+        guard let end = line.ends_on else { return "Hasta nueva indicación" }
+        let format = DateFormatter(); format.locale = Locale(identifier: "en_US_POSIX"); format.dateFormat = "yyyy-MM-dd"
+        guard let start = format.date(from: line.starts_on), let finish = format.date(from: end), let days = Calendar.current.dateComponents([.day], from: start, to: finish).day else { return "No disponible" }
+        return "\(days + 1) días"
     }
     private func optionPicker(_ title: String, kind: String, selection: Binding<UUID?>) -> some View {
         Picker(title, selection: selection) {

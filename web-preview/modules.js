@@ -12,7 +12,7 @@
       this.day = localDay(new Date()); this.request = {specialty:'',reason:'',day:this.day,from:'08:00',to:'12:00'};
       this.consultation = {subjective:'',objective:'',assessment:'',plan:''}; this.seedDraft = true;
       this.diagnosis = {query:'',by:'description',selected:''}; this.diagnoses = [];
-      this.lab = {test:'',instructions:''}; this.rx = {medication:'',unit:'',route:'',dose:'',interval:'',quantity:'',instructions:'',starts:this.day,ends:''};
+      this.lab = {test:'',instructions:''}; this.rx = {medication:'',unit:'',route:'',dose:'',interval:'',quantity:'',instructions:'',days:'',starts:this.day,ends:''};
       this.profile = {phone:'',given:'',family:'',emergencyPhone:'',relationship:''};
       this.keys = Object.fromEntries(['request','start','save','lab','rx','emergency'].map(key => [key,root.crypto.randomUUID()]));
     }
@@ -22,12 +22,14 @@
       this.role = role; this.access = access; this.facility = facility;
     }
     supports(role, page) {
-      return role === 'doctor' ? ['home','patients','appointments','consultation','chart','laboratory','prescriptions','notifications','profile'].includes(page)
+      return role === 'doctor' ? ['home','patients','consultation','chart','laboratory','prescriptions','notifications','profile'].includes(page)
         : ['appointments','request','chart','history','prescriptions','laboratory','notifications','profile'].includes(page);
     }
     async load(page, more = false) {
       if (!this.facility) throw new Error('No hay una sede autorizada.');
+      if (page === 'consultation' && this.screen !== page && !this.selected) this.day = localDay(new Date());
       if (this.screen !== page) { this.screen = page; this.data = null; this.items = []; this.filters = {from:'',to:'',query:''}; }
+      if (page === 'home' && this.role === 'doctor') this.day = localDay(new Date());
       if (this.role === 'doctor' && !['profile','notifications'].includes(page)) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(this.day)) throw new Error('Selecciona una fecha de atención válida.');
         const from = new Date(this.day + 'T00:00:00'), to = new Date(from); to.setDate(to.getDate()+1);
@@ -53,7 +55,7 @@
       this.consultation = {subjective:'',objective:'',assessment:'',plan:''};
       this.diagnosis = {query:'',by:'description',selected:''}; this.diagnoses = [];
       this.lab = {test:'',instructions:''};
-      this.rx = {medication:'',unit:'',route:'',dose:'',interval:'',quantity:'',instructions:'',starts:localDay(new Date()),ends:''};
+      this.rx = {medication:'',unit:'',route:'',dose:'',interval:'',quantity:'',instructions:'',days:'',starts:localDay(new Date()),ends:''};
       for (const key of ['start','save','lab','rx']) this.keys[key] = root.crypto.randomUUID();
     }
     async loadChart() {
@@ -102,8 +104,17 @@
       this.command(group,'Buscar y actualizar',async () => { this.filters.query = this.search; await this.load(this.screen); }); parent.append(group);
     }
     renderData(parent,page) {
+      if (this.role === 'patient' && page === 'chart') {
+        const ticket=this.node('section',null,'clinical-ticket patient-own-chart');ticket.setAttribute('role','region');ticket.setAttribute('aria-label','Mi expediente completo');
+        const navigation=this.node('div',null,'clinical-ticket-nav');navigation.append(this.ui.button('Volver',()=>this.ui.go('home'),'text-button'),this.node('span','FICHA CLÍNICA'));ticket.append(navigation);
+        const fields=(this.data?.sections || []).flatMap(section=>section.fields);
+        const value=label=>{const text=fields.find(field=>field.label.toLocaleLowerCase('es')===label.toLocaleLowerCase('es'))?.value;return typeof text==='string'&&text.trim()?text.trim():'No hay datos reales';};
+        const icon=this.node('span','\u2713','clinical-ticket-icon');icon.setAttribute('aria-hidden','true');
+        ticket.append(icon,this.node('h2','Expediente completo','clinical-ticket-title'),this.node('p',value('Nombre'),'clinical-ticket-patient'));
+        const identity=this.node('div',null,'clinical-ticket-context');identity.append(this.node('strong',value('Expediente')),this.node('span','DUI: '+value('DUI')));ticket.append(identity,this.node('small','Tu información médica · Acceso personal de solo lectura','clinical-ticket-note'));
+        parent.append(ticket);parent=ticket;
+      }
       if (!this.data) this.command(parent,'Actualizar',() => this.load(page));
-      if (page === 'request') this.requestForm(parent);
       else if (page === 'profile') { this.profileForm(parent); return; }
       else if (['appointments','history','laboratory','prescriptions','notifications'].includes(page)) this.filtersView(parent);
       for (const section of this.data?.sections || []) {
@@ -113,14 +124,14 @@
         parent.append(card);
       }
       const rows = this.items.filter(item => this.matches(item.title+' '+(item.subtitle || '')+' '+item.details.map(field => field.value).join(' '),this.search));
-      if (!rows.length) parent.append(this.ui.row('Sin registros','No hay información que coincida con esta consulta.'));
+      if (!rows.length) parent.append(this.ui.row(this.role==='patient' && page==='chart' ? 'Documentos' : 'Sin registros',this.role==='patient' && page==='chart' ? 'No hay documentos publicados en tu expediente.' : 'No hay información que coincida con esta consulta.'));
       for (const item of rows) {
         const card = this.ui.row(item.title,item.subtitle,labels[item.status] || 'Estado no disponible');
         card.append(this.node('p',dateTime(item.event_at),'module-date'));
         const details = this.node('details'); details.append(this.node('summary','Ver detalle'));
         for (const field of item.details) this.detail(details,field.label,field.label === 'Horario' ? this.ui.period(field.value) : field.value); card.append(details);
-        if (item.action === 'mark_read') this.command(card,'Marcar como leída',() => this.mutation('update_record',{p_resource:'notifications',p_id:item.id,p_values:{read_at:new Date().toISOString()},p_expected_version:item.row_version},'Notificación leída.'));
-        if (item.action === 'cancel_appointment') {
+        if (page !== 'chart' && item.action === 'mark_read') this.command(card,'Marcar como leída',() => this.mutation('update_record',{p_resource:'notifications',p_id:item.id,p_values:{read_at:new Date().toISOString()},p_expected_version:item.row_version},'Notificación leída.'));
+        if (page !== 'chart' && item.action === 'cancel_appointment') {
           const cancellation = {reason:''}, {form,finish} = this.form(card,'Confirmar cancelación',async () => {
             if (!cancellation.reason.trim()) throw new Error('Escribe el motivo de cancelación.');
             await this.mutation('transition_appointment',{p_id:item.id,p_status:'cancelled',p_reason:cancellation.reason,p_expected_version:item.row_version},'Cita cancelada.');
@@ -135,20 +146,6 @@
         parent.append(card);
       }
       if (this.data?.has_more) this.command(parent,'Cargar más',() => this.load(page,true));
-      if (page === 'appointments') parent.append(this.ui.button('Solicitar atención',() => this.ui.go('request'),'primary'));
-    }
-    requestForm(parent) {
-      const values = this.request, {form,finish} = this.form(parent,'Enviar solicitud',async () => {
-        if (!values.specialty || !values.reason.trim() || values.reason.length > 2000 || values.day < localDay(new Date()) || values.from >= values.to) throw new Error('Revisa especialidad, motivo, fecha y horario de la solicitud.');
-        await this.mutation('request_appointment',{p_patient:this.access.patient_id,p_facility:this.facility,p_specialty:values.specialty,p_reason:values.reason.trim(),p_date:values.day,p_from:values.from,p_to:values.to,p_request_key:this.keys.request},'Solicitud enviada. Recepción confirmará la disponibilidad.',() => { this.keys.request = root.crypto.randomUUID(); values.reason = ''; });
-      });
-      this.field(form,'Especialidad',values,'specialty','text',(this.data?.options || []).filter(item => item.kind === 'specialty').map(item => [item.id,item.name])).required = true;
-      if (this.data && !this.data.options.length) form.append(this.node('p','No hay especialidades disponibles en el catálogo.','scope-note'));
-      this.field(form,'Motivo de consulta',values,'reason','textarea').required = true;
-      const day = this.field(form,'Fecha preferida',values,'day','date'); day.min = localDay(new Date()); day.required = true;
-      this.field(form,'Desde',values,'from','time').required = true; this.field(form,'Hasta',values,'to','time').required = true;
-      form.append(this.node('p','La disponibilidad se confirmará al programar.','scope-note')); finish();
-      parent.append(this.node('h2','Mis solicitudes','section-title'));
     }
     profileForm(parent) {
       const state = this.profile, {form,finish} = this.form(parent,'Guardar teléfono',async () => {
@@ -187,29 +184,30 @@
       if (this.appointment) { this.detail(parent,'Paciente',this.appointment.patient_name); this.detail(parent,'Turno',this.appointment.ticket_number); this.detail(parent,'Teléfono',this.appointment.phone); }
     }
     renderDoctor(parent,page) {
+      if (page === 'home' && this.workspace) { this.ui.doctorDashboard(parent,this); return; }
+      if (page !== 'consultation') {
       const dayState = {day:this.day}, dayInput = this.field(parent,'Fecha de atención',dayState,'day','date');
       dayInput.addEventListener('change',() => { this.day = dayState.day; this.select(''); this.ui.run(() => this.load(page)); });
+      }
       const workspace = this.workspace;
       if (!workspace) { parent.append(this.ui.row('Sin información','Actualiza para consultar tu jornada.')); this.command(parent,'Actualizar',() => this.load(page)); return; }
-      if (page === 'home') {
-        const grid = this.node('div',null,'metric-grid');
-        for (const [key,label,destination] of [['consultations','Consultas del día','consultation'],['completed_consultations','Consultas finalizadas','chart'],['issued_orders','Órdenes emitidas','laboratory'],['pending_orders','Órdenes pendientes','laboratory']]) {
-          const node = this.ui.button(null,() => this.ui.go(destination),'metric'); node.append(this.node('strong',String(workspace.stats[key])),this.node('span',label)); grid.append(node);
-        } parent.append(grid);
-        for (const [id,label] of [['patients','Mis pacientes'],['consultation','Iniciar consulta'],['laboratory','Laboratorio'],['prescriptions','Recetas']]) parent.append(this.ui.button(label,() => this.ui.go(id),'menu-row'));
-        this.renderNotifications(parent,workspace.notifications.slice(0,5)); return;
-      }
-      if (['patients','appointments'].includes(page)) {
+      if (page === 'patients') {
         const appointments = workspace.appointments.filter(item => this.matches(item.patient_name+' '+item.record_number+' '+(item.ticket_number || ''),this.search));
         if (!appointments.length) parent.append(this.ui.row('Sin pacientes','No tienes pacientes asignados para esta fecha.'));
         for (const item of appointments) {
           const card = this.ui.row(item.patient_name,item.record_number+' · '+this.ui.period(item.period),labels[item.status]);
           for (const [id,label] of [['consultation','Atender'],['chart','Expediente']]) card.append(this.ui.button(label,() => { this.select(item.id); this.ui.go(id); },'module-action')); parent.append(card);
-        } return;
+        }
+        if (page === 'patients') this.ui.doctorPatientHistory(parent,this);
+        return;
+      }
+      if (page === 'consultation') {
+        this.ui.doctorConsultations(parent,this);
+        if (workspace.appointments.length) { this.patientPicker(parent); this.consultationForm(parent); }
+        return;
       }
       if (page === 'notifications') { this.renderNotifications(parent,workspace.notifications); return; }
       this.patientPicker(parent);
-      if (page === 'consultation') this.consultationForm(parent);
       if (page === 'chart') this.chartView(parent);
       if (page === 'laboratory') this.laboratoryForm(parent);
       if (page === 'prescriptions') this.prescriptionForm(parent);
@@ -288,13 +286,28 @@
         if (this.data && !this.data.options.some(item => item.kind === 'medication')) parent.append(this.ui.row('Sin medicamentos disponibles','No hay medicamentos activos en el catálogo de la sede.'));
         const {form,finish} = this.form(parent,'Añadir medicamento',async () => {
           const rx = this.rx, number = value => /^[0-9]+([.,][0-9]{1,4})?$/.test(value) && Number(value.replace(',','.')) > 0 ? Number(value.replace(',','.')) : null;
-          if (!rx.medication || !rx.unit || !rx.route || !number(rx.dose) || !number(rx.interval) || !number(rx.quantity) || !rx.instructions.trim() || rx.instructions.length > 2000 || !rx.starts || (rx.ends && rx.ends < rx.starts) || this.lines.length >= 30) throw new Error('Revisa medicamento, dosis, vía, frecuencia, fechas e indicaciones.');
+          if (!rx.medication || !rx.unit || !rx.route || !number(rx.dose) || !number(rx.interval) || !number(rx.quantity) || !rx.instructions.trim() || rx.instructions.length > 2000 || !rx.starts || (rx.days && (!/^\d{1,5}$/.test(rx.days) || Number(rx.days)<1 || Number(rx.days)>36500)) || (rx.ends && rx.ends < rx.starts) || this.lines.length >= 30) throw new Error('Revisa medicamento, dosis, vía, frecuencia, fechas e indicaciones.');
+          if(rx.days){const end=new Date(rx.starts+'T00:00:00');end.setDate(end.getDate()+Number(rx.days)-1);rx.ends=localDay(end);}
           this.lines.push({medication_id:rx.medication,dose:number(rx.dose),dose_unit_id:rx.unit,route_id:rx.route,interval_hours:number(rx.interval),quantity:number(rx.quantity),instructions:rx.instructions,starts_on:rx.starts,ends_on:rx.ends || null});
-          rx.medication = ''; rx.dose = ''; rx.instructions = ''; rx.interval = ''; rx.quantity = '';
+          rx.medication = ''; rx.dose = ''; rx.instructions = ''; rx.interval = ''; rx.quantity = ''; rx.days = '';
         });
         for (const [label,key,kind] of [['Medicamento','medication','medication'],['Unidad de dosis','unit','unit'],['Vía','route','route']]) this.field(form,label,this.rx,key,'text',(this.data?.options || []).filter(item => item.kind === kind).map(item => [item.id,item.name])).required = true;
-        for (const [label,key,type] of [['Dosis','dose','number'],['Cada cuántas horas','interval','number'],['Cantidad a dispensar','quantity','number'],['Indicaciones','instructions','textarea'],['Inicio','starts','date'],['Fin (opcional)','ends','date']]) this.field(form,label,this.rx,key,type).required = key !== 'ends'; finish();
-        this.lines.forEach((line,index) => { const card = this.ui.row(this.data?.options.find(item => item.id === line.medication_id)?.name || 'Medicamento',line.dose+' · cada '+line.interval_hours+' horas'); this.command(card,'Quitar medicamento',async () => { this.lines.splice(index,1); }); parent.append(card); });
+        const inputs={};
+        for (const [label,key,type] of [['Dosis','dose','number'],['Cada cuántas horas','interval','number'],['Durante (días)','days','number'],['Cantidad a dispensar','quantity','number'],['Observaciones','instructions','textarea'],['Inicio','starts','date'],['Fin (opcional)','ends','date']]) {
+          inputs[key]=this.field(form,label,this.rx,key,type);inputs[key].required=!['days','ends'].includes(key);
+        }
+        inputs.days.min='1';inputs.days.step='1';inputs.days.max='36500';
+        const updateEnd=()=>{if(/^\d{1,5}$/.test(this.rx.days)&&Number(this.rx.days)>0&&Number(this.rx.days)<=36500&&this.rx.starts){const end=new Date(this.rx.starts+'T00:00:00');end.setDate(end.getDate()+Number(this.rx.days)-1);this.rx.ends=localDay(end);inputs.ends.value=this.rx.ends;}};
+        inputs.days.addEventListener('input',updateEnd);inputs.starts.addEventListener('input',updateEnd);
+        inputs.ends.addEventListener('input',()=>{this.rx.days='';inputs.days.value='';});
+        form.append(this.node('p','Indica duración en días o fecha final. Sin ambas, hasta nueva indicación.','scope-note'));finish();
+        this.lines.forEach((line,index) => {
+          const option=id=>this.data?.options.find(item=>item.id===id)?.name || 'No disponible';
+          const duration=line.ends_on?((Date.parse(line.ends_on+'T00:00:00Z')-Date.parse(line.starts_on+'T00:00:00Z'))/86400000+1)+' días':'Hasta nueva indicación';
+          const card=this.ui.row(option(line.medication_id),'Vista previa de receta');
+          for(const[label,value]of[['Dosis',line.dose+' '+option(line.dose_unit_id)],['Cada',line.interval_hours+' horas'],['Vía',option(line.route_id)],['Durante',duration],['Cantidad',String(line.quantity)],['Observaciones',line.instructions]])this.detail(card,label,value);
+          this.command(card,'Quitar medicamento',async()=>{this.lines.splice(index,1);});parent.append(card);
+        });
         if (this.lines.length) {
           const confirm = this.node('details'); confirm.append(this.node('summary','Emitir y firmar receta'));
           this.command(confirm,'Confirmar emisión',() => this.mutation('mobile_issue_prescription',{p_encounter:this.encounter.id,p_items:this.lines.map(line => ({...line})),p_request_key:this.keys.rx},'Receta emitida.',() => { this.keys.rx = root.crypto.randomUUID(); this.lines = []; }),true); parent.append(confirm);

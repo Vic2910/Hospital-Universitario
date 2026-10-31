@@ -3,15 +3,23 @@ import SwiftUI
 @MainActor
 struct ContentView: View {
     @StateObject private var store = HospitalStore()
+    @StateObject private var appointmentFlow = PatientAppointmentFlowStore()
+    @StateObject private var labDesign = ClinicalLabDesignStore()
+    @State private var showLabDesign = false
     @State private var email = ""
     @State private var password = ""
     @State private var showPassword = false
+    @State private var showRegister = false
+    @State private var showRecoveryInfo = false
     @State private var search = ""
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         VStack(spacing: 0) {
-            if store.access == nil { login }
+            if store.access == nil {
+                if showRegister { RegisterView(onBack: { showRegister = false }) }
+                else { login }
+            }
             else if store.selectedRole == nil { rolePicker }
             else { portal }
             if let message = store.message {
@@ -27,6 +35,10 @@ struct ContentView: View {
             search = ""
             await store.refreshScreen()
         }
+        .onChange(of: store.selectedRole) { _, _ in showLabDesign = store.selectedRole == "doctor"; labDesign.reset(); appointmentFlow.reset() }
+        .onChange(of: store.doctor?.workspace?.doctor_name) { _, name in
+            if store.selectedRole == "doctor", let name { labDesign.doctorName = name }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active && store.selectedRole != nil { Task { await store.refreshScreen() } }
         }
@@ -39,35 +51,52 @@ struct ContentView: View {
     }
 
     private var login: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                Image(systemName: "cross.case.fill").font(.system(size: 44)).foregroundStyle(HospitalTheme.wine)
-                Text("Hospital\nUniversitario").font(.system(size: 34, weight: .bold))
-                Text("Iniciar sesión").font(.title2.bold())
-                Text("Accede a tu espacio de Médico o Paciente.").font(.subheadline).foregroundStyle(HospitalTheme.secondary)
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Correo electrónico").font(.subheadline.weight(.semibold))
-                    TextField("nombre@correo.com", text: $email)
-                        .textContentType(.username).textInputAutocapitalization(.never)
-                        .keyboardType(.emailAddress).autocorrectionDisabled().padding(14).background(.white, in: RoundedRectangle(cornerRadius: 12))
-                    Text("Contraseña").font(.subheadline.weight(.semibold))
-                    HStack {
-                        Group {
-                            if showPassword { TextField("Contraseña", text: $password) }
-                            else { SecureField("Contraseña", text: $password) }
-                        }.textContentType(.password).autocorrectionDisabled().textInputAutocapitalization(.never)
-                        Button { showPassword.toggle() } label: { Image(systemName: showPassword ? "eye.slash" : "eye") }
-                            .accessibilityLabel(showPassword ? "Ocultar contraseña" : "Mostrar contraseña")
-                    }.padding(14).background(.white, in: RoundedRectangle(cornerRadius: 12))
-                }
-                Button {
-                    let value = password; password = ""
-                    Task { await store.signIn(email: email, password: value) }
-                } label: { Text("Iniciar sesión").frame(maxWidth: .infinity).padding(.vertical, 10) }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(store.busy || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty)
-                Text("Tu perfil y tus permisos son asignados por el hospital.").font(.footnote).foregroundStyle(HospitalTheme.secondary)
-            }.padding(28).padding(.top, 44)
+        VStack(spacing: 0) {
+            HospitalAuthHeader(title: "Iniciar sesión", subtitle: "Accede a tu espacio de Médico o Paciente.")
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HospitalCard {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text("Correo electrónico").font(.subheadline.weight(.semibold))
+                            TextField("nombre@correo.com", text: $email)
+                                .textContentType(.username).textInputAutocapitalization(.never)
+                                .keyboardType(.emailAddress).autocorrectionDisabled()
+                                .padding(14).background(HospitalTheme.background, in: RoundedRectangle(cornerRadius: 12))
+                            Text("Contraseña").font(.subheadline.weight(.semibold))
+                            HStack {
+                                Group {
+                                    if showPassword { TextField("Contraseña", text: $password) }
+                                    else { SecureField("Contraseña", text: $password) }
+                                }.textContentType(.password).autocorrectionDisabled().textInputAutocapitalization(.never)
+                                Button { showPassword.toggle() } label: { Image(systemName: showPassword ? "eye.slash" : "eye").foregroundStyle(HospitalTheme.secondary) }
+                                    .accessibilityLabel(showPassword ? "Ocultar contraseña" : "Mostrar contraseña")
+                            }.padding(14).background(HospitalTheme.background, in: RoundedRectangle(cornerRadius: 12))
+                            HStack {
+                                Spacer()
+                                HospitalLink("¿Olvidaste tu contraseña?") { showRecoveryInfo = true }
+                            }
+                        }
+                    }.padding(.top, -28)
+                    Button {
+                        let value = password; password = ""
+                        Task { await store.signIn(email: email, password: value) }
+                    } label: { Text("Iniciar sesión") }
+                        .buttonStyle(HospitalPrimaryButtonStyle())
+                        .disabled(store.busy || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty)
+                    HStack(spacing: 4) {
+                        Text("¿No tienes cuenta?").font(.footnote).foregroundStyle(HospitalTheme.secondary)
+                        HospitalLink("Regístrate") { showRegister = true }
+                    }.frame(maxWidth: .infinity)
+                    Text("Tu perfil y tus permisos son asignados por el hospital.")
+                        .font(.footnote).foregroundStyle(HospitalTheme.secondary).frame(maxWidth: .infinity, alignment: .center)
+                }.padding(.horizontal, 16).padding(.bottom, 24)
+            }
+            .scrollDismissesKeyboard(.interactively)
+        }
+        .alert("Recuperación de contraseña", isPresented: $showRecoveryInfo) {
+            Button("Entendido", role: .cancel) {}
+        } message: {
+            Text("Solicita el restablecimiento con el personal del hospital. Enviarán las instrucciones a tu correo electrónico.")
         }
     }
 
@@ -87,6 +116,7 @@ struct ContentView: View {
     private var isDoctor: Bool { store.selectedRole == "doctor" }
     private var title: String {
         if store.screenID == "home" { return "Hola, \(store.name == "Bienvenido" ? (isDoctor ? "Doctor" : "Paciente") : store.name)" }
+        if store.screenID == "schedule" { return "Solicitar atención" }
         return screen?.title ?? (store.screenID == "rooms" ? "Habitaciones" : store.screenID == "health" ? "Mi salud" : "Más")
     }
 
@@ -99,16 +129,18 @@ struct ContentView: View {
                     Button { go("notifications") } label: { Image(systemName: "bell.badge") }.accessibilityLabel("Notificaciones")
                 }.padding(.bottom, 24)
                 Text(title).font(.system(size: 25, weight: .semibold)).lineLimit(2)
-                Text(screen?.subtitle ?? "Servicios y consultas del hospital").font(.system(size: 12)).padding(.top, 8)
+                Text(screen?.subtitle ?? (store.screenID == "schedule" ? "Elige especialidad y horario" : "Servicios y consultas del hospital")).font(.system(size: 12)).padding(.top, 8)
             }
-            .foregroundStyle(.white).padding(.horizontal, 24).padding(.top, 18).padding(.bottom, 48)
+            .foregroundStyle(.white).padding(.horizontal, 24).padding(.top, 18).padding(.bottom, (store.screenID == "profile" || (!isDoctor && store.screenID == "chart") || (showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID))) ? 24 : 48)
             .frame(maxWidth: .infinity, alignment: .leading).background(HospitalTheme.wine.ignoresSafeArea(edges: .top))
+            if store.screenID != "profile" && !(!isDoctor && store.screenID == "chart") && !(showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID)) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").font(.system(size: 11))
                 TextField(screen?.search ?? "Buscar servicios…", text: $search).font(.system(size: 12)).autocorrectionDisabled()
                     .accessibilityLabel(screen?.search ?? "Buscar servicios")
             }.foregroundStyle(HospitalTheme.secondary).padding(.horizontal, 16).frame(height: 52)
                 .background(.white, in: RoundedRectangle(cornerRadius: 13)).padding(.horizontal, 16).padding(.top, -29)
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     if let note = store.screenMessage { Text(note).font(.footnote).foregroundStyle(HospitalTheme.secondary) }
@@ -120,17 +152,50 @@ struct ContentView: View {
     }
 
     @ViewBuilder private var content: some View {
+        if !isDoctor && store.screenID == "chart" { liveContent }
+        else if ["patients", "chart", "laboratory"].contains(store.screenID) {
+            VStack(alignment: .leading, spacing: 18) {
+                Toggle("Vista de diseño · datos locales", isOn: $showLabDesign).font(.footnote)
+                if showLabDesign {
+                    ClinicalLabDesignView(model: labDesign, role: isDoctor ? "doctor" : "patient", screenID: store.screenID, navigate: go)
+                        .onAppear {
+                            if isDoctor {
+                                labDesign.configureDoctor(name: store.doctor?.workspace?.doctor_name ?? store.name,
+                                    id: store.access?.staff_id?.uuidString ?? "doctor-demo", clinic: store.doctor?.workspace?.facility_name)
+                            }
+                        }
+                } else { liveContent }
+            }
+        } else { liveContent }
+    }
+
+    @ViewBuilder private var liveContent: some View {
         if isDoctor, store.screenID == "prescriptions", let doctor = store.doctor, let modules = store.modules {
             DoctorPrescriptionView(doctor: doctor, model: modules, search: search, period: store.period, navigate: go)
+        } else if !isDoctor, ["request", "schedule"].contains(store.screenID) {
+            PatientAppointmentView(flow: appointmentFlow)
+        } else if !isDoctor, store.screenID == "appointments", let modules = store.modules {
+            PatientAppointmentsView(flow: appointmentFlow, modules: modules, profile: store.profile, patientID: store.access?.patient_id, search: search, period: store.period, navigate: go)
+        } else if !isDoctor, store.screenID == "prescriptions", let modules = store.modules {
+            let useExamples = modules.page != nil && modules.items.isEmpty && !modules.loading && modules.error == nil
+            PatientPrescriptionsView(records: useExamples ? PatientPrescriptionRecord.examples : modules.items.map(PatientPrescriptionRecord.from),
+                demonstration: useExamples, search: search, loading: modules.loading, error: modules.error, hasMore: modules.page?.has_more == true,
+                retry: { Task { await modules.load("prescriptions") } }, loadMore: { Task { await modules.load("prescriptions", more: true) } })
+        } else if !isDoctor, store.screenID == "history", let modules = store.modules {
+            let useExamples = modules.page != nil && modules.items.isEmpty && !modules.loading && modules.error == nil
+            PatientHistoryView(records: useExamples ? PatientHistoryRecord.examples : modules.items.map(PatientHistoryRecord.from),
+                demonstration: useExamples, search: search, loading: modules.loading, error: modules.error, hasMore: modules.page?.has_more == true,
+                retry: { Task { await modules.load("history") } }, loadMore: { Task { await modules.load("history", more: true) } })
         } else if let modules = store.modules,
            ((!isDoctor && ["appointments", "request", "chart", "history", "prescriptions", "laboratory"].contains(store.screenID)) || store.screenID == "notifications") {
             MobileModuleView(model: modules, module: store.screenID, role: isDoctor ? "doctor" : "patient", search: search, period: store.period, navigate: go)
         } else if isDoctor, let doctor = store.doctor,
-           ["home", "patients", "appointments", "consultation", "chart", "laboratory", "notifications"].contains(store.screenID) {
+           ["home", "patients", "consultation", "chart", "laboratory", "notifications"].contains(store.screenID) {
             DoctorModuleView(model: doctor, screenID: store.screenID, search: search, navigate: go, period: store.period)
         } else {
             switch store.screenID {
-            case "home": home
+            case "home": if isDoctor { home } else { patientDashboard }
+            case "schedule": PatientAppointmentView(flow: appointmentFlow)
             case "more", "health": menu
             case "turns": if isDoctor { schedule } else { queue }
             case "rooms": rooms
@@ -142,14 +207,24 @@ struct ContentView: View {
     }
 
     private func heading(_ value: String) -> some View { Text(value).font(.system(size: 16, weight: .semibold)).padding(.top, 1) }
-    private func go(_ id: String) { guard !store.busy, store.doctor?.saving != true, store.modules?.saving != true else { return }; store.screenID = id; search = "" }
+    private func go(_ id: String) { guard !store.busy, store.doctor?.saving != true, store.modules?.saving != true else { return }; if id == "consultation", store.screenID != id, store.doctor?.selectedAppointmentID == nil { store.doctor?.day = Date() }; store.screenID = id; search = "" }
     private func matches(_ value: String) -> Bool { search.isEmpty || value.localizedCaseInsensitiveContains(search) }
+
+    /// Inicio del paciente: dashboard nuevo con saludo, fecha/cita y accesos rápidos.
+    /// El nombre real llegará con el modelo de paciente; por ahora usa el del store si existe.
+    private var patientDashboard: some View {
+        PatientDashboardView(
+            nombrePaciente: store.name == "Bienvenido" ? "Gaby Diaz" : store.name,
+            proximaCita: nil,
+            navigate: go
+        )
+    }
 
     private var home: some View {
         VStack(alignment: .leading, spacing: 22) {
             heading(screen?.section ?? "Resumen")
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                metric(store.summary.map { String((isDoctor ? $0.scheduled_appointments : $0.upcoming_appointments) ?? 0) } ?? "—", label: isDoctor ? "Citas programadas" : "Próximas citas", destination: "appointments")
+                metric(store.summary.map { String((isDoctor ? $0.scheduled_appointments : $0.upcoming_appointments) ?? 0) } ?? "—", label: isDoctor ? "Citas programadas" : "Próximas citas", destination: isDoctor ? "patients" : "appointments")
                 metric(store.summary.map { String((isDoctor ? $0.waiting_patients : $0.new_results) ?? 0) } ?? "—", label: isDoctor ? "Pacientes en espera" : "Resultado nuevo", destination: isDoctor ? "patients" : "laboratory")
                 metric(store.summary.map { String((isDoctor ? $0.new_results : $0.active_prescriptions) ?? 0) } ?? "—", label: isDoctor ? "Resultados nuevos" : "Recetas activas", destination: isDoctor ? "laboratory" : "prescriptions")
                 metric(isDoctor ? (store.summary.map { String($0.pending_prescriptions ?? 0) } ?? "—") : store.summary?.tickets?.first.map { String($0.number) } ?? "—", label: isDoctor ? "Recetas pendientes" : "Turno actual", destination: isDoctor ? "prescriptions" : "turns")
@@ -255,21 +330,19 @@ struct ContentView: View {
     }
 
     private var profile: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        let given = store.profile?.person?.given_names.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let family = store.profile?.person?.family_names.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 14) {
+                Image(systemName: "person.crop.circle.fill").font(.system(size: 48)).foregroundStyle(HospitalTheme.wine)
+                Text("Datos de registro").font(.system(size: 22, weight: .bold)).foregroundStyle(HospitalTheme.ink)
+            }.padding(.vertical, 10)
             HospitalCard {
-                HStack(spacing: 16) {
-                    Text(String(store.name.prefix(2)).uppercased()).font(.title2.weight(.semibold)).foregroundStyle(HospitalTheme.wine).frame(width: 68, height: 68).background(HospitalTheme.rose, in: Circle())
-                    VStack(alignment: .leading, spacing: 8) { Text(store.name).font(.subheadline.weight(.semibold)); HospitalBadge(text: isDoctor ? "Médico activo" : "Cuenta activa") }
-                }.padding(.vertical, 6)
+                DoctorConsultationField(label: "Nombre", value: given.isEmpty ? "No disponible" : given)
             }
-            heading(screen?.section ?? "Mi perfil")
-            detail(isDoctor ? "Correo institucional" : "Correo electrónico", value: store.profile?.auth_email ?? "No disponible")
-            if isDoctor { detail("Identificación profesional", value: store.profile?.professional?.license_number ?? "Pendiente de verificación") }
-            if let modules = store.modules {
-                MobileModuleView(model: modules, module: "profile", role: isDoctor ? "doctor" : "patient", search: search, period: store.period, navigate: go)
+            HospitalCard {
+                DoctorConsultationField(label: "Apellido", value: family.isEmpty ? "No disponible" : family)
             }
-            Button("Notificaciones") { go("notifications") }.disabled(store.busy)
-            Button("Cerrar sesión") { Task { await store.signOut() } }.frame(maxWidth: .infinity).padding(.vertical, 12).disabled(store.busy)
         }
     }
 
@@ -295,7 +368,7 @@ struct ContentView: View {
     }
 
     private var bottomBar: some View {
-        let tabs: [(String, String, String)] = isDoctor ? [("home","Inicio","house"),("patients","Pacientes","person"),("appointments","Mis citas","calendar"),("consultation","Consultas","cross.fill"),("more","Más","line.3.horizontal")] : [("home","Inicio","house"),("appointments","Mis citas","calendar"),("health","Salud","heart"),("profile","Perfil","person"),("more","Más","line.3.horizontal")]
+        let tabs: [(String, String, String)] = isDoctor ? [("home","Inicio","house"),("patients","Pacientes","person"),("consultation","Consultas","cross.fill"),("laboratory","Laboratorios","testtube.2"),("more","Más","line.3.horizontal")] : [("home","Inicio","house"),("appointments","Mis citas","calendar"),("health","Salud","heart"),("profile","Perfil","person"),("more","Más","line.3.horizontal")]
         let active = ["more", "health", "rooms"].contains(store.screenID) ? (store.screenID == "health" ? "health" : "more") : screen?.tab ?? "home"
         return HStack(spacing: 0) {
             ForEach(tabs.indices, id: \.self) { index in

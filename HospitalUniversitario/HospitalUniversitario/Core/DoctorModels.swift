@@ -67,6 +67,9 @@ struct DoctorAppointment: Codable, Identifiable, Sendable {
     let period: String
     let status: String
     let encounter_id: UUID?
+    var age: Int? = nil
+    var reason: String? = nil
+    var symptoms: [String]? = nil
 }
 
 struct DoctorLabTest: Codable, Identifiable, Sendable {

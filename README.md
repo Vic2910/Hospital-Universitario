@@ -71,6 +71,10 @@ El ZIP aportado contiene 11 pantallas de Paciente y 10 de Médico. Se usaron com
 
 Las rutas **Más** y **Salud** reúnen las pantallas secundarias. Habitaciones es una consulta complementaria en Más, necesaria para demostrar este bloque; no se presenta como una pantalla exportada de Figma. El ZIP no incluye un login iOS, por lo que se adaptó la identidad visual para ese acceso.
 
+El 30 de octubre se rediseñó la capa visual del login (encabezado vino, tarjeta con campos etiquetados, enlace «¿Olvidaste tu contraseña?» y enlace de texto «Regístrate») y se creó la pantalla de registro con los campos nombres, apellidos, DUI, edad, teléfono, correo, contraseña y confirmar contraseña, con iconos de mostrar/ocultar. **El registro es solo presentación**: valida los formatos en el cliente y no crea cuentas ni escribe en la base; el hospital sigue creando y activando las cuentas. El mismo diseño está replicado en la vista previa web (`web-preview/app.js` y `style.css`), visible en `http://127.0.0.1:4173/` al ejecutar el servidor local; la app Swift se ve compilando en Xcode. [Detalle](docs/REDISENO_AUTH_2026-10-30.md).
+
+Ese mismo día se rediseñó el **inicio del Paciente** (dashboard con saludo y avatar, card degradada con fecha de hoy y próxima cita, y accesos rápidos a Mis citas, Laboratorios, Expedientes y Agendar cita) usando la paleta vino/rojo como extensión de `Color` (`Design/HospitalPalette.swift`). El parámetro `nombrePaciente` admite el nombre real cuando exista el modelo de paciente, y `proximaCita` queda listo para conectarse al modelo de citas. El home del Médico y la barra de navegación no cambiaron. Está replicado en la vista previa web. [Detalle](docs/DASHBOARD_PACIENTE_2026-10-30.md).
+
 Las imagenes de `docs/design-reference/` son referencias, no fondos para simular pantallas. Se comprobo el formulario web de recetas en navegador a 1280x900 y 390x844 sin desbordamiento horizontal. No se acredita igualdad pixel a pixel de las 21 pantallas ni una revision visual de SwiftUI.
 
 ## Modelos y reglas compartidos
@@ -142,8 +146,12 @@ xcodebuild -project HospitalUniversitario/HospitalUniversitario.xcodeproj -schem
 
 | Ruta desde la raíz | Target / finalidad |
 |---|---|
-| `HospitalUniversitario/HospitalUniversitario/ContentView.swift` | `HospitalUniversitario`: login, TOTP, selección de rol, navegación y vistas |
-| `HospitalUniversitario/HospitalUniversitario/Design/HospitalTheme.swift` | `HospitalUniversitario`: colores, tarjetas y badges |
+| `HospitalUniversitario/HospitalUniversitario/ContentView.swift` | `HospitalUniversitario`: login rediseñado, TOTP, selección de rol, navegación y vistas |
+| `HospitalUniversitario/HospitalUniversitario/Auth/RegisterView.swift` | `HospitalUniversitario`: pantalla de registro (solo presentación, validación local) |
+| `HospitalUniversitario/HospitalUniversitario/Patient/PatientDashboardView.swift` | `HospitalUniversitario`: dashboard del Paciente, modelo `ProximaCita` y `#Preview` |
+| `HospitalUniversitario/HospitalUniversitario/Patient/PatientDashboardComponents.swift` | `HospitalUniversitario`: cards reutilizables del dashboard (saludo, fecha/cita, accesos) |
+| `HospitalUniversitario/HospitalUniversitario/Design/HospitalPalette.swift` | `HospitalUniversitario`: extensión `Color` con la paleta vino y rojo |
+| `HospitalUniversitario/HospitalUniversitario/Design/HospitalTheme.swift` | `HospitalUniversitario`: colores, tarjetas, badges y componentes de autenticación |
 | `HospitalUniversitario/HospitalUniversitario/Core/HospitalAPI.swift` | `HospitalUniversitario`: Auth REST, Keychain, MFA y servicios RPC |
 | `HospitalUniversitario/HospitalUniversitario/Core/HospitalStore.swift` | `HospitalUniversitario`: estado MVVM y carga de datos |
 | `HospitalUniversitario/HospitalUniversitario/Core/SharedCore.swift` | `HospitalUniversitario`: puente JavaScriptCore y fechas |
@@ -190,3 +198,73 @@ El comando anterior no inscribe MFA. La opción `--enroll-totp` está reservada 
 La consulta más reciente del asesor de seguridad informa que la protección de contraseñas filtradas está deshabilitada; no se cambió esa configuración. [Configuración de protección de contraseñas](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection). También persisten seis avisos INFO por RLS sin políticas en tablas de recuperación `hospital_recovery_3fn`, que no se modificaron. [Explicación del aviso](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy).
 
 Las fuentes y decisiones de alcance se conservan en [Contexto iOS](docs/CONTEXTO_IOS.md). El informe anterior es evidencia histórica del backend; sus pruebas no se anuncian como pruebas de esta app.
+
+## Agendar cita: actualización del 30 de octubre
+
+En Inicio del paciente, Accesos rápidos → **Paciente** abre Agendar cita. Datos editables de prueba, síntomas, motivo, especialidades, horarios y resumen equivalentes en SwiftUI y web. El botón prepara localmente; no reserva en Supabase. [Detalles y validaciones](docs/AGENDAR_CITA_2026-10-30.md).
+
+Para ver el formulario sin credenciales, inicia el servidor local, abre `http://127.0.0.1:4173/`, selecciona **Diseño Paciente** y pulsa **Paciente** en Accesos rápidos. «Preparar cita de prueba» valida el formulario y muestra una simulación local. Las solicitudes reales existentes conservan su flujo separado.
+
+
+## Dashboard del doctor (30 de octubre)
+
+Inicio del doctor comparte las cards y paleta del panel de paciente: saludo con nombre completo, fecha actual, consultas programadas para hoy, accesos a Pacientes/Consultas/Laboratorios/Expedientes, historial propio por paciente y fechas y resumen de jornadas laborales. Se conserva el destino Mi horario para el detalle completo. La sesión real reutiliza `doctor_workspace`, `doctor_chart` y `staff_shifts`, sin cambios de autorización.
+
+Para verlo con datos precargados, inicia la vista previa y pulsa **Médico** en los controles de diseño. SwiftUI ofrece el Preview **Doctor · datos locales** en `Doctor/DoctorDashboardView.swift`. Ambos usan los mismos ejemplos ficticios; no se envían al hospital ni reemplazan datos reales. El selector del historial ofrece pacientes de la agenda de hoy; otras fechas se consultan desde Pacientes. [Archivos, conexión de datos y límites](docs/DASHBOARD_DOCTOR_2026-10-30.md).
+
+Prueba específica: `node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-dashboard.mjs`. Las pruebas con transporte simulado no sustituyen la compilación y revisión de SwiftUI en Mac.
+
+
+**Corrección de navegación (2026-10-30):** el dashboard del doctor muestra bienvenida, fecha, conteo y accesos. El historial clínico por paciente y fechas está en **Pacientes**; el horario laboral se consulta en **Más → Mi horario**, sin resumen ni carga de jornadas en Inicio. La vista SwiftUI del historial es `Doctor/DoctorPatientHistoryView.swift`; la web usa `renderHistory` del componente del doctor. Esta ubicación sustituye la distribución anterior.
+
+
+**Navegación Doctor actualizada (2026-10-30):** Inicio / Pacientes / Consultas / Más. Se retiró **Mis citas** exclusivamente del Doctor, incluido su acceso en Más; Paciente lo conserva. Las citas asignadas siguen disponibles como datos de agenda en los módulos clínicos. El catálogo actual contiene 20 pantallas; las 21 capturas de referencia se conservan como material histórico.
+
+
+**Consultas Doctor (2026-10-30):** agenda visual con fecha actual, calendario y accesos Hoy/Mañana/En 7 días. El modo diseño y la sesión sin citas muestran una agenda local claramente identificada como ejemplo; nunca permite iniciar/guardar atenciones ficticias. Las citas reales conservan el formulario clínico. Ver [implementación y pruebas](docs/CONSULTAS_DOCTOR_2026-10-30.md). Prueba: `node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-consultations.mjs`.
+
+
+**Ticket de Consultas Doctor (2026-10-30):** las tarjetas incluyen paciente, edad, teléfono, hora, motivo y síntomas. **Ver detalle** abre una hoja iOS o panel web dentro de la consulta seleccionada; el ticket conserva el estado real y muestra **No hay datos reales** en campos ausentes. **Abrir atención** conserva el flujo clínico solo para citas reales. [Archivos y origen de cada campo](docs/TICKET_CONSULTA_DOCTOR_2026-10-30.md).
+
+
+## Expediente y Laboratorios: diseño por rol (30 de octubre)
+
+Doctor puede buscar por DUI/nombre, abrir el expediente y pulsar **Solicitud de laboratorio**. El formulario local valida los datos obligatorios y agrega la solicitud como **Pendiente** a ese expediente. La sección integrada permite filtrar por fecha, tipo de examen y paciente seleccionado; ambos roles consultan detalle y estado. Paciente solo ve su ficha y resultados, sin creación. Estados de diseño: Pendiente / En Proceso / Completado.
+
+En la web usa los controles de diseño **Médico → Expedientes**. En SwiftUI activa **Vista de diseño · datos locales** dentro de Expedientes/Laboratorio, o abre sus previews. Los flujos reales previos se conservan. La demostración no envía solicitudes ni persiste en Supabase.
+
+La navegación actual del Doctor es **Inicio / Pacientes / Consultas / Laboratorios / Más**; sustituye la distribución anterior de cuatro destinos y mantiene Mis citas solo en Paciente. [Archivos, navegación, modelos y futura conexión](docs/LABORATORIOS_EXPEDIENTE_2026-10-30.md). Prueba: `node --preserve-symlinks --preserve-symlinks-main scripts/test-clinical-labs.mjs`.
+
+
+**Corrección de visibilidad (2026-10-30):** al iniciar sesión como Doctor y abrir **Laboratorios** o **Expedientes**, el rediseño local se muestra por defecto, sin activar el modo diseño externo. Laboratorios incluye la búsqueda de expediente. El aviso aclara que los datos son ficticios; **Ver flujo conectado** conserva el acceso al módulo real. En SwiftUI el interruptor de diseño se activa inicialmente para Doctor. Paciente en sesión conserva sus datos reales.
+
+
+**Actualización de Laboratorio (2026-10-30):** se puede buscar al paciente y pulsar **Solicitar exámenes** desde Laboratorio, sin abrir Expedientes. El modal captura examen, motivo, peso y altura; toma fecha y doctor automáticamente y crea una solicitud local Pendiente. Expedientes abre una ficha modal separada con datos disponibles, mediciones, notas, recetas locales y laboratorios/resultados compartidos. Sustituye la restricción anterior de iniciar solicitudes solo desde la ficha.
+
+Los resultados estructurados tienen valor, unidad, referencia y observación. El adaptador local de resultados está probado; **la recepción/publicación real y la persistencia de este prototipo todavía necesitan conexión a Supabase**. Las recetas locales no se emiten clínicamente; el módulo conectado existente se conserva. [Detalles, archivos y verificaciones](docs/LABORATORIO_INDEPENDIENTE_2026-10-30.md).
+
+
+**Ajuste visual de Laboratorio (2026-10-30):** solicitud y expediente se abren ahora como **tickets dentro de la aplicación**, sin dialog externo ni sheet. Buscar/seleccionar paciente no muestra formularios ni filtros. **Solicitar exámenes** abre el ticket con todos los campos; **Ver solicitudes y resultados** abre el panel de filtros y lista por separado. **Volver** conserva el paciente seleccionado. El estado local y las operaciones conectadas previas se mantienen.
+
+
+**Pacientes Doctor (2026-10-30):** diseño con fecha de atención, DUI o nombre, tarjetas de coincidencias y ficha interna con historial propio, datos disponibles y seguimiento compartido con Expedientes/Laboratorios. En la web se muestra directamente en **Doctor → Pacientes**; los ejemplos locales siguen identificados y el flujo conectado se conserva. [Archivos y verificaciones](docs/PACIENTES_DOCTOR_2026-10-30.md). Prueba específica: `node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-patients.mjs`.
+
+
+**Perfil (2026-10-30):** para ambos roles se muestra únicamente Nombre y Apellido, de solo lectura y tomados de `my_profile.person`; sin datos inventados ni formularios de ajustes. Si faltan, aparece No disponible. Cerrar sesión sigue en Más. Prueba: `node --preserve-symlinks --preserve-symlinks-main scripts/test-profile.mjs`.
+
+
+**Expediente Paciente (2026-10-30):** abre directamente el ticket interno con el mismo estilo del Doctor, usando únicamente la información autorizada de su cuenta. Sin selección de personas ni edición. Faltantes explícitos y documentos publicados conservados. Los ejemplos están separados en modo diseño. [Archivos y pruebas](docs/EXPEDIENTE_PACIENTE_2026-10-30.md).
+
+
+**Historial médico Paciente (2026-10-30):** tarjetas cronológicas según la captura 215451, con fecha/hora, especialidad, médico, motivo y acento verde de la paleta. Pulsar una tarjeta abre el detalle dentro de la app. Tres ejemplos solicitados, identificados y reemplazables por el historial autorizado existente; no se mezclan con datos reales ni se importan a Supabase. Acceso **Más → Historial médico**. [Archivos y verificaciones](docs/HISTORIAL_PACIENTE_2026-10-30.md).
+
+
+**Recetas Paciente (2026-10-30):** Accesos rápidos muestra **Recetas** en lugar de Paciente. Tarjetas por medicamento según receta.png, ordenadas de más reciente a más antigua, con Pendiente/Retirada cuando la fuente informa retiro. Los ejemplos están identificados; el estado real sin datos de entrega aparece como Retiro por confirmar. **Agendar cita** se conserva en Mis citas. [Archivos y verificaciones](docs/RECETAS_PACIENTE_2026-10-30.md).
+
+
+**Receta Doctor (2026-10-30):** tanto Añadir receta del expediente local como el formulario conectado incluyen medicamento, dosis/unidad, frecuencia, vía, duración, cantidad y observaciones, con vista previa completa. La duración utiliza las fechas existentes de la receta; no modifica el contrato ni la entrega de farmacia. [Implementación y pruebas](docs/CAMPOS_RECETA_DOCTOR_2026-10-30.md).
+
+
+**Citas y solicitudes Paciente (2026-10-30):** Mis citas incorpora próxima cita y ticket con el mismo estilo del Doctor. Se unifican los dos formularios: el formulario de agendar ahora se envía con **Solicitar atención**, exige preferencia Mañana/Tarde y guarda una solicitud local **Pendiente**. **Recepción (demo)** en la vista previa permite asignar fecha/hora a ejemplos y comprobar el cambio a Cita asignada; en SwiftUI se incluye su componente y Preview. Los ejemplos son temporales y no se envían a Supabase. Se conservan citas y cancelación conectadas. Esta actualización sustituye la indicación anterior de conservar un acceso separado Agendar cita. [Archivos, datos y verificaciones](docs/CITAS_SOLICITUDES_PACIENTE_2026-10-30.md).
+
+Para verlo: abre `http://127.0.0.1:4173`, recarga con Ctrl+F5 y usa **Paciente → Mis citas → Solicitar atención** en modo diseño. El servidor existente utiliza `node --preserve-symlinks --preserve-symlinks-main web-preview/server.mjs`; si está abierto no inicies otra instancia en el mismo puerto.

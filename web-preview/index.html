@@ -8,6 +8,11 @@
   <script src="/shared/hospital-core.js" defer></script>
   <script src="/api.js" defer></script>
   <script src="/modules.js" defer></script>
+  <script src="/doctor-dashboard.js" defer></script>
+  <script src="/clinical-labs.js" defer></script>
+  <script src="/patient-history.js" defer></script>
+  <script src="/patient-prescriptions.js" defer></script>
+  <script src="/patient-appointments.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -16,7 +21,7 @@
     <strong>Hospital<br>Universitario</strong>
     <span>Avance · 24 de octubre<br>iOS + vista previa web</span>
     <small id="preview-mode">Conexión real a Supabase. Inicia sesión con una cuenta autorizada.</small>
-    <div class="design-controls"><p>Explorar el diseño sin credenciales</p><button id="design-patient" type="button">Paciente</button><button id="design-doctor" type="button">Médico</button><button id="live-mode" type="button">Volver al login real</button></div>
+    <div class="design-controls"><p>Explorar el diseño sin credenciales</p><button id="design-patient" type="button">Paciente</button><button id="design-doctor" type="button">Médico</button><button id="design-reception" type="button">Recepción (demo)</button><button id="live-mode" type="button">Volver al login real</button></div>
     <small>Los modos de diseño usan ejemplos locales del prototipo y no acceden a Supabase.</small>
   </aside>
   <main class="phone" aria-label="Vista previa de iPhone">

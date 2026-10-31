@@ -5,3 +5,196 @@
 
 .schedule-next{padding:17px 14px}.schedule-next h3{font-size:16px;line-height:21px;color:var(--wine);margin-bottom:15px}.schedule-next p{font-size:14px;font-weight:600;color:#242936;margin-bottom:12px}.schedule-row .card-body{display:grid;grid-template-columns:1fr 100px;gap:3px}.schedule-row h3,.schedule-row p{grid-column:1}.schedule-row .badge{grid-column:2;grid-row:1 / span 2;margin:0;align-self:center}.history-detail{display:block;font-size:9px;color:var(--muted);margin-top:7px}
 .module-form,.module-filters{display:grid;gap:12px;margin:6px 0 16px;min-width:0}.module-field{display:grid;gap:6px;font-size:12px;min-width:0}.module-field input,.module-field select,.module-field textarea{width:100%;min-width:0;max-width:100%;border:1px solid #dedde2;border-radius:8px;background:#fff;padding:11px;color:var(--ink,#242936);font-size:12px}.module-field textarea{min-height:80px;resize:vertical}.module-detail{display:grid;gap:4px;margin:9px 0;font-size:11px;overflow-wrap:anywhere}.module-detail strong{font-weight:600}.module-detail p{white-space:pre-wrap;font-size:11px;line-height:1.5}.module-action{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 10px;margin:5px 5px 0 0;border:1px solid #d4c5cb;background:#fff;color:var(--wine);border-radius:8px;font-size:11px;text-decoration:none;max-width:100%;overflow-wrap:anywhere}.module-toggle{display:flex;align-items:center;gap:10px;min-height:44px;font-size:12px}.module-toggle input{width:18px;height:18px;accent-color:var(--wine)}.card details{margin-top:10px;font-size:11px}.card summary{cursor:pointer;min-height:28px;color:var(--wine)}.module-date{margin-top:7px}.module-form button{white-space:normal}.module-form,.module-field{letter-spacing:0}
+
+/* Autenticacion redisena 2026-10-30 */
+.auth-view{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;background:var(--paper)}
+.auth-header{background:var(--wine);color:#fff;padding:18px 24px 46px;border-bottom-right-radius:28px;flex-shrink:0}
+.auth-brand{display:flex;align-items:center;gap:8px;margin-bottom:20px;font-size:14px;font-weight:500}
+.auth-header h1{font-size:28px;line-height:1.2;font-weight:600;letter-spacing:-.5px}
+.auth-header p{font-size:12px;line-height:16px;margin-top:8px;opacity:.9}
+.auth-card{background:#fff;border-radius:14px;margin:-28px 16px 0;padding:16px;flex-shrink:0}
+.auth-card form{display:grid;gap:14px}
+.auth-field{display:grid;gap:8px;min-width:0}
+.auth-field label{font-size:13px;font-weight:600}
+.auth-field input{width:100%;min-width:0;padding:14px;border:0;border-radius:12px;background:var(--paper);color:#242936;font-size:13px}
+.auth-input{display:flex;gap:6px;align-items:center;background:var(--paper);border-radius:12px;min-width:0}
+.auth-input input{background:none;border-radius:12px}
+.field-reveal{background:none;color:var(--muted);font-size:11px;font-weight:600;padding:0 10px;white-space:nowrap}
+.auth-row{display:flex;justify-content:flex-end}
+.field-link{background:none;color:var(--wine);font-size:11px;font-weight:600;padding:0}
+.auth-inline{font-size:11px;line-height:16px;color:var(--muted)}
+.auth-notice{background:var(--rose);color:var(--wine);border-radius:12px;padding:12px;font-size:11px;line-height:17px}
+.auth-error{color:#b3261e;font-size:11px;line-height:16px}
+.auth-link-row{display:flex;justify-content:center;align-items:center;gap:4px;padding:16px 16px 0;font-size:11px;color:var(--muted)}
+.link-button{background:none;color:var(--wine);font-size:11px;font-weight:600;padding:0}
+.auth-footer{text-align:center;color:var(--muted);font-size:11px;line-height:18px;padding:16px 16px 24px}
+
+/* Dashboard del paciente 2026-10-30 */
+.dash-greeting{display:flex;justify-content:space-between;align-items:center;gap:14px;background:#fff;border-radius:18px;padding:16px;box-shadow:0 6px 18px rgba(36,41,54,.06)}
+.dash-text{display:grid;gap:6px;min-width:0}
+.dash-text h2{font-size:20px;font-weight:700;letter-spacing:-.3px}
+.dash-text p{font-size:12px;color:var(--muted)}
+.dash-avatar{flex-shrink:0;width:54px;height:54px;border-radius:50%;display:grid;place-content:center;background:var(--rose);color:var(--wine);font-size:17px;font-weight:600;border:2px solid rgba(164,19,60,.25)}
+.dash-date{background:linear-gradient(135deg,var(--wine),#4d041a);color:#fff;border-radius:18px;padding:18px;display:grid;gap:10px;box-shadow:0 8px 20px rgba(119,7,39,.25)}
+.dash-row{display:flex;align-items:center;gap:12px}
+.dash-row-icon{font-size:15px;opacity:.9}
+.dash-stack{display:grid;gap:2px;min-width:0}
+.dash-stack strong{font-size:15px;font-weight:600}
+.dash-label{font-size:10px;font-weight:700;letter-spacing:1.4px;opacity:.8}
+.dash-date hr{border:0;height:1px;background:rgba(255,255,255,.25);margin:2px 0}
+.dash-cita-day{font-size:13px;opacity:.95}
+.dash-time{font-size:32px;font-weight:700;line-height:1.1}
+.dash-medico{font-size:12px;opacity:.9}
+.dash-empty{font-size:14px;font-weight:600}
+.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dash-card{display:grid;gap:12px;justify-items:start;background:#fff;border-radius:14px;padding:14px;min-height:92px;text-align:left;border:1px solid rgba(164,19,60,.18);transition:transform .12s ease,opacity .12s ease}
+.dash-card:active{transform:scale(.97);opacity:.85}
+.dash-icon{width:40px;height:40px;border-radius:50%;display:grid;place-content:center;background:var(--rose);color:var(--wine);font-size:16px}
+.dash-card strong{font-size:13px;font-weight:600}
+
+/* Agendar cita 2026-10-30 */
+.sched-card{display:grid;gap:14px;background:#fff;border-radius:18px;padding:16px;box-shadow:0 6px 18px rgba(36,41,54,.06);animation:sched-in .25s ease}
+@keyframes sched-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.sched-head{display:flex;align-items:center;gap:8px}
+.sched-head-icon{width:28px;height:28px;border-radius:50%;display:grid;place-content:center;background:var(--rose);color:var(--wine);font-size:13px}
+.sched-head strong{font-size:15px;font-weight:600}
+.sched-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sched-field{display:grid;gap:5px;min-width:0}
+.sched-field label{font-size:11px;font-weight:600;color:var(--muted)}
+.sched-field input{width:100%;padding:10px 12px;border:1px solid rgba(164,19,60,.22);border-radius:12px;font:inherit;font-size:13px;background:var(--paper);transition:border-color .15s ease,box-shadow .15s ease}
+.sched-field input:focus{outline:none;border-color:var(--wine);box-shadow:0 0 0 3px rgba(119,7,39,.12);background:#fff}
+.sched-hint{font-size:12px;color:var(--muted)}
+.sched-sub{font-size:13px;font-weight:600}
+.sched-wrap{display:grid;gap:12px}
+.sched-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
+.sched-chip{display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 12px;border-radius:999px;border:1px solid rgba(164,19,60,.25);background:#fff;font-size:12px;font-weight:500;text-align:center;transition:transform .12s ease,background .15s ease,color .15s ease,border-color .15s ease}
+.sched-chip:active{transform:scale(.95)}
+.sched-chip.is-selected{background:var(--wine);border-color:var(--wine);color:#fff;font-weight:600;box-shadow:0 4px 12px rgba(119,7,39,.25)}
+.sched-reason{width:100%;min-height:100px;padding:12px;border:1px solid rgba(164,19,60,.22);border-radius:12px;font:inherit;font-size:13px;background:var(--paper);resize:vertical;transition:border-color .15s ease,box-shadow .15s ease}
+.sched-reason:focus{outline:none;border-color:var(--wine);box-shadow:0 0 0 3px rgba(119,7,39,.12);background:#fff}
+.sched-slots{display:grid;gap:8px;animation:sched-in .2s ease}
+.sched-slot{display:grid;gap:3px;padding:12px;border-radius:14px;border:1px solid rgba(164,19,60,.25);background:#fff;text-align:center;transition:transform .12s ease,background .2s ease,color .2s ease,border-color .2s ease}
+.sched-slot:active{transform:scale(.97)}
+.sched-slot-day{font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--muted)}
+.sched-slot strong{font-size:12px;font-weight:600}
+.sched-slot.is-selected{background:linear-gradient(135deg,var(--wine),#4d041a);border-color:transparent;color:#fff;box-shadow:0 6px 16px rgba(119,7,39,.25)}
+.sched-slot.is-selected .sched-slot-day{color:rgba(255,255,255,.85)}
+.sched-success{display:flex;gap:12px;align-items:flex-start;background:var(--rose);border-radius:14px;padding:14px;animation:sched-in .25s ease}
+.sched-success-icon{width:26px;height:26px;flex-shrink:0;border-radius:50%;display:grid;place-content:center;background:#fff;color:#A4133C;font-weight:700}
+.sched-success-text{display:grid;gap:4px;min-width:0}
+.sched-success-text strong{font-size:15px;font-weight:600}
+.sched-success-text p{font-size:12px;color:var(--muted)}
+.sched-submit{width:100%}
+
+/* Agendar cita: misma jerarquía y paleta que SwiftUI. */
+.sched-intro{display:grid;gap:10px;padding:22px;border-radius:22px;background:linear-gradient(135deg,var(--wine),#4d041a);color:white;box-shadow:0 8px 24px #77072720}
+.sched-eyebrow{font-size:10px;font-weight:700;letter-spacing:1.4px;opacity:.8}
+.sched-intro h2{font-size:24px;line-height:1.15;letter-spacing:-.6px}
+.sched-intro p{font-size:13px;line-height:1.6;opacity:.9}
+.sched-intro small{font-size:10px;line-height:1.5;opacity:.8}
+.sched-fields>.sched-hint,.sched-field:last-child{grid-column:1/-1}
+.sched-hint{line-height:1.6}
+.sched-summary{display:grid;gap:8px;padding:16px;border:1px solid #a4133c30;border-radius:18px;background:var(--rose)}
+.sched-summary strong{color:var(--wine);font-size:14px}.sched-summary p{font-size:13px;line-height:1.6}.sched-summary small{color:var(--muted);line-height:1.5}
+.sched-chip,.sched-slot{min-height:44px}.sched-slot.is-selected::after{content:'✓';font-weight:700}
+.sched-card:focus-within{box-shadow:0 6px 22px #77072712}
+.sched-reason{min-height:120px;line-height:1.6}
+@media(prefers-reduced-motion:reduce){.sched-card,.sched-success,.sched-intro,.sched-chip,.sched-slot{animation:none!important;transition:none!important}}
+
+/* Formulario equivalente al apilado nativo; horarios con espacio para la franja. */
+.sched-fields{grid-template-columns:minmax(0,1fr)}
+.sched-slots .sched-grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.sched-chip.is-selected::before{content:"\2713";font-weight:700}
+.sched-chip:focus-visible,.sched-slot:focus-visible{outline:3px solid var(--wine);outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.sched-slots{animation:none!important}.sched-chip:active,.sched-slot:active{transform:none}}
+
+/* Doctor: cards y accesos compartidos con el dashboard del paciente. */
+.doctor-today{display:grid;gap:10px}.doctor-today .dash-time{font-size:36px}
+.doctor-history,.doctor-schedule{display:grid;gap:14px}.doctor-history .section-title,.doctor-schedule .section-title{margin:0}
+.doctor-field{display:grid;gap:6px;font-size:12px;font-weight:600;min-width:0}
+.doctor-field input{width:100%;min-width:0;min-height:44px;border:1px solid #a4133c40;border-radius:12px;padding:10px;background:var(--paper);font:inherit;color:inherit}
+.doctor-patients,.doctor-results{display:grid;gap:10px}
+.doctor-patient{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:56px;padding:12px;border:1px solid transparent;border-radius:12px;background:var(--paper);text-align:left;color:var(--wine)}
+.doctor-patient div{display:grid;gap:4px}.doctor-patient.is-selected{background:var(--rose);border-color:var(--wine)}
+.doctor-patient:active{opacity:.8}.doctor-toggle{display:flex;gap:10px;align-items:center;min-height:44px;font-size:13px}.doctor-toggle input{width:20px;height:20px;accent-color:var(--wine)}
+.doctor-dates{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.doctor-visit{display:grid;gap:8px;padding:14px;border:1px solid var(--rose);border-radius:14px;background:white;font-size:13px;line-height:1.5}
+.doctor-status{font-size:11px;color:var(--wine)}.doctor-shift{display:flex;align-items:flex-start;gap:12px;padding:8px 0;font-size:13px}.doctor-shift>div{display:grid;gap:4px}.doctor-shift p{font-size:12px;color:var(--muted)}.doctor-shift small,.doctor-clock{color:var(--wine)}
+.doctor-history button:focus-visible,.doctor-schedule button:focus-visible,.doctor-field input:focus-visible{outline:3px solid var(--wine);outline-offset:3px}
+
+/* Doctor: destinos visibles distribuidos en todo el ancho. */
+.bottom-nav.doctor-nav{grid-template-columns:repeat(5,minmax(0,1fr))}
+
+/* Agenda de Consultas: paleta y cards compartidas con el panel del paciente. */
+.consult-count{display:flex;gap:8px;align-items:baseline}.consult-count strong{font-size:36px}.consult-count span{font-size:12px}
+.consult-days{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.consult-day{min-height:44px;border-radius:12px;background:var(--paper);color:var(--wine);font-size:12px;font-weight:600}.consult-day.is-selected{background:var(--rose);box-shadow:inset 0 0 0 1px #77072735}
+.consult-demo{padding:14px;border-radius:14px;background:var(--rose);color:var(--wine);font-size:12px;line-height:1.6}
+.consult-card{border:1px solid #a4133c25}.consult-head{display:flex;gap:12px;align-items:center}.consult-head h3{font-size:15px;line-height:1.4}.consult-avatar{width:40px;height:40px;flex-shrink:0;border-radius:50%;background:var(--rose);color:var(--wine);display:grid;place-content:center;font-size:12px;font-weight:700}
+.consult-time{font-size:15px;color:var(--wine)}.consult-status{justify-self:start;padding:6px 10px;border-radius:999px;background:var(--rose);color:var(--wine);font-size:11px;font-weight:600}
+.consult-day:focus-visible{outline:3px solid var(--wine);outline-offset:3px}
+
+/* Ticket de consulta: vino de marca y azul #2196f3 de la captura de referencia. */
+.consult-demographics{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.consult-field{display:grid;gap:5px;min-width:0;text-align:left}.consult-field>span{font-size:11px;color:var(--muted);font-weight:600}.consult-field p{font-size:13px;line-height:1.6;overflow-wrap:anywhere;color:#242936}
+.consult-ticket{display:grid;justify-items:center;gap:22px;border-top:1px dashed #a4133c40;padding:22px 0 0;margin-top:8px;min-width:0}.consult-ticket h2{font-size:27px;font-weight:700;line-height:1.2;text-align:center}
+.consult-ticket-check{width:82px;height:82px;border-radius:50%;display:grid;place-content:center;background:var(--wine);color:white;font-size:44px;font-weight:700}
+.consult-ticket-date{display:grid;gap:8px;text-align:center;background:var(--rose);padding:18px;border-radius:16px;width:100%;line-height:1.5}.consult-ticket-date span{font-size:11px;color:var(--muted)}.consult-ticket-date strong{font-size:15px}
+.consult-ticket-fields{display:grid;gap:18px;width:100%;padding:18px;background:var(--paper);border-radius:16px}
+.consult-ticket-primary{background:#2196f3;color:white;border-radius:12px;min-height:54px;width:100%;font-weight:600;padding:12px;font-size:15px}.consult-ticket-primary:focus-visible{outline:3px solid var(--wine);outline-offset:3px}
+
+/* Laboratorios de diseño, integrados al expediente seleccionado. */
+.clinical-lab-card,.clinical-lab-form,.clinical-lab-list{display:grid;gap:14px}.clinical-lab-card .section-title{margin:0}.clinical-lab-form{margin:0}
+.clinical-lab-card select,.clinical-lab-form select,.clinical-lab-form textarea{width:100%;min-width:0;min-height:44px;border:1px solid #a4133c40;border-radius:12px;background:var(--paper);font:inherit;padding:10px;color:inherit}.clinical-lab-form textarea{min-height:110px;resize:vertical}
+.clinical-lab-state{justify-self:start;display:inline-flex;border-radius:999px;padding:6px 10px;background:var(--rose);color:var(--wine);font-size:11px;font-weight:600}.clinical-lab-state.is-completed{background:#e3f6ea}
+.clinical-lab-list details{display:grid;gap:10px}.clinical-lab-list summary{cursor:pointer;min-height:44px;padding:12px 0;font-weight:600;color:var(--wine)}.clinical-lab-list details .consult-field{margin-top:10px}
+
+.clinical-lab-state.is-processing{background:#e7f1fd}.clinical-lab-state.is-pending{background:#fff2d9}
+
+.clinical-result-table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}.clinical-result-table th,.clinical-result-table td{padding:8px 4px;border-bottom:1px solid #77072720;text-align:left;overflow-wrap:anywhere}.clinical-result-table th{color:var(--wine);font-weight:600}
+
+/* Tickets internos: permanecen dentro de .screen-content y del marco del teléfono. */
+.clinical-landing{display:grid;gap:10px;padding:22px;border-radius:22px;background:linear-gradient(135deg,var(--wine),#4d041a);color:white;margin-bottom:10px;box-shadow:0 8px 22px #77072720}.clinical-landing h2{font-size:24px;line-height:1.2}.clinical-landing p{font-size:12px;line-height:1.7;opacity:.9}
+.clinical-ticket{display:grid;gap:22px;width:100%;min-width:0;padding:20px;border:1px solid #77072715;border-radius:24px;background:white;box-shadow:0 12px 28px #77072710;box-sizing:border-box}
+.clinical-ticket-nav{display:flex;align-items:center;justify-content:space-between;gap:12px}.clinical-ticket-nav>span{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:1px}.clinical-ticket-nav .text-button{padding-left:0;font-weight:600;min-height:44px}
+.clinical-ticket-icon{justify-self:center;display:grid;place-content:center;width:82px;height:82px;border-radius:50%;background:var(--wine);color:white;font-size:42px;font-weight:700}
+.clinical-ticket-title{font-size:27px!important;line-height:1.2;text-align:center;letter-spacing:-.6px}.clinical-ticket-patient{text-align:center;font-size:15px;color:var(--muted);font-weight:600}
+.clinical-ticket-context{display:grid;gap:8px;text-align:center;padding:18px;border-radius:16px;background:var(--rose);font-size:13px;overflow-wrap:anywhere}.clinical-ticket-context strong{font-size:16px}.clinical-ticket-note{font-size:10px;text-align:center;color:var(--muted);line-height:1.5}
+.clinical-ticket>.clinical-lab-form{gap:18px}.clinical-ticket .clinical-lab-card{padding:16px;border:1px solid #77072712;box-shadow:none}.clinical-ticket .primary{background:#2196f3;border-radius:12px;min-height:54px;font-size:15px;font-weight:600}
+.clinical-ticket .clinical-lab-form>.doctor-field{font-size:12px}.clinical-ticket input,.clinical-ticket select,.clinical-ticket textarea{min-width:0;width:100%;box-sizing:border-box}.clinical-ticket .consult-field{padding-bottom:4px}
+
+.clinical-flow .hospital-header{padding-bottom:24px;min-height:140px}.clinical-flow .screen-content{gap:16px}
+
+.clinical-ticket-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.clinical-ticket-group{display:grid;gap:14px;min-width:0;border:0;border-top:1px dashed #77072735;margin:0;padding:18px 0 0}.clinical-ticket-group legend{font-size:11px;font-weight:700;color:var(--wine);letter-spacing:.4px;padding:0 8px 0 0}
+.clinical-ticket .clinical-lab-form>.primary{box-shadow:0 6px 14px #2196f330}.clinical-ticket .doctor-field input,.clinical-ticket .doctor-field select,.clinical-ticket .doctor-field textarea{border-radius:12px;background:#f8f8fa}
+
+/* Pacientes: búsqueda contextual, coincidencias y cronología dentro del ticket. */
+.patient-matches{display:grid;gap:12px}.patient-match-count{font-size:12px;color:var(--muted);padding:4px 0}
+.patient-match-card{display:flex;align-items:flex-start;gap:12px;min-width:0;padding:16px;text-align:left;border:1px solid #77072722;border-radius:18px;background:linear-gradient(135deg,#fff,#fff9fb);box-shadow:0 5px 16px #77072708}.patient-match-card:active{opacity:.8}.patient-match-card:focus-visible{outline:3px solid var(--wine);outline-offset:3px}
+.patient-match-avatar{display:grid;place-content:center;flex-shrink:0;width:44px;height:44px;border-radius:15px;background:var(--rose);color:var(--wine);font-weight:700;font-size:13px}
+.patient-match-info{display:grid;gap:8px;min-width:0}.patient-match-info strong{font-size:17px;color:#242936}.patient-match-info small{font-size:11px;color:var(--muted);line-height:1.5}.patient-match-progress{font-size:11px;color:var(--wine);font-weight:600}.patient-match-link{font-size:12px;font-weight:700;color:var(--wine)}
+.patient-history-row{position:relative;display:grid;gap:10px;border-left:3px solid var(--wine);padding:14px 14px 14px 18px;background:var(--paper);border-radius:0 14px 14px 0;font-size:13px}.patient-history-row:before{content:'';position:absolute;left:-6px;top:18px;width:9px;height:9px;border-radius:50%;background:var(--wine);border:2px solid white}.patient-history-date{font-size:11px;color:var(--wine);font-weight:600}.patient-history-row p{font-size:12px;line-height:1.6;color:var(--muted)}
+
+.patient-visit-state{justify-self:start;font-size:11px;color:var(--wine);background:var(--rose);padding:5px 10px;border-radius:999px}
+
+/* Perfil: únicamente nombre y apellido del registro. */
+.identity-intro{display:flex;align-items:center;gap:14px;padding:10px 0 18px}.identity-intro h2{font-size:22px;font-weight:700;line-height:1.3}.identity-icon{display:grid;place-content:center;width:48px;height:48px;flex-shrink:0;border-radius:50%;background:var(--rose);color:var(--wine);font-size:25px}
+.identity-field{gap:10px}.identity-field>span{font-size:12px;font-weight:600;color:var(--muted)}.identity-field>strong{font-size:18px;font-weight:600;overflow-wrap:anywhere;line-height:1.5}
+
+/* Expediente propio del Paciente: mismo ticket interno, sin controles clínicos. */
+.patient-own-chart>.section-title{margin:0!important;font-size:17px;color:#242936}.patient-own-chart>.card{border:1px solid #77072712;border-radius:16px;padding:18px;background:#fff}.patient-own-chart .module-detail{padding-bottom:8px}.patient-own-chart .module-detail strong{font-size:12px;color:var(--muted)}.patient-own-chart .module-detail p{font-size:14px;line-height:1.6;color:#242936}
+
+/* Historial médico del Paciente: composición cronológica de la referencia. */
+.patient-history-card{position:relative;display:grid;gap:6px;width:100%;padding:18px 18px 18px 24px;margin:0 0 10px;text-align:left;border:1px solid #2429360f;border-radius:16px;background:#fff;box-shadow:0 3px 12px #2429360a;color:#242936}
+.patient-history-card:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:5px;background:#e3f6ea;border-radius:3px}.patient-history-card:focus-visible{outline:3px solid var(--wine);outline-offset:3px}.patient-history-card:active{opacity:.8}
+.patient-history-date{display:flex;justify-content:space-between;align-items:baseline;gap:14px;margin-bottom:6px}.patient-history-date strong{font-size:16px;font-weight:700}.patient-history-date time{font-size:14px;color:var(--muted);white-space:nowrap;font-weight:500}
+.patient-history-specialty{font-size:12px;color:var(--muted);line-height:1.6}.patient-history-doctor{font-size:15px;font-weight:600;line-height:1.5}.patient-history-reason{display:grid;gap:4px;margin-top:7px}.patient-history-reason>span{font-size:10px;font-weight:600;color:var(--muted)}.patient-history-reason p{font-size:13px;line-height:1.6;overflow-wrap:anywhere}.patient-history-notice{font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:8px}
+
+/* Recetas del Paciente: composición por medicamento de receta.png. */
+.patient-rx-date{font-size:13px;color:var(--muted);font-weight:600;margin:8px 0 4px}
+.patient-rx-card{display:grid;gap:16px;padding:20px;border-radius:20px;border:1px solid var(--rose);background:#fff;margin-bottom:12px;min-width:0}
+.patient-rx-state{justify-self:start;border-radius:7px;padding:6px 12px;font-size:13px;font-weight:600;color:var(--wine)}.patient-rx-state.is-collected{background:#e3f6ea}.patient-rx-state.is-pending{background:#fff2d9}.patient-rx-state.is-unknown{background:var(--rose)}
+.patient-rx-title{display:flex;gap:10px;align-items:flex-start;color:#242936}.patient-rx-title>span{font-size:25px;line-height:1}.patient-rx-title h3{font-size:16px;font-weight:700;line-height:1.6;overflow-wrap:anywhere}
+.patient-rx-line{display:flex;justify-content:space-between;gap:14px;border-bottom:1px dashed #757e9170;padding:0 0 10px;color:var(--muted);font-size:13px;line-height:1.5}.patient-rx-line strong{font-size:14px}.patient-rx-line>span{text-align:right;overflow-wrap:anywhere;min-width:0}
+.patient-rx-observations{display:grid;gap:7px;font-size:13px;line-height:1.6;color:var(--muted)}.patient-rx-observations strong{font-size:14px}.patient-rx-observations p{overflow-wrap:anywhere}

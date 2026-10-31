@@ -97,14 +97,16 @@ final class HospitalStore: ObservableObject {
             if let facility = fresh.roles.first(where: { $0.code == role })?.facility_id, let profile = fresh.profile {
                 modules?.configure(role: role, facility: facility, profile: profile.id, patient: fresh.patient_id)
             }
+            if role == "patient" && ["request", "schedule"].contains(screenID) { return }
             if (role == "patient" && ["appointments", "request", "chart", "history", "prescriptions", "laboratory", "notifications"].contains(screenID)) || screenID == "notifications" {
                 await modules?.load(screenID, more: more)
                 return
             }
             if role == "doctor", let identity = fresh.staff_id,
                let facility = fresh.roles.first(where: { $0.code == "doctor" })?.facility_id,
-               ["home", "patients", "appointments", "consultation", "chart", "laboratory", "notifications", "prescriptions"].contains(screenID) {
+               ["home", "patients", "consultation", "chart", "laboratory", "notifications", "prescriptions"].contains(screenID) {
                 doctor?.configure(facility: facility, identity: identity)
+                if screenID == "home" { doctor?.day = Date() }
                 await doctor?.refresh()
                 if screenID == "prescriptions" { await modules?.load("prescriptions", more: more) }
                 return
@@ -147,7 +149,6 @@ final class HospitalStore: ObservableObject {
                 if let facility { overview = try await api.rpc("hospital_overview", parameters: ["p_facility": facility.uuidString]) }
             case "profile":
                 profile = try await api.rpc("my_profile")
-                await modules?.load("profile")
             default: break
             }
         } catch {

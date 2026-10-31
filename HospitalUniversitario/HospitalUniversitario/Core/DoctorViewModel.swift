@@ -147,6 +147,15 @@ final class DoctorViewModel: ObservableObject {
         }
     }
 
+    /// doctor_chart aplica el médico autenticado en el servidor; no se acepta un médico elegido por el cliente.
+    func patientHistory(patient: UUID, from: Date?, to: Date?) async throws -> [DoctorConsultation] {
+        guard workspace?.appointments.contains(where: { $0.patient_id == patient }) == true else { throw CancellationError() }
+        let scope = generation
+        let value = try await repository.chart(patient: patient, from: from, to: to, query: "")
+        guard generation == scope, !Task.isCancelled else { throw CancellationError() }
+        return value.history
+    }
+
     func startConsultation() async {
         guard let appointment = selectedAppointment, appointment.encounter_id == nil else { return }
         let key = startKey

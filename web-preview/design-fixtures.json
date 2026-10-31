@@ -1,6 +1,6 @@
 {
   "patient": {
-    "name":"María", "fullName":"María López", "email":"maria.lopez@ejemplo.com", "initials":"ML",
+    "givenNames":"María", "familyNames":"López", "name":"María", "fullName":"María López", "email":"maria.lopez@ejemplo.com", "initials":"ML",
     "metrics":[["2","Próximas citas","appointments"],["1","Resultado nuevo","laboratory"],["3","Recetas activas","prescriptions"],["A-014","Turno actual","turns"]],
     "queue":{"ticket_id":"00000000-0000-4000-8000-000000000014","number":14,"status":"waiting","display_number":"A-014","serving_number":"A-011","people_ahead":2,"consultation_room":{"name":"Consultorio 3"}},
     "rows": {
@@ -13,11 +13,10 @@
     }
   },
   "doctor": {
-    "name":"Dr. Ramírez", "fullName":"Dr. Luis Ramírez", "email":"luis.ramirez@hospital.edu", "initials":"LR",
+    "givenNames":"Luis", "familyNames":"Ramírez", "name":"Dr. Ramírez", "fullName":"Dr. Luis Ramírez", "email":"luis.ramirez@hospital.edu", "initials":"LR",
     "metrics":[["12","Citas programadas","appointments"],["4","Pacientes en espera","patients"],["3","Resultados nuevos","laboratory"],["2","Recetas pendientes","prescriptions"]],
     "rows": {
       "patients":[["Carlos Mendoza","EXP-001284 · Consulta programada","En espera"],["María López","EXP-001285 · Control de hipertensión","Activo"],["Juan Pérez","EXP-001286 · Consulta general","En consulta"],["Lucía García","EXP-001287 · Seguimiento clínico","Activo"],["Roberto Díaz","EXP-001288 · Revisión de resultados","Pendiente"]],
-      "appointments":[["08:00 · Carlos Mendoza","Control · Consultorio 3","Confirmada"],["09:30 · María López","Medicina interna · Sala 2","En espera"],["10:30 · Juan Pérez","Consulta general · Sala 1","En curso"],["11:30 · Lucía García","Seguimiento · Consultorio 3","Confirmada"],["14:00 · Roberto Díaz","Revisión de resultados","Pendiente"]],
       "consultation":[["Carlos Mendoza · EXP-001284","45 años · Consultorio 3 · 10:30"]],
       "chart":[["Carlos Mendoza","EXP-001284 · 45 años · Tipo O+","Confidencial"],["Alergias","Penicilina · Precaución clínica"],["Diagnósticos","Hipertensión · En seguimiento"],["Antecedentes","Antecedente quirúrgico"],["Medicamentos activos","Losartán 50 mg · Prescrito"],["Evolución médica","Control y valoración reciente"]],
       "prescriptions":[["Carlos Mendoza","Losartán 50 mg · Vía oral","Vigente"],["María López","Metformina 850 mg · Vía oral","Vigente"],["Juan Pérez","Tratamiento por confirmar","Borrador"],["Lucía García","Paracetamol 500 mg · Vía oral","Vigente"]],

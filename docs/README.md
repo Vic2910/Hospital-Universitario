@@ -4,6 +4,8 @@ El nombre vigente del producto es **Hospital Universitario**. Las capturas y el 
 
 | Documento | Contenido |
 |---|---|
+| [DASHBOARD_PACIENTE_2026-10-30.md](DASHBOARD_PACIENTE_2026-10-30.md) | Rediseño del inicio del Paciente: paleta vino/rojo, componentes, parametrización y réplica web |
+| [REDISENO_AUTH_2026-10-30.md](REDISENO_AUTH_2026-10-30.md) | Rediseño visual del login y nueva pantalla de registro (solo capa visual, sin registro en base) |
 | [MODULOS_FUNCIONALES_2026-10-28.md](MODULOS_FUNCIONALES_2026-10-28.md) | Estado actual: Medico/Paciente en iOS y web, backend instalado, pruebas y pendientes |
 | [Informe_Hospital_Universitario.md](Informe_Hospital_Universitario.md) | Informe aportado por el usuario para los flujos; contrastado con el esquema real |
 | [sql/mobile-modules.sql](sql/mobile-modules.sql) | RPC de modulos, recetas atomicas y eventos; desplegados |
@@ -26,3 +28,27 @@ No añadas contraseñas, tokens o secretos a esta carpeta. Las credenciales de p
 ## Decision vigente de acceso
 
 [Acceso con contrasena sin MFA para Medico/Paciente (2026-10-28)](ACCESO_SIN_MFA_2026-10-28.md). Sustituye los requisitos MFA de los informes historicos para estos roles.
+
+- [Agendar cita SwiftUI y web, 30 de octubre](AGENDAR_CITA_2026-10-30.md).
+
+- [Dashboard del doctor: SwiftUI, web, datos y verificaciones (30 de octubre)](DASHBOARD_DOCTOR_2026-10-30.md).
+
+- [Consultas Doctor: agenda de hoy, próximas fechas y ejemplos locales](CONSULTAS_DOCTOR_2026-10-30.md).
+
+- [Consultas Doctor: lista y detalle tipo ticket, datos y faltantes](TICKET_CONSULTA_DOCTOR_2026-10-30.md).
+
+- [Laboratorios por rol e integración dentro del expediente: diseño y pruebas](LABORATORIOS_EXPEDIENTE_2026-10-30.md).
+
+- [Laboratorio independiente, expediente modal, resultados y alcance de conexión](LABORATORIO_INDEPENDIENTE_2026-10-30.md).
+
+- [Pacientes del Doctor: diseño, filtros combinados y ficha clínica interna](PACIENTES_DOCTOR_2026-10-30.md).
+
+- [Expediente propio del Paciente: diseño de ticket interno y solo lectura](EXPEDIENTE_PACIENTE_2026-10-30.md).
+
+- [Historial médico del Paciente: tarjetas cronológicas y detalle interno](HISTORIAL_PACIENTE_2026-10-30.md).
+
+- [Recetas del Paciente: dashboard, tarjetas y estado de retiro](RECETAS_PACIENTE_2026-10-30.md).
+
+- [Campos de receta del Doctor iguales a la presentación del Paciente](CAMPOS_RECETA_DOCTOR_2026-10-30.md).
+
+- [Próxima cita, formulario único, preferencia y solicitudes Pendientes del Paciente; recepción de demostración](CITAS_SOLICITUDES_PACIENTE_2026-10-30.md).

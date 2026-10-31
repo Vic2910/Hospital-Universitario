@@ -21,13 +21,16 @@ assert "SDKROOT = auto" not in project
 ET.parse(project_dir / "HospitalUniversitario.xcodeproj/xcshareddata/xcschemes/HospitalUniversitario.xcscheme")
 catalog = json.loads((project_dir / "HospitalUniversitario/Shared/screens.json").read_text(encoding="utf-8"))
 inventory = json.loads((root / "docs/design-reference/inventory.json").read_text(encoding="utf-8"))
-assert len(catalog["patient"]) == 11 and len(catalog["doctor"]) == 10
-assert len(inventory) == sum(len(screens) for screens in catalog.values())
+assert len(catalog["patient"]) == 11 and len(catalog["doctor"]) == 9
+assert len(inventory) == 21  # Referencias históricas: se conserva la antigua pantalla del doctor.
+assert sum(len(screens) for screens in catalog.values()) == 20
+assert not any(screen["id"] == "appointments" for screen in catalog["doctor"])
+assert any(screen["id"] == "appointments" for screen in catalog["patient"])
 for role, screens in catalog.items():
     assert len({screen["id"] for screen in screens}) == len(screens), role
     assert screens[0]["id"] == "home"
 for item in inventory:
     assert (root / "docs/design-reference" / item["file"]).is_file()
 assert not any("../" in path for path in re.findall(r"path = ([^;]+);", project))
-print("Xcode: referencias, recursos explícitos, esquema y 21 pantallas verificados.")
+print("Xcode: referencias, recursos explícitos, esquema, 20 pantallas activas y 21 referencias históricas verificados.")
 print("Esta comprobación no compila Swift ni sustituye xcodebuild en una Mac.")

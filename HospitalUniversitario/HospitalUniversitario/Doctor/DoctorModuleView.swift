@@ -24,10 +24,10 @@ struct DoctorModuleView: View {
                 Text(confirmation).font(.footnote).foregroundStyle(HospitalTheme.wine)
             }
             if let workspace = model.workspace {
-                if screenID != "notifications" { dayPicker }
+                if !["home", "notifications", "consultation"].contains(screenID) { dayPicker }
                 switch screenID {
                 case "home": dashboard(workspace)
-                case "patients", "appointments": patients(workspace)
+                case "patients": patients(workspace)
                 case "consultation": consultation(workspace)
                 case "chart": patientChart(workspace)
                 case "laboratory": laboratory(workspace)
@@ -58,35 +58,9 @@ struct DoctorModuleView: View {
     }
 
     private func dashboard(_ workspace: DoctorWorkspace) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text(workspace.facility_name).font(.subheadline).foregroundStyle(HospitalTheme.secondary)
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                metric(workspace.stats.consultations, "Consultas del día", "consultation")
-                metric(workspace.stats.completed_consultations, "Consultas finalizadas", "chart")
-                metric(workspace.stats.issued_orders, "Órdenes emitidas", "laboratory")
-                metric(workspace.stats.pending_orders, "Órdenes pendientes", "laboratory")
-            }
-            HStack {
-                action("Mis pacientes", "person.2", "patients")
-                action("Laboratorio", "testtube.2", "laboratory")
-            }
-            Text("Notificaciones recientes").font(.headline)
-            notifications(Array(workspace.notifications.prefix(5)))
-        }
-    }
-
-    private func metric(_ value: Int, _ label: String, _ destination: String) -> some View {
-        Button { navigate(destination) } label: {
-            HospitalCard {
-                Text(value.formatted()).font(.title2.weight(.semibold)).foregroundStyle(HospitalTheme.wine)
-                Text(label).font(.caption).foregroundStyle(HospitalTheme.secondary)
-            }.frame(minHeight: 96)
-        }.buttonStyle(.plain)
-    }
-
-    private func action(_ label: String, _ icon: String, _ destination: String) -> some View {
-        Button { navigate(destination) } label: { Label(label, systemImage: icon).font(.subheadline) }
-            .frame(maxWidth: .infinity, minHeight: 44)
+        DoctorDashboardView(name: workspace.doctor_name, facility: workspace.facility_name,
+            consultationCount: workspace.appointments.filter { !["cancelled", "rejected", "no_show"].contains($0.status) }.count,
+            navigate: navigate)
     }
 
     private func matches(_ text: String) -> Bool { search.isEmpty || text.localizedCaseInsensitiveContains(search) }
@@ -113,6 +87,13 @@ struct DoctorModuleView: View {
                     }.font(.subheadline).padding(.top, 6)
                 }
             }
+            if screenID == "patients" {
+                let unique = Dictionary(workspace.appointments.map { ($0.patient_id, $0) }, uniquingKeysWith: { first, _ in first })
+                DoctorPatientHistoryView(
+                    patients: unique.values.map { DoctorDashboardPatient(id: $0.patient_id, name: $0.patient_name, record: $0.record_number) }.sorted { $0.name < $1.name },
+                    loadHistory: { patient, from, to in try await model.patientHistory(patient: patient, from: from, to: to) })
+                    .id(model.day)
+            }
         }
     }
 
@@ -135,7 +116,12 @@ struct DoctorModuleView: View {
 
     private func consultation(_ workspace: DoctorWorkspace) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            patientPicker(workspace)
+            DoctorConsultationAgendaView(day: $model.day,
+                appointments: workspace.appointments.isEmpty ? DoctorConsultationDemo.appointments(day: model.day) : workspace.appointments,
+                search: search, period: workspace.appointments.isEmpty ? DoctorConsultationDemo.period : period, demonstration: workspace.appointments.isEmpty,
+                select: { model.select($0) })
+                .onChange(of: model.day) { _, _ in model.select(nil); Task { await model.refresh() } }
+            if !workspace.appointments.isEmpty { patientPicker(workspace) }
             if let appointment = model.selectedAppointment {
                 if appointment.encounter_id == nil {
                     Button("Iniciar consulta", systemImage: "cross.case.fill") { Task { await model.startConsultation() } }

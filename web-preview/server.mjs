@@ -4,6 +4,11 @@ import { readFile } from 'node:fs/promises';
 const shared = new URL('../HospitalUniversitario/HospitalUniversitario/Shared/', import.meta.url);
 const files = new Map([
   ['/', [new URL('./index.html', import.meta.url), 'text/html; charset=utf-8']],
+  ['/doctor-dashboard.js', [new URL('./doctor-dashboard.js', import.meta.url), 'text/javascript; charset=utf-8']],
+  ['/clinical-labs.js', [new URL('./clinical-labs.js', import.meta.url), 'text/javascript; charset=utf-8']],
+  ['/patient-history.js', [new URL('./patient-history.js', import.meta.url), 'text/javascript; charset=utf-8']],
+  ['/patient-prescriptions.js', [new URL('./patient-prescriptions.js', import.meta.url), 'text/javascript; charset=utf-8']],
+  ['/patient-appointments.js', [new URL('./patient-appointments.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/app.js', [new URL('./app.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/api.js', [new URL('./api.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/modules.js', [new URL('./modules.js', import.meta.url), 'text/javascript; charset=utf-8']],

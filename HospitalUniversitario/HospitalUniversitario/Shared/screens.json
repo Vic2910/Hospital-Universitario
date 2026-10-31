@@ -10,18 +10,17 @@
     {"id":"laboratory","title":"Laboratorio","subtitle":"Consulta de solicitudes y resultados","search":"Buscar laboratorio…","tab":"health","layout":"laboratory","section":"Mis estudios"},
     {"id":"information","title":"Información pública","subtitle":"Servicios y avisos hospitalarios","search":"Buscar información pública…","tab":"more","layout":"information","section":"Información del hospital"},
     {"id":"notifications","title":"Notificaciones","subtitle":"Avisos relacionados con tu atención","search":"Buscar notificaciones…","tab":"more","layout":"notifications","section":"Recientes"},
-    {"id":"profile","title":"Mi perfil","subtitle":"Datos personales y configuración","search":"Buscar mi perfil…","tab":"profile","layout":"profile","section":"Información personal"}
+    {"id":"profile","title":"Mi perfil","subtitle":"Nombre y apellido de tu registro","search":"Buscar mi perfil…","tab":"profile","layout":"profile","section":"Información personal"}
   ],
   "doctor": [
     {"id":"home","title":"Hola","subtitle":"Resumen de tu jornada clínica","search":"Buscar servicios…","tab":"home","layout":"home","section":"Resumen del día"},
     {"id":"patients","title":"Mis pacientes","subtitle":"Pacientes asignados y atención reciente","search":"Buscar mis pacientes…","tab":"patients","layout":"patients","section":"Lista de pacientes"},
-    {"id":"appointments","title":"Mis citas","subtitle":"Agenda médica y turnos de consulta","search":"Buscar mis citas…","tab":"appointments","layout":"appointments","section":"Agenda del día"},
-    {"id":"consultation","title":"Consultas","subtitle":"Registro de valoración y diagnóstico","search":"Buscar consultas…","tab":"consultation","layout":"consultation","section":"Paciente seleccionado","fields":["Motivo de consulta","Exploración física","Diagnóstico y plan"]},
+    {"id":"consultation","title":"Consultas","subtitle":"Tu agenda diaria y próximas consultas","search":"Buscar consultas…","tab":"consultation","layout":"consultation","section":"Agenda de consultas","fields":["Motivo de consulta","Exploración física","Diagnóstico y plan"]},
     {"id":"chart","title":"Expedientes","subtitle":"Consulta autorizada de historial clínico","search":"Buscar expedientes…","tab":"more","layout":"chart","section":"Resumen del expediente","sections":["Alergias","Diagnósticos","Antecedentes","Medicamentos activos","Evolución médica"]},
     {"id":"prescriptions","title":"Recetas","subtitle":"Emisión y seguimiento de prescripciones","search":"Buscar recetas…","tab":"more","layout":"prescriptions","section":"Prescripciones recientes"},
-    {"id":"laboratory","title":"Laboratorio","subtitle":"Solicitudes y resultados de mis pacientes","search":"Buscar laboratorio…","tab":"more","layout":"laboratory","section":"Órdenes de laboratorio"},
+    {"id":"laboratory","title":"Laboratorio","subtitle":"Solicitudes y resultados de mis pacientes","search":"Buscar laboratorio…","tab":"laboratory","layout":"laboratory","section":"Órdenes de laboratorio"},
     {"id":"turns","title":"Mi horario","subtitle":"Guardias, turnos y disponibilidad","search":"Buscar mi horario…","tab":"more","layout":"schedule","section":"Próxima jornada"},
     {"id":"notifications","title":"Notificaciones","subtitle":"Avisos y alertas clínicas autorizadas","search":"Buscar notificaciones…","tab":"more","layout":"notifications","section":"Notificaciones recientes"},
-    {"id":"profile","title":"Mi perfil","subtitle":"Identidad profesional y preferencias","search":"Buscar mi perfil…","tab":"more","layout":"profile","section":"Datos profesionales"}
+    {"id":"profile","title":"Mi perfil","subtitle":"Nombre y apellido de tu registro","search":"Buscar mi perfil…","tab":"more","layout":"profile","section":"Datos profesionales"}
   ]
 }

@@ -17,6 +17,11 @@ class Element {
   replaceChildren(...children) { this._text = ''; this.children = children; }
   setAttribute(name,value) { this.attributes[name] = value; }
   addEventListener(name,callback) { const previous = this.listeners[name]; this.listeners[name] = event => { previous?.(event); callback(event); }; }
+  querySelector(selector) {
+    if (selector.startsWith('#')) return this.all().find(node => node.id === selector.slice(1)) || null;
+    const match = selector.match(/^\[data-choice="([^"]+)"\]$/);
+    return match ? this.all().find(node => node.attributes['data-choice'] === match[1]) || null : null;
+  }
   reportValidity() { return true; }
   all() { return [this, ...this.children.flatMap(child => child.all())]; }
 }
@@ -24,7 +29,7 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 const response = (body,status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body, text: async () => body == null ? '' : JSON.stringify(body) });
 export function createApp(roleCodes = ['doctor'], options = {}) {
   const body = new Element('body');
-  for (const id of ['app','notice','preview-mode','design-patient','design-doctor','live-mode']) { const node = new Element(id.startsWith('design-') || id === 'live-mode' ? 'button' : 'div'); node.id = id; if (id === 'notice') node.hidden = true; body.append(node); }
+  for (const id of ['app','notice','preview-mode','design-patient','design-doctor','live-mode','design-reception']) { const node = new Element(id.startsWith('design-') || id === 'live-mode' ? 'button' : 'div'); node.id = id; if (id === 'notice') node.hidden = true; body.append(node); }
   const find = predicate => body.all().find(predicate);
   const calls = [], stored = new Map();
   const storage = { getItem:key => stored.get(key) ?? null, setItem:(key,value) => stored.set(key,value), removeItem:key => stored.delete(key) };
@@ -54,7 +59,7 @@ export function createApp(roleCodes = ['doctor'], options = {}) {
     throw new Error('Unexpected request: ' + url);
   };
   const context = {Date,Intl,console,URL,crypto:webcrypto,AbortSignal,fetch,setInterval(){},sessionStorage:storage,document:{body,hidden:false,querySelector:selector => find(node => node.id === selector.slice(1)),createElement:tag => new Element(tag),addEventListener(){}}};
-  for (const path of ['HospitalUniversitario/HospitalUniversitario/Shared/hospital-core.js','web-preview/api.js','web-preview/modules.js','web-preview/app.js']) runInNewContext(read(path),context);
+  for (const path of ['HospitalUniversitario/HospitalUniversitario/Shared/hospital-core.js','web-preview/api.js','web-preview/modules.js','web-preview/doctor-dashboard.js','web-preview/clinical-labs.js','web-preview/patient-history.js','web-preview/patient-prescriptions.js','web-preview/patient-appointments.js','web-preview/app.js']) runInNewContext(read(path),context);
   const app = find(node => node.id === 'app');
   return {
     calls, stored, body, app,
@@ -70,6 +75,7 @@ for (const [codes,role] of [[['doctor'],'doctor'],[['patient'],'patient'],[['doc
   const ui = createApp(codes); await ui.login();
   if (codes.length > 1) await ui.click(role === 'doctor' ? 'Médico' : 'Paciente');
   assert.match(ui.app.textContent,/Hola, Persona de prueba/);
+  assert.equal(ui.app.textContent.includes('Mis citas'),role === 'patient');
   await ui.click('Más'); await ui.click((role === 'doctor' ? 'Mi horario' : 'Mi turno') + '　›');
   const query = ui.calls.findLast(call => call.params?.p_resource);
   assert.equal(query.params.p_resource,role === 'doctor' ? 'staff_shifts' : 'queue_tickets');
@@ -95,10 +101,65 @@ for (const role of ['patient','doctor']) {
     await ui.click('Más'); await ui.click(screen.title + '　›');
     assert.ok(ui.app.all().some(node => node.tagName === 'h1' && node.textContent === screen.title),screen.id);
     assert.equal(ui.app.textContent.includes('true'),false,'No boolean shown as a badge');
+    if (role === 'doctor') assert.equal(ui.app.textContent.includes('Mis citas'),false,'Sin Mis citas en ninguna pantalla del doctor');
   }
   assert.equal(ui.calls.some(call => call.url.startsWith(contract.url)),false);
   ui.get('live-mode').listeners.click(); await settle(); assert.ok(ui.get('password'));
   console.log(`OK Diseño ${role}: todas las pantallas navegables; cero llamadas a Supabase`);
 }
-assert.equal(catalog.patient.length + catalog.doctor.length,21);
-console.log('8 recorridos aprobados; 21 pantallas comprobadas.');
+assert.equal(catalog.patient.length + catalog.doctor.length,20);
+console.log('8 recorridos aprobados; 20 pantallas comprobadas.');
+
+// Agendamiento local: comportamiento completo sin escrituras al servidor.
+for (const mode of ['design', 'session']) {
+  const ui = createApp(['patient']); await settle();
+  if (mode === 'design') { ui.get('design-patient').listeners.click(); await settle(); }
+  else await ui.login();
+  await ui.click('Mis citas'); await ui.click('Solicitar atención');
+  assert.match(ui.app.textContent, /Preparemos tu próxima cita/);
+  assert.equal(ui.get('sched-nombres').value, 'Gaby');
+  assert.equal(ui.get('sched-apellidos').value, 'Diaz');
+  assert.equal(ui.get('sched-dui').value, '0123-45678');
+  assert.equal(ui.get('sched-telefono').value, '7123-4567');
+  assert.equal(ui.get('sched-correo').value, 'gaby.diaz@ejemplo.test');
+  const calls = ui.calls.length;
+  const choice = id => ui.app.all().find(node => node.attributes['data-choice'] === id);
+  const choose = async id => { const node = choice(id); assert.ok(node, id); node.listeners.click(); await settle(); };
+  const selected = id => choice(id).attributes['aria-pressed'] === 'true';
+  await ui.click('Tos'); await ui.click('Sangrado');
+  assert.ok(selected('symptom-0') && selected('symptom-1'));
+  await ui.click('Ninguno');
+  assert.ok(selected('symptom-10')); assert.equal(selected('symptom-0'), false); assert.equal(selected('symptom-1'), false);
+  await ui.click('Tos'); assert.equal(selected('symptom-10'), false);
+  await ui.click('Tos'); assert.equal(selected('symptom-1'), false);
+  await ui.input('Preferencia de horario','Mañana','change');await ui.input('Motivo de consulta', 'Consulta de prueba');
+  for (let index = 0; index < 6; index++) {
+    await choose('specialty-' + index);
+    assert.equal(ui.get('sched-submit').disabled, true, 'Cambiar especialidad borra el horario');
+    await choose('slot-0');
+    assert.equal(ui.get('sched-submit').disabled, false);
+  }
+  await ui.input('DUI', 'incorrecto'); assert.equal(ui.get('sched-submit').disabled, true);
+  await ui.input('DUI', '0123-45678');
+  await ui.input('Teléfono', '12'); assert.equal(ui.get('sched-submit').disabled, true);
+  await ui.input('Teléfono', '7123-4567');
+  await ui.input('Correo electrónico', 'incorrecto'); assert.equal(ui.get('sched-submit').disabled, true);
+  await ui.input('Correo electrónico', 'otro@ejemplo.test');
+  await ui.input('Nombres', ' '); assert.equal(ui.get('sched-submit').disabled, true);
+  await ui.input('Nombres', 'Otra persona');
+  await ui.input('Motivo de consulta', ' '); assert.equal(ui.get('sched-submit').disabled, true);
+  await ui.input('Motivo de consulta', 'Consulta de prueba');
+  await ui.click('Solicitar atención'); assert.ok(ui.get('sched-feedback'));
+  assert.equal(ui.get('sched-submit').disabled, true);
+  await ui.input('Apellidos', 'Prueba'); assert.equal(ui.get('sched-feedback').hidden, true);
+  assert.equal(ui.get('sched-submit').disabled, false);
+  assert.equal(ui.calls.length, calls, 'Editar y preparar no llama a la API');
+  if (mode === 'design') {
+    ui.get('live-mode').listeners.click(); await settle();
+    ui.get('design-patient').listeners.click(); await settle();
+    await ui.click('Mis citas'); await ui.click('Solicitar atención');
+    assert.equal(ui.get('sched-nombres').value, 'Gaby', 'Borrador descartado al salir');
+    assert.equal(ui.calls.some(call => call.url.startsWith(contract.url)), false);
+  }
+  console.log('OK Agendar cita (' + mode + '): datos, síntomas, seis especialidades, validación y simulación sin API');
+}
