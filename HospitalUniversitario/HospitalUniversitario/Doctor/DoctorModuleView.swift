@@ -24,13 +24,11 @@ struct DoctorModuleView: View {
                 Text(confirmation).font(.footnote).foregroundStyle(HospitalTheme.wine)
             }
             if let workspace = model.workspace {
-                if !["home", "notifications", "consultation"].contains(screenID) { dayPicker }
+                if !["home", "notifications", "consultation", "patients", "chart", "laboratory"].contains(screenID) { dayPicker }
                 switch screenID {
                 case "home": dashboard(workspace)
-                case "patients": patients(workspace)
+                case "patients", "chart", "laboratory": DoctorClinicalView(model: model, screenID: screenID, navigate: navigate, period: period)
                 case "consultation": consultation(workspace)
-                case "chart": patientChart(workspace)
-                case "laboratory": laboratory(workspace)
                 case "notifications": notifications(workspace.notifications)
                 default: EmptyView()
                 }

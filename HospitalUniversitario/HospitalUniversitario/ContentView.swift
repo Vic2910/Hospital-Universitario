@@ -3,8 +3,6 @@ import SwiftUI
 @MainActor
 struct ContentView: View {
     @StateObject private var store = HospitalStore()
-    @StateObject private var labDesign = ClinicalLabDesignStore()
-    @State private var showLabDesign = false
     @State private var email = ""
     @State private var password = ""
     @State private var showPassword = false
@@ -33,10 +31,6 @@ struct ContentView: View {
         .task(id: "\(store.selectedRole ?? "")/\(store.screenID)") {
             search = ""
             await store.refreshScreen()
-        }
-        .onChange(of: store.selectedRole) { _, _ in showLabDesign = store.selectedRole == "doctor"; labDesign.reset() }
-        .onChange(of: store.doctor?.workspace?.doctor_name) { _, name in
-            if store.selectedRole == "doctor", let name { labDesign.doctorName = name }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active && store.selectedRole != nil { Task { await store.refreshScreen() } }
@@ -130,9 +124,9 @@ struct ContentView: View {
                 Text(title).font(.system(size: 25, weight: .semibold)).lineLimit(2)
                 Text(screen?.subtitle ?? (store.screenID == "schedule" ? "Elige especialidad y horario" : "Servicios y consultas del hospital")).font(.system(size: 12)).padding(.top, 8)
             }
-            .foregroundStyle(.white).padding(.horizontal, 24).padding(.top, 18).padding(.bottom, (store.screenID == "profile" || (!isDoctor && ["chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) || (showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID))) ? 24 : 48)
+            .foregroundStyle(.white).padding(.horizontal, 24).padding(.top, 18).padding(.bottom, (store.screenID == "profile" || (!isDoctor && ["chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) || (isDoctor && ["patients", "chart", "laboratory"].contains(store.screenID))) ? 24 : 48)
             .frame(maxWidth: .infinity, alignment: .leading).background(HospitalTheme.wine.ignoresSafeArea(edges: .top))
-            if store.screenID != "profile" && !(!isDoctor && ["chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) && !(showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID)) {
+            if store.screenID != "profile" && !(!isDoctor && ["chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) && !(isDoctor && ["patients", "chart", "laboratory"].contains(store.screenID)) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").font(.system(size: 11))
                 TextField(screen?.search ?? "Buscar servicios…", text: $search).font(.system(size: 12)).autocorrectionDisabled()
@@ -150,23 +144,7 @@ struct ContentView: View {
         }
     }
 
-    @ViewBuilder private var content: some View {
-        if !isDoctor && ["chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID) { liveContent }
-        else if ["patients", "chart", "laboratory"].contains(store.screenID) {
-            VStack(alignment: .leading, spacing: 18) {
-                Toggle("Vista de diseño · datos locales", isOn: $showLabDesign).font(.footnote)
-                if showLabDesign {
-                    ClinicalLabDesignView(model: labDesign, role: isDoctor ? "doctor" : "patient", screenID: store.screenID, navigate: go)
-                        .onAppear {
-                            if isDoctor {
-                                labDesign.configureDoctor(name: store.doctor?.workspace?.doctor_name ?? store.name,
-                                    id: store.access?.staff_id?.uuidString ?? "doctor-demo", clinic: store.doctor?.workspace?.facility_name)
-                            }
-                        }
-                } else { liveContent }
-            }
-        } else { liveContent }
-    }
+    @ViewBuilder private var content: some View { liveContent }
 
     @ViewBuilder private var liveContent: some View {
         if isDoctor, store.screenID == "prescriptions", let doctor = store.doctor, let modules = store.modules {

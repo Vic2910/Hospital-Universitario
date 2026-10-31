@@ -20,6 +20,8 @@ El avance original implemento login, navegacion y maquetacion base de 21 pantall
 
 ## Ejecutar en Windows
 
+**Pantallas clínicas conectadas (31 de octubre):** Pacientes, Expedientes y Laboratorios del Doctor usan datos autorizados al iniciar sesión, sin el selector de prototipo dentro del portal. Conservan la presentación con fichas internas y resultados publicados. Añadir observación/receta utiliza la consulta abierta; Laboratorio emite con el catálogo real y ofrece acceso a Consultas cuando falta una atención abierta. Los ejemplos permanecen únicamente en el modo de diseño. Se amplían las RPC existentes mediante [clinical-connected.sql](docs/sql/clinical-connected.sql), ya aplicado; en una reinstalación se ejecuta después de los módulos existentes. [Detalle, pruebas y límites](docs/PANTALLAS_CLINICAS_CONECTADAS_2026-10-31.md).
+
 Requisito: Node.js 22 o posterior. Desde la raíz del repositorio:
 
 ```powershell

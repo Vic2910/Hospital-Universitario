@@ -41,7 +41,6 @@ assert.equal(live.app.textContent.includes('Historial clínico'),false);
 assert.equal(live.app.textContent.includes('Mi horario'),false);
 assert.equal(live.calls.some(call => call.params?.p_resource === 'staff_shifts'),false,'Inicio no carga jornadas');
 await live.click('Pacientes');
-await live.click('Ver flujo conectado');
 assert.match(live.app.textContent,/Historial clínico/);
 await live.click('Paciente asignado'); assert.match(live.app.textContent,/Consulta autorizada/);
 const request = live.calls.findLast(call => call.url.endsWith('/doctor_chart'));

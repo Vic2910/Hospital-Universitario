@@ -36,7 +36,7 @@ private final class DoctorRepositoryStub: DoctorRepositoryProtocol {
         if failSave { throw URLError(.networkConnectionLost) }
     }
     func close(encounter: UUID, note: UUID, noteVersion: Int, encounterVersion: Int) async throws { }
-    func issueOrder(encounter: UUID, test: UUID, instructions: String, requestKey: UUID) async throws { }
+    func issueOrder(encounter: UUID, test: UUID, instructions: String, weight: Decimal, height: Decimal, requestKey: UUID) async throws { }
     func markRead(_ notification: DoctorNotification) async throws { }
 }
 

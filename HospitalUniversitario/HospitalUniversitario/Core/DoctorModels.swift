@@ -70,6 +70,7 @@ struct DoctorAppointment: Codable, Identifiable, Sendable {
     var age: Int? = nil
     var reason: String? = nil
     var symptoms: [String]? = nil
+    var dui: String? = nil
 }
 
 struct DoctorLabTest: Codable, Identifiable, Sendable {
@@ -119,6 +120,9 @@ struct DoctorPatientChart: Codable, Sendable {
         let email: String?
         let address: String?
         let identification: String?
+        var given_names: String? = nil
+        var family_names: String? = nil
+        var dui: String? = nil
     }
     let patient: Patient
     let allergies: [String]
@@ -128,10 +132,38 @@ struct DoctorPatientChart: Codable, Sendable {
     var medical_history: [String]? = nil
     var medications: [String]? = nil
     var vitals: [Vital]? = nil
+    var laboratories: [DoctorChartLab]? = nil
 
     struct Vital: Codable, Sendable {
         let label: String
         let value: String
+    }
+}
+
+struct DoctorChartLab: Codable, Identifiable, Sendable {
+    struct Value: Codable, Sendable {
+        let name: String
+        let value: String?
+        let unit: String?
+        let reference: String?
+    }
+    let id: UUID
+    let test_name: String
+    let requested_at: String
+    let instructions: String?
+    let status: String
+    let narrative: String?
+    let released_at: String?
+    let values: [Value]
+    var published: Bool { status == "completed" && released_at != nil }
+    var label: String {
+        switch status {
+        case "completed": return "Completado"
+        case "pending": return "Pendiente"
+        case "in_progress": return "En Proceso"
+        case "cancelled": return "Cancelado"
+        default: return "Estado no disponible"
+        }
     }
 }
 

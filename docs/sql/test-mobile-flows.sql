@@ -43,9 +43,27 @@ begin
   if not exists(select 1 from jsonb_array_elements(chart0->'history') x where x->>'id'=encounter_id0::text) then raise exception 'Own encounter missing in doctor chart'; end if;
   begin perform public.doctor_chart(gen_random_uuid(),null,null,''); raise exception 'Unlinked chart allowed'; exception when insufficient_privilege then null; end;
   begin perform public.save_consultation(encounter_id0,note_id0,jsonb_build_object('plan','Conflicto de prueba'),null,0,gen_random_uuid()); raise exception 'Stale version allowed'; exception when serialization_failure or sqlstate 'PT409' then null; end;
-  result0:=public.doctor_issue_lab_order(encounter_id0,test_id0,'Prueba transaccional',lab_key);
-  replay0:=public.doctor_issue_lab_order(encounter_id0,test_id0,'Prueba transaccional',lab_key);
+  result0:=public.doctor_submit_lab_request(encounter_id0,test_id0,'Prueba transaccional',lab_key,70.5,170);
+  replay0:=public.doctor_submit_lab_request(encounter_id0,test_id0,'Prueba transaccional',lab_key,70.5,170);
   if result0->>'id' is distinct from replay0->>'id' or result0->>'status'<>'ordered' then raise exception 'Lab issuance/idempotency failed'; end if;
+  chart0:=public.doctor_chart(patient_id0,null,null,'');
+  if not exists(select 1 from jsonb_array_elements(chart0->'laboratories') x
+    where x->>'test_name'='Estudio de prueba transaccional' and x->>'status'='pending'
+      and x->>'narrative' is null and jsonb_array_length(x->'values')=0)
+    then raise exception 'Connected chart missing pending laboratory'; end if;
+  if chart0->'patient'->>'given_names' is null then raise exception 'Structured patient identity missing'; end if;
+  -- A draft result must never leak into the connected clinical projection.
+  execute 'reset role';
+  if (select count(*) from hospital.vital_sign_sets where encounter_id=encounter_id0 and weight_kg=70.5 and height_cm=170)<>1
+    then raise exception 'Measurements missing or duplicated'; end if;
+  insert into hospital.lab_results(order_item_id,narrative,recorded_by)
+    select i.id,'PRIVATE-ROLLBACK-DRAFT',doctor_user from hospital.diagnostic_order_items i where i.order_id=(replay0->>'id')::uuid;
+  execute 'set local role authenticated';
+  chart0:=public.doctor_chart(patient_id0,null,null,'');
+  if chart0::text like '%PRIVATE-ROLLBACK-DRAFT%' then raise exception 'Draft laboratory leaked'; end if;
+  if exists(select 1 from jsonb_array_elements(chart0->'laboratories') x where x->>'status'<>'completed'
+    and (x->>'narrative' is not null or jsonb_array_length(x->'values')<>0))
+    then raise exception 'Unpublished laboratory values leaked'; end if;
   items0:=jsonb_build_array(jsonb_build_object('medication_id',medication_id0,'dose',0.5,'dose_unit_id',unit_id0,'route_id',route_id0,
     'interval_hours',8,'instructions','Prueba, no uso clinico','starts_on',current_date,'ends_on',null,'quantity',3));
   result0:=public.mobile_issue_prescription(encounter_id0,items0,rx_key);
@@ -93,6 +111,7 @@ begin
   select x into result0 from jsonb_array_elements(chart0->'history') x where x->>'id'=encounter_id0::text;
   replay0:=public.close_consultation(encounter_id0,note_id0,(result0->>'note_version')::bigint,(result0->>'row_version')::bigint);
   if replay0->>'status'<>'closed' then raise exception 'Consultation closure failed'; end if;
+  begin perform public.doctor_issue_lab_order(encounter_id0,test_id0,'Closed encounter',gen_random_uuid()); raise exception 'Lab on closed encounter allowed'; exception when check_violation then null; end;
   begin perform public.mobile_issue_prescription(encounter_id0,items0,gen_random_uuid()); raise exception 'Prescription on closed encounter allowed'; exception when check_violation then null; end;
   execute 'reset role';
   update hospital.user_role_assignments set revoked_at=now() where profile_id=doctor_user and revoked_at is null;

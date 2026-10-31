@@ -7,7 +7,6 @@
   let homeAppointments = null;
   let screenNote = '';
   let registerOpen = false;
-  let labConnected = false;
   let receptionPreview = false;
   const statuses = { pending: 'Pendiente', confirmed: 'Confirmado', cancelled: 'Cancelado', waiting: 'En espera', called: 'Llamado', in_service: 'En atención', completed: 'Finalizado' };
   const glyphs = { home: '⌂', patients: '♙', appointments: '▦', consultation: '✚', health: '♡', profile: '♙', more: '☰', request: '✚', chart: '▤', laboratory: '⚗', prescriptions: '▤' };
@@ -35,7 +34,7 @@
   }
   function matches(value) { return !search || value.toLocaleLowerCase('es').includes(search.toLocaleLowerCase('es')); }
   function definition() { return catalog?.[role]?.find(screen => screen.id === page); }
-  function clearData() { patientLabModules?.clear(); patientClinical?.reset(); receptionPreview=false; appointmentFlow?.reset(); patientHistory?.clear(); labConnected = false; labDesign?.reset(); doctorConsultations?.clear(); doctorDashboard?.clear(); resetSchedule(); modules?.clear(); profile = summary = overview = null; homeAppointments = null; items = []; queue = []; cursor = null; more = false; screenNote = ''; }
+  function clearData() { patientLabModules?.clear(); patientClinical?.reset(); receptionPreview=false; appointmentFlow?.reset(); patientHistory?.clear(); labDesign?.reset(); doctorConsultations?.clear(); doctorDashboard?.clear(); resetSchedule(); modules?.clear(); profile = summary = overview = null; homeAppointments = null; items = []; queue = []; cursor = null; more = false; screenNote = ''; }
   function reset() { access = null; roles = []; role = null; page = 'home'; registerOpen = false; clearData(); }
   async function run(action) {
     if (busy) return;
@@ -64,7 +63,6 @@
       if (role==='patient'&&['request','schedule','health'].includes(page)) { modules.configure(access,role,facility); await modules.load('request'); return; }
       if (page === 'profile') { profile = await api.rpc('my_profile'); modules.configure(access,role,facility); await modules.load('profile'); return; }
       modules.configure(access,role,facility);
-      if (role === 'doctor' && ['patients','chart','laboratory'].includes(page) && !labConnected) return;
       if (modules.supports(role,page)) { await modules.load(page,append);if(role==='patient'&&page==='chart'){patientLabModules.configure(access,role,facility);await patientLabModules.load('laboratory');}return; }
       if (page === 'home') {
         summary = null;
@@ -300,7 +298,7 @@
     field.addEventListener('input', () => { search = field.value; const content = $('#screen-content'); if (content) renderContent(content); });
     searchbox.append(el('span', '⌕'), field);
     const content = el('div', null, 'screen-content'); content.id = 'screen-content'; content.setAttribute('aria-busy', String(busy)); renderContent(content);
-    const clinicalFlow = ['patients','chart','laboratory'].includes(page) && (design || (role === 'doctor' && !labConnected));
+    const clinicalFlow = ['patients','chart','laboratory'].includes(page);
     if(clinicalFlow || page === 'profile' || (role === 'patient' && ['chart','laboratory','appointments','request','schedule','health','information'].includes(page))) { portal.className += ' clinical-flow'; portal.append(header,content,bottomBar()); }
     else portal.append(header,searchbox,content,bottomBar());
     app.append(portal);
@@ -342,13 +340,6 @@
         retry:()=>run(()=>load()),loadMore:()=>run(()=>modules.load('history',true))});
     }
     if(!design&&role==='patient'&&['chart','laboratory'].includes(page))return patientClinical.render(content,{page,profile,scope:access?.patient_id});
-    if (!design && role === 'doctor' && ['patients','chart','laboratory'].includes(page)) {
-      content.append(button(labConnected ? 'Ver diseño de expediente y laboratorios' : 'Ver flujo conectado', () => run(async () => { labConnected = !labConnected; await load(); }), 'text-button'));
-      if (!labConnected) {
-        labDesign.configureDoctor(modules.workspace?.doctor_name || (profile?.person ? profile.person.given_names+' '+profile.person.family_names : displayName()),access.staff_id || access.profile.id,modules.workspace?.facility_name);
-        return labDesign.render(content,{role,page});
-      }
-    }
     if (design && ['patients','chart','laboratory'].includes(page)) return labDesign.render(content,{role,page});
     if (!design && modules.supports(role,page) && page !== 'profile') {
       modules.configure(access,role,access.roles.find(item => item.code === role)?.facility_id);

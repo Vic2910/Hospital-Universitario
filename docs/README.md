@@ -4,6 +4,7 @@ El nombre vigente del producto es **Hospital Universitario**. Las capturas y el 
 
 | Documento | Contenido |
 |---|---|
+| [PANTALLAS_CLINICAS_CONECTADAS_2026-10-31.md](PANTALLAS_CLINICAS_CONECTADAS_2026-10-31.md) | Pacientes, expediente, solicitudes y resultados conectados en iOS/web; consulta abierta, Supabase y verificaciones |
 | [DASHBOARD_PACIENTE_2026-10-30.md](DASHBOARD_PACIENTE_2026-10-30.md) | Rediseño del inicio del Paciente: paleta vino/rojo, componentes, parametrización y réplica web |
 | [REDISENO_AUTH_2026-10-30.md](REDISENO_AUTH_2026-10-30.md) | Rediseño visual del login y nueva pantalla de registro (solo capa visual, sin registro en base) |
 | [MODULOS_FUNCIONALES_2026-10-28.md](MODULOS_FUNCIONALES_2026-10-28.md) | Estado actual: Medico/Paciente en iOS y web, backend instalado, pruebas y pendientes |

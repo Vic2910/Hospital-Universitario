@@ -65,11 +65,11 @@ assert.equal(model.applyPublishedResult('unknown',[],'Resultado',new Date().toIS
 model.entryKind='Observación';model.entryText='Nota';model.linkedRequest=created.id;assert.equal(model.saveEntry('patient'),false);assert.equal(model.saveEntry('doctor'),true);model.select('p2');model.entryKind='Observación';model.entryText='Ajena';model.linkedRequest=created.id;assert.equal(model.saveEntry('doctor'),false);
 console.log('OK Modelo: validación, autor, resultados publicados compartidos, versiones antiguas rechazadas y aislamiento de notas');
 
-const signed=createApp(['doctor']);await signed.login();await signed.click('Laboratorios');await signed.input('DUI o nombre del paciente','Ana');await signed.click('Seleccionar a Ana Reyes');await signed.click('Solicitar exámenes');
-const modal=signed.app.all().find(node=>node.className==='clinical-ticket');assert.match(modal.textContent,/Persona de prueba/);assert.equal(modal.textContent.includes('Dr. Luis Ramírez'),false,'Doctor tomado de cuenta activa');
-await signed.input('Tipo de examen','blood','change');await signed.input('Motivo del examen','Motivo local');await signed.input('Peso (kg)','70');await signed.input('Altura (cm)','170');await signed.submit('Solicitar');
-assert.equal(signed.calls.some(call=>call.url.endsWith('/doctor_issue_lab_order')),false);await signed.click('Ver flujo conectado');assert.ok(signed.app.all().some(node=>node.attributes['aria-label']==='Paciente / turno'));
-console.log('OK Sesión: doctor de cuenta activa, diseño visible y módulo conectado conservado');
+const signed=createApp(['doctor']);await signed.login();await signed.click('Laboratorios');
+assert.equal(signed.app.textContent.includes('Prototipo local'),false);
+assert.equal(signed.app.textContent.includes('Ana Reyes'),false);
+assert.ok(signed.calls.some(call=>call.url.endsWith('/doctor_workspace')));
+console.log('OK Sesión: datos autorizados; ejemplos aislados en diseño');
 
 // Una publicación actualiza la misma lista visible sin duplicar solicitudes.
 const Element=ui.app.constructor,parent=new Element('div');let reactive;

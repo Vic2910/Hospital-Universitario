@@ -16,6 +16,8 @@ final class DoctorViewModel: ObservableObject {
     @Published var selectedTestID: UUID?
     @Published var draft = DoctorConsultationDraft()
     @Published var instructions = ""
+    @Published var weight = ""
+    @Published var height = ""
     @Published var diagnosisQuery = ""
     @Published var diagnosisByCode = false
     @Published var selectedDiagnosis: UUID?
@@ -50,6 +52,15 @@ final class DoctorViewModel: ObservableObject {
     var canEditConsultation: Bool {
         activeConsultation?.status == "open"
     }
+    private func measurement(_ text: String, minimum: Decimal, maximum: Decimal) -> Decimal? {
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
+        guard clean.range(of: "^[0-9]{1,3}(\\.[0-9]{1,2})?$", options: .regularExpression) != nil,
+              let value = Decimal(string: clean, locale: Locale(identifier: "en_US_POSIX")), value >= minimum, value <= maximum else { return nil }
+        return value
+    }
+    var validMeasurements: Bool {
+        measurement(weight, minimum: Decimal(string: "0.1")!, maximum: 500) != nil && measurement(height, minimum: 20, maximum: 250) != nil
+    }
 
     func configure(facility: UUID, identity: UUID) {
         guard self.facility != facility || self.identity != identity else { return }
@@ -63,6 +74,7 @@ final class DoctorViewModel: ObservableObject {
         facility = nil; identity = nil
         workspace = nil; chart = nil; contextChart = nil; selectedAppointmentID = nil
         selectedTestID = nil; draft = DoctorConsultationDraft(); instructions = ""
+        weight = ""; height = ""
         historyQuery = ""; filterDates = false; day = Date()
         loading = false; loadingChart = false; saving = false; error = nil; confirmation = nil
         startKey = UUID(); saveKey = UUID(); orderKey = UUID()
@@ -96,6 +108,7 @@ final class DoctorViewModel: ObservableObject {
         selectionGeneration = UUID()
         selectedAppointmentID = appointment; chart = nil; contextChart = nil
         draft = DoctorConsultationDraft(); instructions = ""; selectedTestID = nil
+        weight = ""; height = ""
         error = nil; confirmation = nil; loadingChart = false
         startKey = UUID(); saveKey = UUID(); orderKey = UUID()
         diagnosisQuery = ""; selectedDiagnosis = nil; diagnoses = []; searchingDiagnoses = false
@@ -195,14 +208,17 @@ final class DoctorViewModel: ObservableObject {
     func issueOrder() async {
         guard let encounter = activeConsultation, canEditConsultation, let test = selectedTestID,
               workspace?.tests.contains(where: { $0.id == test }) == true,
+              let weightValue = measurement(weight, minimum: Decimal(string: "0.1")!, maximum: 500),
+              let heightValue = measurement(height, minimum: 20, maximum: 250),
               instructions.count <= 10000 else { return }
         let key = orderKey
         let text = instructions
         let scope = generation
-        await mutate(success: "Orden de laboratorio emitida.") {
-            try await self.repository.issueOrder(encounter: encounter.id, test: test, instructions: text, requestKey: key)
+        await mutate(success: "Orden y mediciones registradas.") {
+            try await self.repository.issueOrder(encounter: encounter.id, test: test, instructions: text, weight: weightValue, height: heightValue, requestKey: key)
             if self.generation == scope {
                 self.orderKey = UUID(); self.instructions = ""; self.selectedTestID = nil
+                self.weight = ""; self.height = ""
             }
         }
     }

@@ -9,7 +9,7 @@ protocol DoctorRepositoryProtocol {
     func save(encounter: UUID, note: UUID?, version: Int?, draft: DoctorConsultationDraft, diagnosis: UUID?, requestKey: UUID) async throws
     func diagnoses(query: String, byCode: Bool) async throws -> [DoctorDiagnosis]
     func close(encounter: UUID, note: UUID, noteVersion: Int, encounterVersion: Int) async throws
-    func issueOrder(encounter: UUID, test: UUID, instructions: String, requestKey: UUID) async throws
+    func issueOrder(encounter: UUID, test: UUID, instructions: String, weight: Decimal, height: Decimal, requestKey: UUID) async throws
     func markRead(_ notification: DoctorNotification) async throws
 }
 
@@ -65,9 +65,10 @@ final class DoctorRepository: DoctorRepositoryProtocol {
             "p_expected_version": .number(encounterVersion)])
     }
 
-    func issueOrder(encounter: UUID, test: UUID, instructions: String, requestKey: UUID) async throws {
-        try await perform("doctor_issue_lab_order", ["p_encounter": .string(encounter.uuidString),
+    func issueOrder(encounter: UUID, test: UUID, instructions: String, weight: Decimal, height: Decimal, requestKey: UUID) async throws {
+        try await perform("doctor_submit_lab_request", ["p_encounter": .string(encounter.uuidString),
             "p_test": .string(test.uuidString), "p_instructions": .string(instructions),
+            "p_weight": .decimal(weight), "p_height": .decimal(height),
             "p_request_key": .string(requestKey.uuidString)])
     }
 

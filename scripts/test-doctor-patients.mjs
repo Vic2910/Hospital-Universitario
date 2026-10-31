@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createApp} from './test-preview.mjs';
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 const key=date=>[date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
-for(const mode of ['design','session']){
+for(const mode of ['design']){
   const ui=createApp(['doctor']);await settle();if(mode==='design'){ui.get('design-doctor').listeners.click();await settle();}else await ui.login();
   await ui.click('Pacientes');assert.match(ui.app.textContent,/Tus pacientes, su evolución/);
   const matches=()=>ui.app.all().filter(node=>node.className==='patient-match-card');assert.equal(matches().length,3);

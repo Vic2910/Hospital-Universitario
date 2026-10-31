@@ -88,7 +88,7 @@
     }
     async rpc(name, parameters = {}) {
       if (!['my_profile', 'my_activity_summary', 'my_queue_status', 'hospital_overview', 'mobile_module',
-        'doctor_workspace', 'doctor_chart', 'doctor_issue_lab_order', 'mobile_issue_prescription',
+        'doctor_workspace', 'doctor_chart', 'doctor_issue_lab_order', 'doctor_submit_lab_request', 'mobile_issue_prescription',
         'request_appointment', 'transition_appointment', 'start_consultation', 'save_consultation', 'close_consultation',
         'update_record', 'create_record', 'update_my_phone', 'set_my_emergency_contact', 'confirm_shift', 'read_resource'].includes(name)) throw new Error('Consulta no disponible.');
       return this.request('/rest/v1/rpc/' + name, parameters, await this.token());
