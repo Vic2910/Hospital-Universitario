@@ -52,3 +52,9 @@ No añadas contraseñas, tokens o secretos a esta carpeta. Las credenciales de p
 - [Campos de receta del Doctor iguales a la presentación del Paciente](CAMPOS_RECETA_DOCTOR_2026-10-30.md).
 
 - [Próxima cita, formulario único, preferencia y solicitudes Pendientes del Paciente; recepción de demostración](CITAS_SOLICITUDES_PACIENTE_2026-10-30.md).
+
+- [Perfil del Paciente e Información general: ubicación, contacto y especialidades](PERFIL_INFORMACION_GENERAL_2026-10-30.md).
+
+- [Laboratorios del expediente Doctor: cronología sin filtros y detalle interno de resultados](LABORATORIOS_EXPEDIENTE_2026-10-31.md).
+
+- [Mi expediente y Mis laboratorios del Paciente: diseño, datos propios y resultados publicados](MI_EXPEDIENTE_LABORATORIOS_PACIENTE_2026-10-31.md).

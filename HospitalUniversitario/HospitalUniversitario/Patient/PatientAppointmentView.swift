@@ -160,10 +160,11 @@ struct PatientAppointmentView: View {
                 }
 
                 PatientFormCard(titulo: "Preferencia de horario", icono: "sun.max") {
-                    Picker("Preferencia de horario", selection: $preference) {
-                        Text("Seleccionar").tag(""); Text("Mañana").tag("Mañana"); Text("Tarde").tag("Tarde")
-                    }.pickerStyle(.segmented)
-                    Text("Recepción confirmará fecha y hora. Los horarios mostrados son orientativos.").font(.caption).foregroundStyle(HospitalTheme.secondary)
+                    HStack(spacing: 12) {
+                        PatientTimePreferenceCard(title: "Mañana", period: "AM", icon: "sun.max", selected: preference == "Mañana") { preference = "Mañana" }
+                        PatientTimePreferenceCard(title: "Tarde", period: "PM", icon: "sun.haze", selected: preference == "Tarde") { preference = "Tarde" }
+                    }
+                    Text("Selecciona la opción que te convenga. Recepción confirmará la fecha y hora.").font(.caption).foregroundStyle(HospitalTheme.secondary)
                 }
                 PatientFormCard(titulo: "Tu selección", icono: "calendar") {
                     if let especialidad, let horario {
@@ -187,6 +188,17 @@ struct PatientAppointmentView: View {
                 } label: { Text("Solicitar atención") }
                     .buttonStyle(HospitalPrimaryButtonStyle())
                     .disabled(!puedeAgendar || confirmada)
+                DisclosureGroup("Mis solicitudes de ejemplo") {
+                    ForEach(flow.requests) { request in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(request.specialty).font(.subheadline.weight(.semibold))
+                            HospitalBadge(text: request.state.label, warning: request.state == .pending)
+                            Text(request.reason).font(.footnote)
+                            Text("Preferencia: " + request.preference).font(.caption)
+                        }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 10)
+                    }
+                }.font(.subheadline).tint(HospitalTheme.wine)
+
             }
 
         }

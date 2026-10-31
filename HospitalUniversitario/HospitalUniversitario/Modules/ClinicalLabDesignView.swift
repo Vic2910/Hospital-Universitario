@@ -22,11 +22,14 @@ struct ClinicalLabDesignView: View {
     @State private var rxDuration = ""
     @State private var rxQuantity = ""
     private var prescription: ClinicalPrescriptionDetails { .init(dose: rxDose, doseUnit: rxUnit, frequencyHours: rxFrequency, route: rxRoute, durationDays: rxDuration, quantity: rxQuantity) }
+    @State private var selectedLabID: UUID?
+    @State private var labReturnModal = "record"
+    private var selectedLab: ClinicalLabRequest? { model.requests.first { $0.id == selectedLabID && $0.patient.id == patient?.id } }
     @State private var linkedRequest: UUID?
     private var patient: ClinicalLabPatient? { model.patient(for: role) }
     private var labs: [ClinicalLabRequest] {
-        model.requests.filter { $0.patient.id == patient?.id && (category == "Todos" || $0.exam.category.rawValue == category)
-            && (!filterDate || Calendar.current.isDate($0.requestedAt, inSameDayAs: date)) }.sorted { $0.requestedAt > $1.requestedAt }
+        model.requests.filter { $0.patient.id == patient?.id && (modal == "record" || modal == "lab-detail" || ((category == "Todos" || $0.exam.category.rawValue == category)
+            && (!filterDate || Calendar.current.isDate($0.requestedAt, inSameDayAs: date)))) }.sorted { $0.requestedAt > $1.requestedAt }
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -37,18 +40,23 @@ struct ClinicalLabDesignView: View {
                         Spacer()
                         Text(modal == "request" ? "PASO 2 DE 2" : "FICHA CLÍNICA").font(.caption.weight(.semibold)).foregroundStyle(HospitalTheme.secondary)
                     }
-                    Image(systemName: "checkmark").font(.system(size: 34, weight: .bold)).foregroundStyle(.white)
+                    if modal != "lab-detail" {
+                    Image(systemName: modal == "lab-detail" && selectedLab?.state != .completed ? "clock" : "checkmark").font(.system(size: 34, weight: .bold)).foregroundStyle(.white)
                         .frame(width: 82, height: 82).background(HospitalTheme.wine, in: Circle()).accessibilityHidden(true)
-                    Text(modal == "request" ? "Solicitar exámenes" : modal == "entry" ? entryKind : modal == "results" ? "Solicitudes y resultados" : "Expediente completo")
+                    }
+                    Text(modal == "lab-detail" ? "Detalle de examen" : modal == "request" ? "Solicitar exámenes" : modal == "entry" ? entryKind : modal == "results" ? (role == "patient" ? "Mis laboratorios" : "Solicitudes y resultados") : (role == "patient" ? "Mi expediente" : "Expediente completo"))
                         .font(.system(size: 27, weight: .bold)).multilineTextAlignment(.center).accessibilityAddTraits(.isHeader)
+                    if modal != "lab-detail" {
                     Text(patient.fullName).font(.headline).foregroundStyle(HospitalTheme.secondary)
                     VStack(spacing: 8) {
-                        Text(modal == "request" ? model.requestDate.formatted(date: .abbreviated, time: .shortened) : patient.record).font(.headline)
-                        Text(modal == "request" ? model.doctorName : "DUI: \(patient.dui)").font(.subheadline)
+                        Text(modal == "lab-detail" ? (selectedLab?.requestedAt.formatted(date: .abbreviated, time: .shortened) ?? "No hay datos reales") : modal == "request" ? model.requestDate.formatted(date: .abbreviated, time: .shortened) : patient.record).font(.headline)
+                        Text(modal == "lab-detail" ? (selectedLab?.exam.name ?? "No hay datos reales") : modal == "request" ? model.doctorName : "DUI: \(patient.dui)").font(.subheadline)
                     }.frame(maxWidth: .infinity).padding(18).background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 16))
+                    }
                     Text("Datos locales de ejemplo · Sin envío al hospital").font(.caption).foregroundStyle(HospitalTheme.secondary)
                     if modal == "request" { requestForm(patient) }
                     else if modal == "entry" { entryForm }
+                    else if modal == "lab-detail" { labDetail }
                     else if modal == "results" { laboratorySection }
                     else { recordBody(patient) }
                 }.padding(20).background(.white, in: RoundedRectangle(cornerRadius: 24))
@@ -67,12 +75,10 @@ struct ClinicalLabDesignView: View {
                         Text("DUI: \(patient.dui) · \(patient.record)").font(.footnote)
                         if screenID == "laboratory" && role == "doctor" {
                             Button("Solicitar exámenes") { model.begin(role: role); modal = "request" }.buttonStyle(HospitalPrimaryButtonStyle())
-                            Button("Ver expediente") { modal = "record"; navigate("chart") }.buttonStyle(.bordered)
                         } else {
                             Button("Abrir expediente completo") { modal = "record" }.buttonStyle(HospitalPrimaryButtonStyle())
-                            if role == "doctor" { Button("Solicitud de laboratorio") { model.begin(role: role); modal = "request" }.buttonStyle(.bordered) }
                         }
-                        if screenID == "laboratory" { Button("Ver solicitudes y resultados") { modal = "results" }.buttonStyle(.bordered) }
+                        if screenID == "laboratory" && role != "doctor" { Button("Ver solicitudes y resultados") { modal = "results" }.buttonStyle(.bordered) }
                     }
                 } else if screenID != "patients" { HospitalCard { Text("Selecciona un paciente para continuar.").font(.subheadline) } }
             }
@@ -80,7 +86,7 @@ struct ClinicalLabDesignView: View {
         }.tint(HospitalTheme.wine)
         .onChange(of: screenID) { _, value in if ["patients", "laboratory"].contains(value) { closeModal() } }
     }
-    private func closeModal() { model.preparing = false; modal = nil; entryText = ""; medication = ""; linkedRequest = nil; rxDose = ""; rxUnit = ""; rxFrequency = ""; rxRoute = ""; rxDuration = ""; rxQuantity = "" }
+    private func closeModal() { if modal == "lab-detail" { modal = labReturnModal; selectedLabID = nil; return }; model.preparing = false; modal = nil; entryText = ""; medication = ""; linkedRequest = nil; rxDose = ""; rxUnit = ""; rxFrequency = ""; rxRoute = ""; rxDuration = ""; rxQuantity = "" }
     private var searchSection: some View {
         PatientFormCard(titulo: screenID == "patients" ? "Encuentra a tu paciente" : screenID == "laboratory" ? "Buscar paciente" : "Buscar expediente", icono: "magnifyingglass") {
             TextField("DUI o nombre del paciente", text: $query).textFieldStyle(.roundedBorder).accessibilityLabel("DUI o nombre del paciente")
@@ -131,11 +137,7 @@ struct ClinicalLabDesignView: View {
         }
     }
     private func demographics(_ patient: ClinicalLabPatient) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach([("Nombre", patient.givenName), ("Apellido", patient.familyName), ("Correo electrónico", patient.email), ("Edad", "\(patient.age) años"), ("DUI", patient.dui), ("Teléfono", patient.phone), ("Expediente", patient.record)], id: \.0) { item in
-                DoctorConsultationField(label: item.0, value: item.1)
-            }
-        }
+        ClinicalPatientIdentityView(givenName: patient.givenName, familyName: patient.familyName, fullName: patient.fullName, age: DoctorConsultationFields.age(patient.age), dui: patient.dui, email: patient.email, phone: patient.phone, record: patient.record)
     }
     private func recordBody(_ patient: ClinicalLabPatient) -> some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -231,32 +233,92 @@ struct ClinicalLabDesignView: View {
     }
     private var laboratorySection: some View {
         PatientFormCard(titulo: "Laboratorios del expediente", icono: "testtube.2") {
-            Text("Paciente: \(patient?.fullName ?? "")").font(.footnote)
-            Picker("Tipo de laboratorio", selection: $category) { Text("Todos").tag("Todos"); ForEach(ClinicalLabCategory.allCases, id: \.self) { Text($0.rawValue).tag($0.rawValue) } }
-            Toggle("Filtrar laboratorios por fecha", isOn: $filterDate)
-            if filterDate { DatePicker("Fecha de laboratorio", selection: $date, displayedComponents: .date) }
-            if labs.isEmpty { Text("No hay laboratorios para este paciente con los filtros seleccionados.").font(.footnote) }
+            Text("Más recientes primero · Solicitudes y resultados del paciente").font(.caption).foregroundStyle(HospitalTheme.secondary)
+            if modal != "record" {
+                Picker("Tipo de laboratorio", selection: $category) { Text("Todos").tag("Todos"); ForEach(ClinicalLabCategory.allCases, id: \.self) { Text($0.rawValue).tag($0.rawValue) } }
+                Toggle("Filtrar laboratorios por fecha", isOn: $filterDate)
+                if filterDate { DatePicker("Fecha de laboratorio", selection: $date, displayedComponents: .date) }
+            }
+            if labs.isEmpty { Label("Este paciente todavía no tiene exámenes registrados.", systemImage: "testtube.2").font(.footnote).foregroundStyle(HospitalTheme.secondary).padding(.vertical, 14) }
             ForEach(labs) { request in
-                HospitalCard {
-                    Text(request.exam.name).font(.headline)
-                    Text(request.requestedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption)
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .top) {
+                        VStack(spacing: 3) {
+                            Text(request.requestedAt.formatted(.dateTime.day())).font(.title2.weight(.bold))
+                            Text(request.requestedAt.formatted(.dateTime.month(.abbreviated))).font(.caption.weight(.semibold))
+                        }.foregroundStyle(HospitalTheme.wine).frame(width: 55, height: 62).background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 14))
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text(request.exam.name).font(.subheadline.weight(.bold))
+                            Text(request.requestedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(HospitalTheme.secondary)
+                        }
+                        Spacer(minLength: 0)
+                    }
                     ClinicalLabStateBadge(state: request.state)
-                    DisclosureGroup("Ver detalle") {
-                        VStack(alignment: .leading, spacing: 10) {
-                            DoctorConsultationField(label: "Doctor solicitante", value: request.doctorName)
-                            DoctorConsultationField(label: "Motivo del examen", value: request.observation)
-                            DoctorConsultationField(label: "Resultado", value: request.result ?? "Resultado aún no disponible")
-                            if let released = request.releasedAt { Text("Publicado: \(released.formatted(date: .abbreviated, time: .shortened))").font(.caption) }
-                            ForEach(request.resultValues) { value in
-                                DoctorConsultationField(label: value.name, value: "\(value.value) \(value.unit) · Referencia: \(value.reference)")
-                            }
-                            if role == "doctor" { entryButtons(request: request.id) }
-                        }.padding(.top, 10)
-                    }.font(.footnote)
-                }
+                    Text(request.state == .completed ? ((request.result?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false || !request.resultValues.isEmpty) ? "Resultado disponible para revisión" : "Informe pendiente de publicación") : request.state == .processing ? "El laboratorio está procesando el examen" : "Solicitud pendiente de procesamiento").font(.footnote).foregroundStyle(HospitalTheme.secondary)
+                    Button { selectedLabID = request.id; labReturnModal = modal ?? "record"; modal = "lab-detail" } label: { HStack { Text("Ver detalle"); Spacer(); Image(systemName: "arrow.up.right") } }.font(.subheadline.weight(.semibold)).tint(HospitalTheme.wine)
+                }.padding(18).frame(maxWidth: .infinity, alignment: .leading).background(.white, in: RoundedRectangle(cornerRadius: 18))
+                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(HospitalTheme.rose, lineWidth: 1))
+                    .overlay(alignment: .leading) { RoundedRectangle(cornerRadius: 3).fill(HospitalTheme.wine).frame(width: 3).padding(.vertical, 20) }
             }
         }
     }
+    @ViewBuilder private var labDetail: some View {
+        if let request = selectedLab {
+            VStack(alignment: .leading, spacing: 18) {
+                PatientFormCard(titulo: "Paciente", icono: "person.crop.circle") {
+                    HStack(spacing: 14) {
+                        Text([request.patient.givenName, request.patient.familyName].compactMap { $0.first.map(String.init) }.joined()).font(.title2.weight(.bold)).foregroundStyle(.white)
+                            .frame(width: 58, height: 58).background(HospitalTheme.wine, in: RoundedRectangle(cornerRadius: 18))
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text("Nombre completo").font(.caption.weight(.semibold)).foregroundStyle(HospitalTheme.secondary)
+                            Text(request.patient.fullName).font(.system(size: 18, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    HStack(alignment: .top, spacing: 12) {
+                        DoctorConsultationField(label: "Edad", value: DoctorConsultationFields.age(request.patient.age))
+                        DoctorConsultationField(label: "Teléfono", value: DoctorConsultationFields.value(request.patient.phone))
+                    }.padding(14).background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 14))
+                }
+                PatientFormCard(titulo: "Información del examen", icono: "testtube.2") {
+                    Text(request.exam.name).font(.system(size: 21, weight: .bold))
+                    ClinicalLabStateBadge(state: request.state)
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("Fecha de solicitud").font(.caption).foregroundStyle(HospitalTheme.secondary)
+                        Text(request.requestedAt.formatted(date: .complete, time: .shortened)).font(.subheadline.weight(.semibold))
+                    }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 14))
+                    DoctorConsultationField(label: "Tipo de examen", value: request.exam.category.rawValue)
+                    HStack(alignment: .top) {
+                        DoctorConsultationField(label: "Doctor solicitante", value: request.doctorName)
+                        DoctorConsultationField(label: "Turno", value: request.consultationTurn)
+                    }
+                    DoctorConsultationField(label: "Clínica", value: request.clinicName)
+                    Divider().overlay(HospitalTheme.rose)
+                    DoctorConsultationField(label: "Motivo del examen", value: request.observation)
+                }
+                PatientFormCard(titulo: "Resultado del examen", icono: "doc.text.magnifyingglass") {
+                    if request.state == .completed {
+                        if let released = request.releasedAt { DoctorConsultationField(label: "Fecha de publicación", value: released.formatted(date: .abbreviated, time: .shortened)) }
+                        ForEach(request.resultValues) { value in
+                            VStack(alignment: .leading, spacing: 7) {
+                                Text(value.name).font(.subheadline.weight(.semibold))
+                                Text("Valor obtenido").font(.caption).foregroundStyle(HospitalTheme.secondary)
+                                Text(DoctorConsultationFields.value(value.value) + " " + value.unit).font(.system(size: 25, weight: .bold)).foregroundStyle(HospitalTheme.wine)
+                                Divider().overlay(HospitalTheme.rose)
+                                Text("Referencia: " + DoctorConsultationFields.value(value.reference)).font(.caption).foregroundStyle(HospitalTheme.secondary)
+                            }.padding(14).frame(maxWidth: .infinity, alignment: .leading).background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 14))
+                        }
+                        DoctorConsultationField(label: "Observación del laboratorio", value: request.result ?? "No hay un informe publicado todavía")
+                    } else {
+                        Text(request.state == .processing ? "En Proceso" : "Pendiente").font(.title3.weight(.bold))
+                        Text(request.state == .processing ? "El examen se está procesando. Los resultados aparecerán aquí cuando se publiquen." : "La solicitud está registrada y espera procesamiento. Todavía no hay resultados publicados.").font(.subheadline).foregroundStyle(HospitalTheme.secondary)
+                    }
+                }
+                if role == "doctor" { entryButtons(request: request.id) }
+                Button(labReturnModal == "record" ? "Volver al expediente" : "Volver a laboratorios", action: closeModal).buttonStyle(ClinicalTicketPrimaryStyle())
+            }
+        } else { Text("Este examen no está disponible para el paciente seleccionado.") }
+    }
+
 }
 
 struct ClinicalLabStateBadge: View {

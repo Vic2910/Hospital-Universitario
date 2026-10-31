@@ -273,3 +273,80 @@ Acceso Paciente → schedule, jerarquía visual vino/rojo, resumen, validación 
 - **Rutas:** iOS Patient/{PatientAppointmentFlow,PatientAppointmentView,PatientAppointmentComponents}.swift; Doctor/DoctorConsultationTicketView.swift; ContentView.swift; Core/HospitalStore.swift; Modules/MobileModuleView.swift. Web {patient-appointments.js,app.js,modules.js,index.html,server.mjs}. Scripts {test-patient-appointments,test-preview,test-modules}.mjs. README.md; docs/{README.md,BITACORA.md,CITAS_SOLICITUDES_PACIENTE_2026-10-30.md}.
 - **Verificaciones ejecutadas:** preview y 20 pantallas; prueba nueva de solicitud/preferencia/ticket/asignación, datos propios y errores; siete recorridos de módulos; pruebas de consultas y dashboard del Doctor; comprobador de proyecto, sintaxis JS y diff --check. DOM/transporte simulados, sin escribir en Supabase. Servidor local actualizado y tres recursos HTTP 200/no-store.
 - **Pendientes/límites:** Xcode y revisión visual; persistencia real de solicitudes/preferencia, acceso autorizado y asignación de Recepción. La web ofrece Recepción (demo), SwiftUI su Preview/componente; no se creó un rol real ni se modificaron políticas, esquema o RPC. Los datos locales se reinician y no son registros clínicos. Esta decisión reemplaza los accesos separados anteriores. [Informe](CITAS_SOLICITUDES_PACIENTE_2026-10-30.md).
+
+
+## 2026-10-30 — Mis citas: tarjeta única, ticket 180312 y selector AM/PM
+
+- **Objetivo:** mostrar únicamente Cita asignada al entrar, abrir sus datos en un ticket elegante con Volver y mejorar la preferencia de horario en ambas plataformas.
+- **Cambios:** se inspeccionó la captura 180312; entrada única sin buscador ni cola; ticket interno con check vino, título centrado, bloque de fecha/hora, secciones de datos y botón azul; Volver en esquina superior y al pie. Datos/estados/modelos conservados. Solicitar atención sigue en Más; cola local trasladada al formulario. Gestión/cancelación conectada permanece en desplegable del detalle. Preferencia exclusiva AM/PM con tarjetas, iconos, bordes y check, valores Mañana/Tarde intactos.
+- **Rutas:** iOS Patient/{PatientAppointmentFlow,PatientAppointmentView,PatientAppointmentComponents}.swift y ContentView.swift; web-preview/{patient-appointments.js,app.js,style.css}; scripts/{test-preview,test-patient-appointments,test-modules}.mjs; README.md; docs/{CITAS_SOLICITUDES_PACIENTE_2026-10-30.md,BITACORA.md}.
+- **Verificaciones:** preview/20 pantallas, prueba específica Paciente (entrada única, datos, ambos Volver, AM/PM excluyente, Pendiente/asignación local, datos autorizados y errores), siete recorridos de módulos incluida cancelación; consultas/ticket y dashboard del Doctor aprobados. Sintaxis JS, check-project.py y diff --check aprobados. Recursos actuales HTTP 200/no-store y contenido nuevo servido en el puerto existente 4173. Sin segunda instancia ni cambios de Supabase.
+- **Pendientes:** compilación/revisión SwiftUI en Mac, revisión visual web en navegador y persistencia/Recepción real. Pruebas DOM/transporte simulados, no operaciones clínicas reales. [Informe actualizado](CITAS_SOLICITUDES_PACIENTE_2026-10-30.md).
+
+
+## 2026-10-30 — Salud abre directamente Solicitar atención
+
+- **Objetivo/cambios:** sustituir el menú de Salud del Paciente por el formulario existente, en SwiftUI y web. Se reutilizan health/request/schedule, el store y el estado Pendiente; Salud queda seleccionada y sin buscador. Se conservan autenticación, rutas históricas y recepción local.
+- **Rutas:** ContentView.swift; Core/HospitalStore.swift; web-preview/app.js; scripts/test-preview.mjs; README.md; docs/{BITACORA.md,CITAS_SOLICITUDES_PACIENTE_2026-10-30.md}.
+- **Verificaciones ejecutadas:** test-preview (20 pantallas y formulario desde Salud), test-patient-appointments (envío Pendiente/asignación de recepción local y datos propios), test-modules (siete flujos, incluida cancelación y atención del Doctor), check-project.py y git diff --check aprobados. DOM/transporte simulado, sin operaciones reales contra Supabase.
+- **Pendientes:** compilación Swift en Mac, revisión visual y conexión/persistencia real con Recepción. [Informe actualizado](CITAS_SOLICITUDES_PACIENTE_2026-10-30.md).
+
+
+## 2026-10-30 — Perfil del Paciente e Información general profesional
+
+- **Objetivo:** mostrar nombre, correo y teléfono registrados; mejorar ubicación, orientación, contacto y especialidades con paridad SwiftUI/web y la paleta actual.
+- **Cambios:** nuevo perfil con iniciales y card de contacto, faltantes explícitos y ejemplos aislados; Perfil Doctor conservado. Información general con portada, sede de referencia, mapa, Clínica Universitaria y WhatsApp institucional del directorio oficial UNICAES consultado, especialidades publicadas o seis ejemplos identificados, solicitud de atención y avisos/ocupación/habitaciones conservados. Rutas y autenticación intactas, sin dependencias ni cambios de backend.
+- **Rutas:** Patient/PatientProfileInformationView.swift (nuevo), ContentView.swift, Shared/screens.json, web-preview/{app.js,style.css}, scripts/test-profile.mjs, README.md, docs/{README.md,BITACORA.md,PERFIL_INFORMACION_GENERAL_2026-10-30.md}.
+- **Verificaciones:** test-preview (20 pantallas), test-profile (contactos propios/faltantes/diseño/Doctor, datos y enlaces públicos, especialidades y Salud), check-project.py, sintaxis JS y diff --check aprobados; HTTP 200/no-store en servidor existente. DOM y transporte simulados; sin llamadas reales de teléfono/WhatsApp ni escrituras Supabase.
+- **Pendientes:** compilación SwiftUI en Mac, revisión visual web y confirmación de disponibilidad clínica real. Se sustituye la decisión histórica de Perfil Paciente limitado a nombre/apellido. [Informe y fuente oficial](PERFIL_INFORMACION_GENERAL_2026-10-30.md).
+
+
+## 2026-10-31 — Cronología y detalle de laboratorios del expediente Doctor
+
+- **Objetivo:** exámenes realizados/pendientes visibles en orden, sin filtros en el expediente; detalle elegante dentro de la app con resultados o estado de espera.
+- **Cambios:** cards por fecha de solicitud descendente, fecha destacada y estado, detalle tipo ticket por ID/paciente con retorno al expediente/origen, datos completos, valores/unidades/referencias y observaciones publicadas. Pendientes y En Proceso no muestran resultados. Se mantienen notas/recetas, publicación reactiva, filtros independientes de Laboratorio, rutas y acceso conectado. Paleta existente, sin dependencias.
+- **Rutas:** Modules/ClinicalLabDesignView.swift; web-preview/{clinical-labs.js,style.css}; scripts/test-clinical-labs.mjs; README.md; docs/{README.md,BITACORA.md,LABORATORIOS_EXPEDIENTE_2026-10-31.md}.
+- **Verificaciones:** test-clinical-labs y test-preview/20 pantallas aprobados; cronología, tres estados, falta de filtros, resultados, ambos retornos, acciones e aislamiento verificados con DOM/transporte simulado. Sintaxis JS, check-project.py y diff --check aprobados. HTTP 200/no-store del componente actualizado en servidor existente.
+- **Pendientes:** compilación SwiftUI en Mac, revisión visual y conexión real de resultados/Recepción al prototipo. Sin escrituras ni cambios de Supabase. [Informe](LABORATORIOS_EXPEDIENTE_2026-10-31.md).
+
+
+## 2026-10-31 — Laboratorio Doctor solo solicita; resultados en Expedientes
+
+- **Cambios:** se retiran Ver expediente y Ver solicitudes y resultados de Laboratorio del Doctor en SwiftUI/web; se conserva Solicitar exámenes. En el expediente Ver examen pasa a Ver detalle. Se mantiene publicación local → Completado, resultados exclusivamente para completados y mensajes sin resultados para Pendiente/En Proceso. No se cambia la vista del Paciente.
+- **Rutas:** Modules/ClinicalLabDesignView.swift; web-preview/clinical-labs.js; scripts/{test-clinical-labs,test-doctor-patients}.mjs; README.md; docs/{BITACORA.md,LABORATORIOS_EXPEDIENTE_2026-10-31.md}.
+- **Verificaciones:** test-clinical-labs, test-doctor-patients en diseño/sesión simulada, test-preview/20 pantallas, check-project.py y diff --check aprobados. Sin llamadas clínicas reales ni cambios de Supabase.
+- **Pendientes:** compilación en Mac, revisión visual y conexión real del prototipo. [Informe actualizado](LABORATORIOS_EXPEDIENTE_2026-10-31.md).
+
+
+## 2026-10-31 — Expedientes sin solicitud de examen y datos personales rediseñados
+
+- **Cambios:** retirada del botón Solicitud de laboratorio de Expedientes Doctor en iOS/web; creación conservada en Laboratorio. Datos personales con iniciales, nombre, cuatro campos de identidad y tres filas de contacto/expediente con iconos. Misma paleta, datos, historial, laboratorios y notas/recetas.
+- **Rutas:** Modules/ClinicalLabDesignView.swift; web-preview/{clinical-labs.js,style.css}; scripts/test-clinical-labs.mjs; README.md; docs/{BITACORA.md,LABORATORIOS_EXPEDIENTE_2026-10-31.md}.
+- **Verificaciones:** test-clinical-labs, test-doctor-patients (diseño/sesión), test-preview/20 pantallas, check-project.py y diff --check aprobados. DOM/transporte simulado; sin cambios de Supabase.
+- **Pendientes:** Xcode en Mac y revisión visual. Se sustituye la creación de laboratorios desde Expedientes de decisiones anteriores. [Informe actualizado](LABORATORIOS_EXPEDIENTE_2026-10-31.md).
+
+
+## 2026-10-31 — Detalle de examen: paciente primero y resultados destacados
+
+- **Cambios:** SwiftUI/web muestran primero nombre, edad y teléfono únicamente; después información del examen, estado y resultado. Iniciales/nombre destacados, franja de contacto, fecha en bloque y valores/unidades con referencias separadas. Los datos adicionales permanecen en el expediente/modelo. Estados, publicación, retorno y notas/recetas conservados.
+- **Rutas:** Modules/ClinicalLabDesignView.swift; web-preview/{clinical-labs.js,style.css}; scripts/test-clinical-labs.mjs; README.md; docs/{BITACORA.md,LABORATORIOS_EXPEDIENTE_2026-10-31.md}.
+- **Verificaciones:** test-clinical-labs y test-preview/20 pantallas aprobados; orden de tarjetas y ausencia de datos personales adicionales comprobados, además de estados/resultados. Sintaxis JS, check-project.py y diff --check aprobados. DOM/transporte simulado, sin cambios de Supabase.
+- **Pendientes:** Xcode en Mac, revisión visual y conexión real del prototipo. [Informe actualizado](LABORATORIOS_EXPEDIENTE_2026-10-31.md).
+
+
+## 2026-10-31 — Mi expediente y laboratorios propios con estilo del Doctor
+
+- **Cambios:** Mi expediente y laboratorios del Paciente en SwiftUI/web, cards cronológicas, estados, detalle interno con datos mínimos primero y resultados exclusivamente publicados. Lectura sin acciones del Doctor ni selección de personas. Modelo de lectura de laboratorios independiente para conservar secciones/documentos del expediente. Errores, vacíos, actualización, paginación y autorización de documentos conservados; diseño local aislado de las páginas reales.
+- **Rutas:** Patient/PatientClinicalView.swift (nuevo); Core/HospitalStore.swift; ContentView.swift; Modules/ClinicalLabDesignView.swift; web-preview/{clinical-labs.js,app.js}; scripts/{test-patient-chart,test-clinical-labs}.mjs; README.md; docs/{README.md,BITACORA.md,MI_EXPEDIENTE_LABORATORIOS_PACIENTE_2026-10-31.md}.
+- **Verificaciones:** test-patient-chart, test-clinical-labs, test-doctor-patients y test-preview aprobados con DOM/transporte simulado; datos propios, tres estados, cronología y ausencia de resultados pendientes/capacidades del Doctor. Check-project.py, sintaxis JS y diff --check aprobados. Sin pruebas nuevas ni escrituras en Supabase.
+- **Pendientes:** compilación SwiftUI en Mac, revisión visual y validación contra publicaciones reales de laboratorio. [Informe](MI_EXPEDIENTE_LABORATORIOS_PACIENTE_2026-10-31.md).
+
+- **Coherencia de nombre en este ajuste:** el acceso rápido del Paciente también dice Mi expediente en Patient/PatientDashboardView.swift y web-preview/app.js; Doctor conserva Expedientes.
+
+
+## 2026-10-31 — Paridad exacta del componente de datos personales por rol
+
+- **Cambios:** se extrae ClinicalPatientIdentityView y HospitalClinicalIdentity para compartir tarjeta entre Doctor/Paciente: cabecera con iniciales/nombre, cuatro campos y tres contactos según captura. Laboratorios del Paciente iguala título/subtítulo, fecha destacada, mensajes de estado, divisor y Ver detalle de las cards del Doctor. Se mantiene el acceso propio y los resultados exclusivamente publicados.
+- **Rutas:** Modules/ClinicalPatientIdentityView.swift (nuevo), Modules/ClinicalLabDesignView.swift, Patient/PatientClinicalView.swift, web-preview/{clinical-labs.js,style.css}, scripts/test-patient-chart.mjs, README.md, docs/{BITACORA.md,MI_EXPEDIENTE_LABORATORIOS_PACIENTE_2026-10-31.md}.
+- **Verificaciones:** comparación de tarjeta Doctor/Paciente para el mismo ejemplo aprobada; cuatro campos y tres contactos en sesión propia; test-patient-chart, test-clinical-labs, test-doctor-patients y test-preview aprobados; check-project.py, sintaxis JS y diff --check. DOM/transporte simulado, sin cambios de Supabase.
+- **Pendientes:** revisión visual en navegador y compilación Xcode en Mac. Se conserva el contrato autorizado y no se inventan datos reales ausentes. [Informe](MI_EXPEDIENTE_LABORATORIOS_PACIENTE_2026-10-31.md).

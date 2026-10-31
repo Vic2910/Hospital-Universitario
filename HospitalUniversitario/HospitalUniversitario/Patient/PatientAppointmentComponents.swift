@@ -112,3 +112,30 @@ private struct PatientChipPressStyle: ButtonStyle {
             .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
+
+/// Selección excluyente de turno, manteniendo los valores Mañana/Tarde del modelo.
+struct PatientTimePreferenceCard: View {
+    let title: String
+    let period: String
+    let icon: String
+    let selected: Bool
+    let action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Image(systemName: icon).font(.system(size: 21))
+                    Spacer()
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle").font(.system(size: 18))
+                }
+                Text(title).font(.system(size: 16, weight: .bold))
+                Text(period + (period == "AM" ? " · Antes del mediodía" : " · Después del mediodía")).font(.system(size: 11)).fixedSize(horizontal: false, vertical: true)
+            }.foregroundStyle(selected ? HospitalTheme.wine : HospitalTheme.secondary)
+                .frame(maxWidth: .infinity, minHeight: 108, alignment: .leading).padding(14)
+                .background(selected ? HospitalTheme.rose : HospitalTheme.background, in: RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(selected ? HospitalTheme.wine : HospitalTheme.rose, lineWidth: selected ? 2 : 1))
+        }.buttonStyle(.plain).accessibilityLabel(title + " · " + period).accessibilityValue(selected ? "Seleccionado" : "Sin seleccionar")
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: selected)
+    }
+}

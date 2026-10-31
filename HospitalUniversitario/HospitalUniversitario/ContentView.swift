@@ -116,7 +116,7 @@ struct ContentView: View {
     private var isDoctor: Bool { store.selectedRole == "doctor" }
     private var title: String {
         if store.screenID == "home" { return "Hola, \(store.name == "Bienvenido" ? (isDoctor ? "Doctor" : "Paciente") : store.name)" }
-        if store.screenID == "schedule" { return "Solicitar atención" }
+        if !isDoctor && ["request", "schedule", "health"].contains(store.screenID) { return "Solicitar atención" }
         return screen?.title ?? (store.screenID == "rooms" ? "Habitaciones" : store.screenID == "health" ? "Mi salud" : "Más")
     }
 
@@ -131,9 +131,9 @@ struct ContentView: View {
                 Text(title).font(.system(size: 25, weight: .semibold)).lineLimit(2)
                 Text(screen?.subtitle ?? (store.screenID == "schedule" ? "Elige especialidad y horario" : "Servicios y consultas del hospital")).font(.system(size: 12)).padding(.top, 8)
             }
-            .foregroundStyle(.white).padding(.horizontal, 24).padding(.top, 18).padding(.bottom, (store.screenID == "profile" || (!isDoctor && store.screenID == "chart") || (showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID))) ? 24 : 48)
+            .foregroundStyle(.white).padding(.horizontal, 24).padding(.top, 18).padding(.bottom, (store.screenID == "profile" || (!isDoctor && ["chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) || (showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID))) ? 24 : 48)
             .frame(maxWidth: .infinity, alignment: .leading).background(HospitalTheme.wine.ignoresSafeArea(edges: .top))
-            if store.screenID != "profile" && !(!isDoctor && store.screenID == "chart") && !(showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID)) {
+            if store.screenID != "profile" && !(!isDoctor && ["chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) && !(showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID)) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").font(.system(size: 11))
                 TextField(screen?.search ?? "Buscar servicios…", text: $search).font(.system(size: 12)).autocorrectionDisabled()
@@ -152,7 +152,7 @@ struct ContentView: View {
     }
 
     @ViewBuilder private var content: some View {
-        if !isDoctor && store.screenID == "chart" { liveContent }
+        if !isDoctor && ["chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID) { liveContent }
         else if ["patients", "chart", "laboratory"].contains(store.screenID) {
             VStack(alignment: .leading, spacing: 18) {
                 Toggle("Vista de diseño · datos locales", isOn: $showLabDesign).font(.footnote)
@@ -172,10 +172,12 @@ struct ContentView: View {
     @ViewBuilder private var liveContent: some View {
         if isDoctor, store.screenID == "prescriptions", let doctor = store.doctor, let modules = store.modules {
             DoctorPrescriptionView(doctor: doctor, model: modules, search: search, period: store.period, navigate: go)
-        } else if !isDoctor, ["request", "schedule"].contains(store.screenID) {
+        } else if !isDoctor, ["request", "schedule", "health"].contains(store.screenID) {
             PatientAppointmentView(flow: appointmentFlow)
         } else if !isDoctor, store.screenID == "appointments", let modules = store.modules {
             PatientAppointmentsView(flow: appointmentFlow, modules: modules, profile: store.profile, patientID: store.access?.patient_id, search: search, period: store.period, navigate: go)
+        } else if !isDoctor, ["chart", "laboratory"].contains(store.screenID), let modules = store.modules, let laboratory = store.patientLaboratory {
+            PatientClinicalView(model: modules, laboratory: laboratory, module: store.screenID, profile: store.profile, navigate: go)
         } else if !isDoctor, store.screenID == "prescriptions", let modules = store.modules {
             let useExamples = modules.page != nil && modules.items.isEmpty && !modules.loading && modules.error == nil
             PatientPrescriptionsView(records: useExamples ? PatientPrescriptionRecord.examples : modules.items.map(PatientPrescriptionRecord.from),
@@ -332,34 +334,24 @@ struct ContentView: View {
     private var profile: some View {
         let given = store.profile?.person?.given_names.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let family = store.profile?.person?.family_names.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 14) {
-                Image(systemName: "person.crop.circle.fill").font(.system(size: 48)).foregroundStyle(HospitalTheme.wine)
-                Text("Datos de registro").font(.system(size: 22, weight: .bold)).foregroundStyle(HospitalTheme.ink)
-            }.padding(.vertical, 10)
-            HospitalCard {
-                DoctorConsultationField(label: "Nombre", value: given.isEmpty ? "No disponible" : given)
-            }
-            HospitalCard {
-                DoctorConsultationField(label: "Apellido", value: family.isEmpty ? "No disponible" : family)
+        return Group {
+            if !isDoctor {
+                PatientProfileCardView(name: [given, family].filter { !$0.isEmpty }.joined(separator: " "), email: store.profile?.auth_email ?? "", phone: store.profile?.contacts.first { $0.kind == "phone" }?.value ?? "")
+            } else {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(spacing: 14) {
+                        Image(systemName: "person.crop.circle.fill").font(.system(size: 48)).foregroundStyle(HospitalTheme.wine)
+                        Text("Datos de registro").font(.system(size: 22, weight: .bold)).foregroundStyle(HospitalTheme.ink)
+                    }.padding(.vertical, 10)
+                    HospitalCard { DoctorConsultationField(label: "Nombre", value: given.isEmpty ? "No disponible" : given) }
+                    HospitalCard { DoctorConsultationField(label: "Apellido", value: family.isEmpty ? "No disponible" : family) }
+                }
             }
         }
     }
 
     private var information: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            heading("Información del hospital")
-            if let overview = store.overview {
-                detail("Ocupación general", value: "\(overview.occupied) de \(overview.capacity) camas")
-                heading("Médicos de turno")
-                if overview.on_duty.isEmpty { empty("No hay médicos de turno publicados.") }
-                ForEach(overview.on_duty.indices, id: \.self) { index in detail(overview.on_duty[index].name, value: overview.on_duty[index].specialty) }
-                heading("Comunicados")
-                ForEach(overview.information.filter { matches($0.title) }) { note in detail(note.title, value: note.body) }
-            }
-            Button("Consultar habitaciones") { go("rooms") }.disabled(store.busy)
-            Text("La información clínica de otros pacientes no es pública.").font(.system(size: 11)).padding(12).background(HospitalTheme.rose)
-        }
+        HospitalInformationView(overview: store.overview, navigate: go)
     }
 
     private func empty(_ text: String) -> some View { HospitalCard { Text(text).font(.system(size: 12)).foregroundStyle(HospitalTheme.secondary).padding(.vertical, 15) } }
@@ -369,7 +361,7 @@ struct ContentView: View {
 
     private var bottomBar: some View {
         let tabs: [(String, String, String)] = isDoctor ? [("home","Inicio","house"),("patients","Pacientes","person"),("consultation","Consultas","cross.fill"),("laboratory","Laboratorios","testtube.2"),("more","Más","line.3.horizontal")] : [("home","Inicio","house"),("appointments","Mis citas","calendar"),("health","Salud","heart"),("profile","Perfil","person"),("more","Más","line.3.horizontal")]
-        let active = ["more", "health", "rooms"].contains(store.screenID) ? (store.screenID == "health" ? "health" : "more") : screen?.tab ?? "home"
+        let active = !isDoctor && ["request", "schedule", "health"].contains(store.screenID) ? "health" : ["more", "health", "rooms"].contains(store.screenID) ? (store.screenID == "health" ? "health" : "more") : screen?.tab ?? "home"
         return HStack(spacing: 0) {
             ForEach(tabs.indices, id: \.self) { index in
                 let (id, label, icon) = tabs[index]

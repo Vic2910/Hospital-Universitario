@@ -57,3 +57,30 @@ Las pruebas de interacción usan DOM y transporte simulados; no son pruebas real
 Compilar y revisar SwiftUI en Mac. Conectar el snapshot/preferencia a persistencia, implementar el acceso autorizado real de Recepción y su operación transaccional de asignación, incluyendo idempotencia y permisos de servidor. El prototipo no pretende cubrir esas operaciones reales. El backend existente y sus RPC no se modificaron.
 
 Esta decisión reemplaza las indicaciones anteriores de mantener dos accesos/formularios separados para Agendar cita y Solicitar atención.
+
+
+## Ajuste posterior solicitado — entrada única y referencia 180312
+
+La petición posterior del usuario reemplaza la distribución anterior de Mis citas. Se inspeccionó `docs/design-reference/Captura de pantalla 2026-10-30 180312.png`: icono circular con check, título centrado, fecha/hora en negrita y acción azul al pie.
+
+- **Mis citas ahora muestra una sola tarjeta pulsable: Cita asignada.** Se retiran de esa entrada los datos expandidos, el buscador, el acceso a solicitar y la cola de solicitudes.
+- Al pulsar se presenta un ticket dentro del flujo y del marco de la app, sin ventanas externas. Incluye **Volver** en la esquina superior izquierda y **Volver a Mis citas** al pie. Cualquiera regresa a la tarjeta única.
+- Se utiliza el check vino y el botón azul ya existentes en la paleta, con fecha/hora destacadas y secciones Datos de la cita, Datos del paciente y Motivo de la atención. Se mantienen especialidad, médico, consultorio, paciente, edad, DUI, teléfono, correo, motivo y síntomas, con los mismos datos autorizados/ejemplos y faltantes explícitos.
+- SwiftUI presenta el ticket propio del Paciente dentro de `PatientAppointmentsView`, reutilizando `DoctorConsultationField` y sus normalizadores. La vista del Doctor no cambia en este ajuste.
+- Cuando no hay cita asignada, abrir la tarjeta muestra un mensaje explicativo y permite volver. Los ejemplos siguen identificados y un error no activa una cita ficticia.
+- La cancelación y registros conectados se conservan dentro de **Gestionar mis citas**, un apartado desplegable del detalle. Así no ocupan la entrada principal.
+- **Solicitar atención** continúa accesible desde **Más**. Las solicitudes locales y sus estados se trasladan a un desplegable al final de ese formulario; se conserva Pendiente hasta asignación de Recepción de demostración.
+- Se reemplazan el selector segmentado iOS y el desplegable web por dos tarjetas de selección: **Mañana · AM** y **Tarde · PM**, con icono solar, texto explicativo, borde vino y check en la opción elegida. Selección exclusiva, etiquetas accesibles y animación que respeta reducir movimiento. El dato guardado continúa siendo Mañana/Tarde y conserva su validación obligatoria.
+
+**Archivos de este ajuste:** Patient/{PatientAppointmentFlow,PatientAppointmentView,PatientAppointmentComponents}.swift; ContentView.swift; web-preview/{patient-appointments.js,app.js,style.css}; scripts/{test-preview,test-patient-appointments,test-modules}.mjs; README.md y esta documentación/bitácora.
+
+**Verificaciones ejecutadas en este ajuste:** test-preview (20 pantallas), test-patient-appointments (una sola entrada, datos del ticket, Volver superior/inferior, selección exclusiva AM/PM, validación, flujo local de Recepción, datos autorizados y error sin cita inventada), test-modules (siete recorridos incluida cancelación), test-doctor-consultations y test-doctor-dashboard aprobados. También sintaxis de app.js/patient-appointments.js, check-project.py y git diff --check. HTTP 200 y no-store en `/`, `/app.js`, `/patient-appointments.js` y `/style.css`, comprobando que el servidor actual entrega las nuevas clases del ticket/selector, sin abrir otra instancia.
+
+Estas son comprobaciones con DOM/transporte simulado y HTTP local. No se ejecutó revisión visual de la app web en navegador ni compilación Swift/Xcode en esta intervención. Continúan pendientes Mac y la conexión real de Recepción/persistencia, sin cambios en roles, RPC o base de datos.
+
+
+## Acceso directo desde Salud — 2026-10-30
+
+Por petición posterior del usuario, la pestaña **Salud** del Paciente abre directamente **Solicitar atención**, sin menú intermedio ni buscador. Las rutas `health`, `request` y `schedule` reutilizan el mismo formulario y store; Salud permanece seleccionada. Se conservan los accesos históricos, los datos editables, AM/PM y la validación. El envío sigue como Pendiente en memoria y aparece en Recepción de demostración; no se agregó envío real al backend.
+
+Archivos: ContentView.swift, Core/HospitalStore.swift, web-preview/app.js y scripts/test-preview.mjs. El helper de pruebas ahora entra por Salud, por lo que test-preview, test-patient-appointments y test-modules verifican el nuevo acceso y el recorrido existente hasta la asignación local de recepción. Los tres aprobaron, al igual que check-project.py y git diff --check. Pendiente compilación Swift en Mac; DOM/transporte simulados, sin escrituras reales a Supabase.

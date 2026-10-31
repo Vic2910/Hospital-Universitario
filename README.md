@@ -268,3 +268,30 @@ Los resultados estructurados tienen valor, unidad, referencia y observación. El
 **Citas y solicitudes Paciente (2026-10-30):** Mis citas incorpora próxima cita y ticket con el mismo estilo del Doctor. Se unifican los dos formularios: el formulario de agendar ahora se envía con **Solicitar atención**, exige preferencia Mañana/Tarde y guarda una solicitud local **Pendiente**. **Recepción (demo)** en la vista previa permite asignar fecha/hora a ejemplos y comprobar el cambio a Cita asignada; en SwiftUI se incluye su componente y Preview. Los ejemplos son temporales y no se envían a Supabase. Se conservan citas y cancelación conectadas. Esta actualización sustituye la indicación anterior de conservar un acceso separado Agendar cita. [Archivos, datos y verificaciones](docs/CITAS_SOLICITUDES_PACIENTE_2026-10-30.md).
 
 Para verlo: abre `http://127.0.0.1:4173`, recarga con Ctrl+F5 y usa **Paciente → Mis citas → Solicitar atención** en modo diseño. El servidor existente utiliza `node --preserve-symlinks --preserve-symlinks-main web-preview/server.mjs`; si está abierto no inicies otra instancia en el mismo puerto.
+
+
+**Ajuste de Mis citas (2026-10-30):** su entrada queda reducida a la tarjeta **Cita asignada**. Al pulsarla se abre el ticket interno basado en la captura 180312, con todos los campos, Volver arriba y botón azul para regresar. Solicitar atención se abre desde **Más**; su preferencia usa dos tarjetas **Mañana · AM / Tarde · PM**. La cola local se consulta al final de ese formulario y la gestión/cancelación conectada dentro del detalle de la cita. Esta distribución sustituye la anterior entrada con datos expandidos y solicitudes. [Detalle del ajuste y pruebas](docs/CITAS_SOLICITUDES_PACIENTE_2026-10-30.md).
+
+
+**Salud del Paciente (2026-10-30):** la pestaña Salud abre directamente el formulario Solicitar atención, reemplazando su menú anterior. El envío continúa como Pendiente en el flujo local de Recepción de demostración; aún no tiene persistencia/envío real a Recepción. Se conservan los accesos anteriores al mismo formulario.
+
+
+**Perfil e Información general (2026-10-30):** Perfil del Paciente muestra nombre completo, correo y teléfono propios con cards de contacto. Información general incorpora ubicación de referencia de UNICAES Santa Ana, mapa, contactos institucionales verificados y especialidades publicadas o de demostración identificadas. Se conservan avisos, ocupación y habitaciones. El perfil del Doctor mantiene nombre/apellido. [Archivos, fuentes y verificaciones](docs/PERFIL_INFORMACION_GENERAL_2026-10-30.md).
+
+
+**Laboratorios del expediente Doctor (2026-10-31):** el expediente muestra exámenes del paciente en cards cronológicas, más recientes primero y sin filtros en ese bloque. Ver examen abre un ticket interno con datos, estado, resultados/valores/referencias cuando estén publicados y Volver al expediente. Observaciones y recetas siguen vinculadas al examen; el prototipo mantiene sus datos locales identificados. [Archivos y verificaciones](docs/LABORATORIOS_EXPEDIENTE_2026-10-31.md).
+
+
+**Separación Laboratorio/Expedientes Doctor (2026-10-31):** Laboratorio ofrece únicamente Solicitar exámenes para el paciente seleccionado. Los estudios se consultan en Expedientes mediante Ver detalle; los resultados se muestran solo con estado Completado. Pendiente/En Proceso muestran su estado sin resultados. Se mantienen los datos locales y la lógica de publicación existentes. [Detalle y pruebas](docs/LABORATORIOS_EXPEDIENTE_2026-10-31.md).
+
+
+**Expedientes Doctor (2026-10-31):** se retira el botón Solicitud de laboratorio; la creación queda en Laboratorio. Datos personales usa cabecera con iniciales/nombre, cuadrícula de identidad y filas de correo/teléfono/expediente, en SwiftUI y web, conservando los datos y acciones existentes. [Detalle y verificaciones](docs/LABORATORIOS_EXPEDIENTE_2026-10-31.md).
+
+
+**Detalle de examen (2026-10-31):** paciente primero con solo nombre, edad y teléfono; después información del examen y tarjetas de resultados con valor, unidad y referencia. El expediente completo conserva los demás datos personales. [Implementación y pruebas](docs/LABORATORIOS_EXPEDIENTE_2026-10-31.md).
+
+
+**Mi expediente y laboratorios del Paciente (2026-10-31):** diseño de ticket y cards coherente con el Doctor, acceso directo a estudios propios por fecha, estados, Ver detalle y resultados solo publicados. Mi expediente incluye los laboratorios sin reemplazar las secciones/documentos existentes. Solo lectura, paginación, documentos autorizados y actualización manual; ejemplos aislados del modo de diseño. [Archivos y verificaciones](docs/MI_EXPEDIENTE_LABORATORIOS_PACIENTE_2026-10-31.md).
+
+
+**Paridad visual del expediente (2026-10-31):** Doctor y Paciente comparten el mismo componente de datos personales, con Nombre/Apellido/Edad/DUI y correo/teléfono/expediente. Laboratorios del Paciente replica las cards de la referencia, con fecha destacada, estado, explicación y Ver detalle. Se verificó la igualdad de la tarjeta para el mismo paciente de demostración, conservando el acceso propio en sesión real. [Detalle y archivos](docs/MI_EXPEDIENTE_LABORATORIOS_PACIENTE_2026-10-31.md).

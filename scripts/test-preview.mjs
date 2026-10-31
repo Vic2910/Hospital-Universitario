@@ -27,6 +27,11 @@ class Element {
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
 const response = (body,status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body, text: async () => body == null ? '' : JSON.stringify(body) });
+export async function openAttentionRequest(ui) {
+  await ui.click('Salud');
+  assert.ok(ui.get('sched-submit'),'Salud abre directamente Solicitar atención');
+  assert.equal(ui.app.textContent.includes('Tu información de salud'),false,'Sin menú intermedio');
+}
 export function createApp(roleCodes = ['doctor'], options = {}) {
   const body = new Element('body');
   for (const id of ['app','notice','preview-mode','design-patient','design-doctor','live-mode','design-reception']) { const node = new Element(id.startsWith('design-') || id === 'live-mode' ? 'button' : 'div'); node.id = id; if (id === 'notice') node.hidden = true; body.append(node); }
@@ -115,7 +120,7 @@ for (const mode of ['design', 'session']) {
   const ui = createApp(['patient']); await settle();
   if (mode === 'design') { ui.get('design-patient').listeners.click(); await settle(); }
   else await ui.login();
-  await ui.click('Mis citas'); await ui.click('Solicitar atención');
+  await openAttentionRequest(ui);
   assert.match(ui.app.textContent, /Preparemos tu próxima cita/);
   assert.equal(ui.get('sched-nombres').value, 'Gaby');
   assert.equal(ui.get('sched-apellidos').value, 'Diaz');
@@ -132,7 +137,7 @@ for (const mode of ['design', 'session']) {
   assert.ok(selected('symptom-10')); assert.equal(selected('symptom-0'), false); assert.equal(selected('symptom-1'), false);
   await ui.click('Tos'); assert.equal(selected('symptom-10'), false);
   await ui.click('Tos'); assert.equal(selected('symptom-1'), false);
-  await ui.input('Preferencia de horario','Mañana','change');await ui.input('Motivo de consulta', 'Consulta de prueba');
+  await ui.click('Mañana · AM');await ui.input('Motivo de consulta', 'Consulta de prueba');
   for (let index = 0; index < 6; index++) {
     await choose('specialty-' + index);
     assert.equal(ui.get('sched-submit').disabled, true, 'Cambiar especialidad borra el horario');
@@ -157,7 +162,7 @@ for (const mode of ['design', 'session']) {
   if (mode === 'design') {
     ui.get('live-mode').listeners.click(); await settle();
     ui.get('design-patient').listeners.click(); await settle();
-    await ui.click('Mis citas'); await ui.click('Solicitar atención');
+    await openAttentionRequest(ui);
     assert.equal(ui.get('sched-nombres').value, 'Gaby', 'Borrador descartado al salir');
     assert.equal(ui.calls.some(call => call.url.startsWith(contract.url)), false);
   }

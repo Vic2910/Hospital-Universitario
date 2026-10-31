@@ -1,6 +1,6 @@
 // UI workflows with transport fixtures. No credentials or real clinical writes.
 import assert from 'node:assert/strict';
-import {createApp} from './test-preview.mjs';
+import {createApp,openAttentionRequest} from './test-preview.mjs';
 const id = '00000000-0000-4000-8000-000000000001';
 const second = '00000000-0000-4000-8000-000000000002';
 const third = '00000000-0000-4000-8000-000000000003';
@@ -16,7 +16,7 @@ console.log('OK Medico AAL1: dashboard y notificaciones sin exigir MFA');
 const item = (action,status = 'confirmed') => ({id,title:'Registro de prueba',subtitle:'Detalle de prueba',status,event_at:new Date().toISOString(),row_version:7,details:[],action,document_id:null});
 
 const patient = createApp(['patient']);
-await patient.login(); await patient.click('Mis citas'); await patient.click('Solicitar atención');
+await patient.login(); await openAttentionRequest(patient);
 assert.ok(patient.get('sched-submit'));
 assert.equal(patient.app.textContent.includes('Enviar solicitud'),false);
 assert.equal(patient.calls.some(call=>call.params?.p_module==='request'),false);
@@ -27,7 +27,7 @@ const appointments = createApp(['patient'],{transport:async (url) => {
   if (url.endsWith('/mobile_module')) return {body:{...emptyPage(),items:[item(cancelled ? null : 'cancel_appointment',cancelled ? 'cancelled' : 'confirmed')]}};
   if (url.endsWith('/transition_appointment')) { cancelled = true; return {body:{id}}; }
 }});
-await appointments.login(); await appointments.click('Mis citas');
+await appointments.login(); await appointments.click('Mis citas'); await appointments.click('Cita asignada');
 await appointments.input('Motivo de cancelación','No puedo asistir'); await appointments.submit('Confirmar cancelación');
 const cancellation = appointments.calls.find(call => call.url.endsWith('/transition_appointment'));
 assert.equal(cancellation.params.p_expected_version,7);
