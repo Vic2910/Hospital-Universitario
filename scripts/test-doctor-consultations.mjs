@@ -8,11 +8,21 @@ for (const mode of ['design','empty-session']) {
   if (mode === 'design') { ui.get('design-doctor').listeners.click(); await settle(); } else await ui.login();
   await ui.click('Consultas');
   assert.match(ui.app.textContent,/Tus consultas, a tiempo/);
+  assert.equal(ui.app.textContent.includes('Mis citas'),false);
+  assert.equal(ui.app.all().find(node => node.attributes['aria-label'] === 'Fecha de consultas').value,key(new Date()));
+  if (mode === 'empty-session') {
+    assert.match(ui.app.textContent,/0consultas para hoy/);
+    assert.match(ui.app.textContent,/No hay consultas para mostrar/);
+    assert.equal(ui.app.textContent.includes('Agenda de ejemplo'),false,'Sin agenda de ejemplo en sesión real vacía');
+    assert.equal(ui.app.textContent.includes('Carlos Mendoza'),false);
+    assert.equal(ui.app.all().some(node => node.tagName === 'button' && node.textContent === 'Iniciar consulta'),false);
+    assert.equal(ui.calls.some(call => /start_consultation|save_consultation|doctor_chart/.test(call.url)),false);
+    console.log('OK Consultas empty-session: sin ejemplos locales; agenda vacía explícita');
+    continue;
+  }
   assert.match(ui.app.textContent,/4consultas para hoy/);
   assert.match(ui.app.textContent,/Agenda de ejemplo/);
-  assert.equal(ui.app.textContent.includes('Mis citas'),false);
   assert.equal(ui.get('app').all().some(node => node.textContent === 'Iniciar consulta'),false);
-  assert.equal(ui.app.all().find(node => node.attributes['aria-label'] === 'Fecha de consultas').value,key(new Date()));
   await ui.click('Ver detalle de Carlos Mendoza');
   assert.match(ui.app.textContent,/Detalle de consulta/);
   assert.match(ui.app.textContent,/42 años/); assert.match(ui.app.textContent,/7123-4567/);
@@ -32,8 +42,8 @@ for (const mode of ['design','empty-session']) {
   await ui.input(search.attributes['aria-label'],'María');
   assert.match(ui.app.textContent,/María López/); assert.equal(ui.app.textContent.includes('Carlos Mendoza'),false);
   assert.equal(ui.calls.some(call => /start_consultation|save_consultation|doctor_chart/.test(call.url)),false,'Los ejemplos no llaman a escrituras ni expediente');
-  if (mode === 'design') assert.equal(ui.calls.some(call => call.url.startsWith('https:')),false);
-  console.log('OK Consultas '+mode+': hoy, futuras, calendario, búsqueda, detalles y ejemplos sin operaciones clínicas');
+  assert.equal(ui.calls.some(call => call.url.startsWith('https:')),false);
+  console.log('OK Consultas design: hoy, futuras, calendario, búsqueda, detalles y ejemplos sin operaciones clínicas');
 }
 const owner = '00000000-0000-4000-8000-000000000001';
 const live = createApp(['doctor'],{transport:async (url,params) => {

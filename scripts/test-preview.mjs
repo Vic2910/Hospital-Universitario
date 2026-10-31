@@ -20,7 +20,8 @@ class Element {
   querySelector(selector) {
     if (selector.startsWith('#')) return this.all().find(node => node.id === selector.slice(1)) || null;
     const match = selector.match(/^\[data-choice="([^"]+)"\]$/);
-    return match ? this.all().find(node => node.attributes['data-choice'] === match[1]) || null : null;
+    if (match) return this.all().find(node => node.attributes['data-choice'] === match[1]) || null;
+    return this.all().find(node => node.tagName === selector) || null;
   }
   reportValidity() { return true; }
   all() { return [this, ...this.children.flatMap(child => child.all())]; }
@@ -110,11 +111,11 @@ for (const role of ['patient','doctor']) {
 assert.equal(catalog.patient.length + catalog.doctor.length,20);
 console.log('8 recorridos aprobados; 20 pantallas comprobadas.');
 
-// Agendamiento local: comportamiento completo sin escrituras al servidor.
-for (const mode of ['design', 'session']) {
+// Agendamiento: modo diseño local y modo sesión conectado a Supabase (transporte de prueba).
+{
   const ui = createApp(['patient']); await settle();
-  if (mode === 'design') { ui.get('design-patient').listeners.click(); await settle(); }
-  else await ui.login();
+  ui.get('design-patient').listeners.click(); await settle();
+  assert.match(ui.get('preview-mode').textContent,/MODO DISEÑO/);
   await ui.click('Mis citas'); await ui.click('Solicitar atención');
   assert.match(ui.app.textContent, /Preparemos tu próxima cita/);
   assert.equal(ui.get('sched-nombres').value, 'Gaby');
@@ -154,12 +155,118 @@ for (const mode of ['design', 'session']) {
   await ui.input('Apellidos', 'Prueba'); assert.equal(ui.get('sched-feedback').hidden, true);
   assert.equal(ui.get('sched-submit').disabled, false);
   assert.equal(ui.calls.length, calls, 'Editar y preparar no llama a la API');
-  if (mode === 'design') {
-    ui.get('live-mode').listeners.click(); await settle();
-    ui.get('design-patient').listeners.click(); await settle();
-    await ui.click('Mis citas'); await ui.click('Solicitar atención');
-    assert.equal(ui.get('sched-nombres').value, 'Gaby', 'Borrador descartado al salir');
-    assert.equal(ui.calls.some(call => call.url.startsWith(contract.url)), false);
-  }
-  console.log('OK Agendar cita (' + mode + '): datos, síntomas, seis especialidades, validación y simulación sin API');
+  ui.get('live-mode').listeners.click(); await settle();
+  ui.get('design-patient').listeners.click(); await settle();
+  await ui.click('Mis citas'); await ui.click('Solicitar atención');
+  assert.equal(ui.get('sched-nombres').value, 'Gaby', 'Borrador descartado al salir');
+  assert.equal(ui.calls.some(call => call.url.startsWith(contract.url)), false);
+  console.log('OK Agendar cita (design): datos, síntomas, seis especialidades, validación y simulación sin API');
+}
+{
+  const uuid2 = '00000000-0000-4000-8000-000000000002';
+  const specialties = [{id:uuid,name:'Cardiología',kind:'specialty'},{id:uuid2,name:'Pediatría',kind:'specialty'}];
+  const requests = [];
+  const tomorrow = () => { const day = new Date(); day.setDate(day.getDate() + 1); return new Intl.DateTimeFormat('en-CA',{year:'numeric',month:'2-digit',day:'2-digit'}).format(day); };
+  const transport = async (url,params) => {
+    if (url.endsWith('/mobile_module') && params?.p_module === 'request') return {body:{items:requests.map(request => ({id:request.id,title:'Cardiología',subtitle:'Consulta de prueba',status:'pending',event_at:new Date().toISOString(),row_version:1,details:[{label:'Fecha preferida',value:tomorrow()},{label:'Horario preferido',value:request.p_from+' - '+request.p_to},{label:'Respuesta de recepcion',value:'Pendiente de programacion'}]})),sections:[],options:specialties,preferences:[],phone:null,emergency:null,has_more:false,next_cursor:null}};
+    if (url.endsWith('/request_appointment')) { const request = {...params,id:'00000000-0000-4000-8000-000000000099',status:'pending'}; requests.push(request); return {body:{id:request.id,status:'pending'}}; }
+  };
+  const ui = createApp(['patient'],{transport}); await ui.login();
+  await ui.click('Mis citas'); await ui.click('Solicitar atención');
+  assert.match(ui.app.textContent, /Preparemos tu próxima cita/);
+  assert.match(ui.app.textContent, /la central de citas del hospital/);
+  assert.equal(ui.app.all().some(node => node.id === 'sched-nombres'), false, 'Sin campos editables de datos en modo sesión');
+  assert.match(ui.app.textContent, /Persona de prueba/, 'Datos del paciente desde el perfil');
+  const pick = id => ui.app.all().find(node => node.attributes['data-choice'] === id);
+  assert.ok(pick('specialty-0') && pick('specialty-1'), 'Especialidades del catálogo real');
+  assert.equal(ui.get('sched-submit').disabled, true);
+  await ui.input('Fecha preferida', tomorrow(), 'change');
+  await ui.input('Preferencia de horario', 'Mañana', 'change');
+  await ui.input('Motivo de consulta', 'Consulta de prueba');
+  pick('specialty-0').listeners.click(); await settle();
+  await ui.click('Tos');
+  assert.equal(ui.get('sched-submit').disabled, false);
+  await ui.click('Solicitar atención');
+  const call = ui.calls.findLast(item => item.url.endsWith('/request_appointment'));
+  assert.ok(call, 'Solicitud enviada a request_appointment');
+  assert.equal(call.params.p_patient, uuid); assert.equal(call.params.p_facility, uuid);
+  assert.equal(call.params.p_specialty, uuid); assert.equal(call.params.p_date, tomorrow());
+  assert.equal(call.params.p_from, '08:00'); assert.equal(call.params.p_to, '12:00');
+  assert.match(call.params.p_reason, /Consulta de prueba/); assert.match(call.params.p_reason, /Síntomas: Tos/);
+  assert.ok(call.params.p_request_key, 'Clave de idempotencia presente');
+  assert.match(ui.get('sched-feedback').textContent, /Solicitud enviada/);
+  assert.equal(ui.get('sched-submit').disabled, true);
+  assert.match(ui.app.textContent, /Mis solicitudes/);
+  await ui.input('Motivo de consulta', 'Otra consulta'); assert.equal(ui.get('sched-feedback').hidden, true);
+  await ui.input('Preferencia de horario', 'Tarde', 'change');
+  await ui.click('Solicitar atención');
+  const second = ui.calls.findLast(item => item.url.endsWith('/request_appointment'));
+  assert.equal(second.params.p_from, '13:00'); assert.equal(second.params.p_to, '17:00');
+  assert.notEqual(second.params.p_request_key, call.params.p_request_key, 'Clave nueva por envío');
+  console.log('OK Agendar cita (session): especialidades reales, request_appointment con preferencia e idempotencia');
+}
+{
+  // Formulario de registro: campos reales, máscaras DUI/teléfono y sin aviso de demostración.
+  const ui = createApp(['patient']);
+  await new Promise(resolve => setImmediate(resolve));
+  await ui.click('Regístrate');
+  for (const id of ['reg-given', 'reg-family', 'reg-dui', 'reg-birth', 'reg-sex', 'reg-phone', 'reg-email', 'reg-password', 'reg-confirm']) ui.get(id);
+  assert.equal(ui.app.textContent.includes('Formulario de demostración'), false, 'Sin aviso de demostración');
+  assert.equal(ui.app.textContent.includes('Edad'), false, 'Sin campo de edad');
+  assert.equal(ui.app.textContent.includes('Ya confirmé mi correo'), false, 'Sin paso de confirmación de correo');
+  assert.equal(ui.get('reg-sex').children.length, 4, 'Cuatro opciones de sexo administrativo');
+  ui.get('reg-dui').value = '012345678'; ui.get('reg-dui').listeners.input({ target: ui.get('reg-dui') }); await settle();
+  assert.equal(ui.get('reg-dui').value, '01234567-8', 'Máscara DUI 00000000-0');
+  ui.get('reg-phone').value = '71234567'; ui.get('reg-phone').listeners.input({ target: ui.get('reg-phone') }); await settle();
+  assert.equal(ui.get('reg-phone').value, '7123-4567', 'Máscara teléfono 0000-0000');
+  console.log('OK Registro (render): campos DUI/fecha/sexo, máscaras y sin aviso de demostración');
+}
+{
+  // Flujo completo con el correo ya confirmado en el signUp: envía los datos a la base de datos.
+  const facility = '3d101c8a-8974-4e2c-9144-1e777f632589';
+  const requests = [];
+  const transport = async (url, params) => {
+    if (url.endsWith('/auth/v1/signup')) return { body: { access_token: 'test', refresh_token: 'refresh', expires_in: 3600 } };
+    if (url.endsWith('/submit_patient_registration')) { requests.push(params); return { body: { id: '00000000-0000-4000-8000-000000000077', status: 'pending' } }; }
+  };
+  const ui = createApp(['patient'], { transport });
+  await new Promise(resolve => setImmediate(resolve));
+  await ui.click('Regístrate');
+  const fill = (id, value) => { ui.get(id).value = value; };
+  fill('reg-given', 'Ana'); fill('reg-family', 'Reyes'); fill('reg-dui', '01234567-8');
+  fill('reg-birth', '1990-05-10'); fill('reg-sex', 'female'); fill('reg-phone', '7123-4567');
+  fill('reg-email', 'ana.reyes@ejemplo.test'); fill('reg-password', 'secreta123'); fill('reg-confirm', 'secreta123');
+  await ui.submit('Registrarme');
+  const call = requests.at(-1);
+  assert.ok(call, 'Solicitud enviada a submit_patient_registration');
+  assert.equal(call.p_facility, facility);
+  assert.equal(call.p_given_names, 'Ana');
+  assert.equal(call.p_family_names, 'Reyes');
+  assert.equal(call.p_birth_date, '1990-05-10');
+  assert.equal(call.p_sex, 'female');
+  assert.equal(call.p_dui, '01234567-8');
+  assert.equal(call.p_phone, '7123-4567');
+  assert.match(ui.app.textContent, /Solicitud enviada/);
+  console.log('OK Registro (session): signUp + submit_patient_registration con DUI, teléfono, fecha y sexo');
+}
+{
+  // Respaldo: si el signUp no entrega sesión, se inicia una antes de enviar.
+  const calls = [];
+  const transport = async (url, params) => {
+    calls.push(url.endsWith('/auth/v1/signup') ? 'signup' : url.includes('grant_type=password') ? 'signin' : url.endsWith('/submit_patient_registration') ? 'submit' : 'otro');
+    if (url.endsWith('/auth/v1/signup')) return { body: {} };
+    if (url.includes('grant_type=password')) return { body: { access_token: 'test', refresh_token: 'refresh', expires_in: 3600 } };
+    if (url.endsWith('/submit_patient_registration')) return { body: { id: '00000000-0000-4000-8000-000000000078', status: 'pending' } };
+  };
+  const ui = createApp(['patient'], { transport });
+  await new Promise(resolve => setImmediate(resolve));
+  await ui.click('Regístrate');
+  const fill = (id, value) => { ui.get(id).value = value; };
+  fill('reg-given', 'Luis'); fill('reg-family', 'Castro'); fill('reg-dui', '01234567-8');
+  fill('reg-birth', '1985-03-02'); fill('reg-sex', 'male'); fill('reg-phone', '7123-4567');
+  fill('reg-email', 'luis.castro@ejemplo.test'); fill('reg-password', 'secreta123'); fill('reg-confirm', 'secreta123');
+  await ui.submit('Registrarme');
+  assert.deepEqual(calls.filter(c => c !== 'otro'), ['signup', 'signin', 'submit'], 'signUp sin sesión -> signIn -> envío');
+  assert.match(ui.app.textContent, /Solicitud enviada/);
+  console.log('OK Registro (session): signUp sin sesión respalda con signIn antes de enviar');
 }

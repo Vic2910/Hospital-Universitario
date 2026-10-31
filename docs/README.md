@@ -52,3 +52,7 @@ No añadas contraseñas, tokens o secretos a esta carpeta. Las credenciales de p
 - [Campos de receta del Doctor iguales a la presentación del Paciente](CAMPOS_RECETA_DOCTOR_2026-10-30.md).
 
 - [Próxima cita, formulario único, preferencia y solicitudes Pendientes del Paciente; recepción de demostración](CITAS_SOLICITUDES_PACIENTE_2026-10-30.md).
+
+- [Conexión de Doctor/Paciente a Supabase y datos de ejemplo creados en la base](CONECTAR_SUPABASE_DATOS_DEMO_2026-10-31.md).
+
+- [Registro de pacientes conectado a Supabase (DUI y teléfono)](REGISTRO_REAL_SUPABASE_2026-10-31.md).

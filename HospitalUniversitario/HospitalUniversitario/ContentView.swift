@@ -3,7 +3,6 @@ import SwiftUI
 @MainActor
 struct ContentView: View {
     @StateObject private var store = HospitalStore()
-    @StateObject private var appointmentFlow = PatientAppointmentFlowStore()
     @StateObject private var labDesign = ClinicalLabDesignStore()
     @State private var showLabDesign = false
     @State private var email = ""
@@ -17,7 +16,7 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             if store.access == nil {
-                if showRegister { RegisterView(onBack: { showRegister = false }) }
+                if showRegister { RegisterView(store: store, onBack: { showRegister = false }) }
                 else { login }
             }
             else if store.selectedRole == nil { rolePicker }
@@ -35,7 +34,7 @@ struct ContentView: View {
             search = ""
             await store.refreshScreen()
         }
-        .onChange(of: store.selectedRole) { _, _ in showLabDesign = store.selectedRole == "doctor"; labDesign.reset(); appointmentFlow.reset() }
+        .onChange(of: store.selectedRole) { _, _ in showLabDesign = store.selectedRole == "doctor"; labDesign.reset() }
         .onChange(of: store.doctor?.workspace?.doctor_name) { _, name in
             if store.selectedRole == "doctor", let name { labDesign.doctorName = name }
         }
@@ -172,19 +171,17 @@ struct ContentView: View {
     @ViewBuilder private var liveContent: some View {
         if isDoctor, store.screenID == "prescriptions", let doctor = store.doctor, let modules = store.modules {
             DoctorPrescriptionView(doctor: doctor, model: modules, search: search, period: store.period, navigate: go)
-        } else if !isDoctor, ["request", "schedule"].contains(store.screenID) {
-            PatientAppointmentView(flow: appointmentFlow)
+        } else if !isDoctor, ["request", "schedule"].contains(store.screenID), let modules = store.modules {
+            PatientAppointmentRealView(model: modules, profile: store.profile)
         } else if !isDoctor, store.screenID == "appointments", let modules = store.modules {
-            PatientAppointmentsView(flow: appointmentFlow, modules: modules, profile: store.profile, patientID: store.access?.patient_id, search: search, period: store.period, navigate: go)
+            PatientAppointmentsView(modules: modules, profile: store.profile, patientID: store.access?.patient_id, search: search, period: store.period, navigate: go)
         } else if !isDoctor, store.screenID == "prescriptions", let modules = store.modules {
-            let useExamples = modules.page != nil && modules.items.isEmpty && !modules.loading && modules.error == nil
-            PatientPrescriptionsView(records: useExamples ? PatientPrescriptionRecord.examples : modules.items.map(PatientPrescriptionRecord.from),
-                demonstration: useExamples, search: search, loading: modules.loading, error: modules.error, hasMore: modules.page?.has_more == true,
+            PatientPrescriptionsView(records: modules.items.map(PatientPrescriptionRecord.from),
+                demonstration: false, search: search, loading: modules.loading, error: modules.error, hasMore: modules.page?.has_more == true,
                 retry: { Task { await modules.load("prescriptions") } }, loadMore: { Task { await modules.load("prescriptions", more: true) } })
         } else if !isDoctor, store.screenID == "history", let modules = store.modules {
-            let useExamples = modules.page != nil && modules.items.isEmpty && !modules.loading && modules.error == nil
-            PatientHistoryView(records: useExamples ? PatientHistoryRecord.examples : modules.items.map(PatientHistoryRecord.from),
-                demonstration: useExamples, search: search, loading: modules.loading, error: modules.error, hasMore: modules.page?.has_more == true,
+            PatientHistoryView(records: modules.items.map(PatientHistoryRecord.from),
+                demonstration: false, search: search, loading: modules.loading, error: modules.error, hasMore: modules.page?.has_more == true,
                 retry: { Task { await modules.load("history") } }, loadMore: { Task { await modules.load("history", more: true) } })
         } else if let modules = store.modules,
            ((!isDoctor && ["appointments", "request", "chart", "history", "prescriptions", "laboratory"].contains(store.screenID)) || store.screenID == "notifications") {
@@ -195,7 +192,7 @@ struct ContentView: View {
         } else {
             switch store.screenID {
             case "home": if isDoctor { home } else { patientDashboard }
-            case "schedule": PatientAppointmentView(flow: appointmentFlow)
+            case "request", "schedule": empty("Preparando la solicitud de atención…")
             case "more", "health": menu
             case "turns": if isDoctor { schedule } else { queue }
             case "rooms": rooms
@@ -210,14 +207,33 @@ struct ContentView: View {
     private func go(_ id: String) { guard !store.busy, store.doctor?.saving != true, store.modules?.saving != true else { return }; if id == "consultation", store.screenID != id, store.doctor?.selectedAppointmentID == nil { store.doctor?.day = Date() }; store.screenID = id; search = "" }
     private func matches(_ value: String) -> Bool { search.isEmpty || value.localizedCaseInsensitiveContains(search) }
 
-    /// Inicio del paciente: dashboard nuevo con saludo, fecha/cita y accesos rápidos.
-    /// El nombre real llegará con el modelo de paciente; por ahora usa el del store si existe.
+    /// Inicio del paciente: dashboard con saludo, fecha/cita real y accesos rápidos.
+    /// La próxima cita proviene del módulo `appointments` (cargado en `home`).
     private var patientDashboard: some View {
         PatientDashboardView(
-            nombrePaciente: store.name == "Bienvenido" ? "Gaby Diaz" : store.name,
-            proximaCita: nil,
+            nombrePaciente: store.name == "Bienvenido" ? "Paciente" : store.name,
+            proximaCita: nextPatientAppointment,
             navigate: go
         )
+    }
+
+    /// Próxima cita confirmada o programada del paciente, desde los ítems reales del módulo.
+    private var nextPatientAppointment: ProximaCita? {
+        guard let items = store.modules?.items else { return nil }
+        let now = Date()
+        guard let item = items.filter({ ["scheduled", "confirmed"].contains($0.status) && (DoctorDate.parse($0.event_at) ?? .distantPast) >= now })
+            .sorted(by: { (DoctorDate.parse($0.event_at) ?? .distantPast) < (DoctorDate.parse($1.event_at) ?? .distantPast) }).first,
+              let date = DoctorDate.parse(item.event_at) else { return nil }
+        func field(_ label: String) -> String? { item.details.first { $0.label.localizedCaseInsensitiveCompare(label) == .orderedSame }?.value }
+        let dayFormatter = DateFormatter()
+        dayFormatter.locale = Locale(identifier: "es_SV")
+        dayFormatter.dateFormat = "d 'de' MMMM"
+        let timeFormatter = DateFormatter()
+        timeFormatter.locale = Locale(identifier: "es_SV")
+        timeFormatter.timeStyle = .short
+        timeFormatter.dateStyle = .none
+        return ProximaCita(dia: dayFormatter.string(from: date), hora: timeFormatter.string(from: date),
+                           medico: field("Medico") ?? item.title)
     }
 
     private var home: some View {
@@ -342,6 +358,9 @@ struct ContentView: View {
             }
             HospitalCard {
                 DoctorConsultationField(label: "Apellido", value: family.isEmpty ? "No disponible" : family)
+            }
+            if let modules = store.modules, modules.page != nil || modules.loading || modules.error != nil {
+                MobileModuleView(model: modules, module: "profile", role: isDoctor ? "doctor" : "patient", search: search, period: store.period, navigate: go)
             }
         }
     }

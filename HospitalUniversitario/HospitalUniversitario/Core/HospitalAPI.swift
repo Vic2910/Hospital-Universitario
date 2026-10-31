@@ -64,6 +64,23 @@ struct BackendFailure: Error, LocalizedError {
     }
 }
 
+/// Datos de identidad que el paciente envía al registrar su cuenta.
+///
+/// Coinciden con los parámetros de `public.submit_patient_registration`. El
+/// DUI usa el formato salvadoreño `00000000-0`; el teléfono, `0000-0000`.
+struct RegistrationDraft {
+    let facility: UUID
+    let given: String
+    let family: String
+    let birthDate: String   // yyyy-MM-dd
+    let sex: String         // female | male | intersex | unknown
+    let dui: String         // 00000000-0
+    let phone: String       // 0000-0000
+
+    /// Única sede activa del hospital (hospital.facilities, código CENTRAL).
+    static let centralFacility = UUID(uuidString: "3D101C8A-8974-4E2C-9144-1E777F632589")!
+}
+
 @MainActor
 final class HospitalAPI {
     let core: SharedCore
@@ -107,6 +124,34 @@ final class HospitalAPI {
     func signIn(email: String, password: String) async throws {
         _ = try await client.auth.signIn(email: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
         RefreshTokenStore.clear()
+    }
+
+    /// Crea la cuenta de autenticación del paciente. Devuelve `true` si el
+    /// signUp ya entregó una sesión usable (confirmación de correo desactivada
+    /// en el proyecto); `false` si el servidor no devolvió sesión y habrá que
+    /// iniciar sesión antes de enviar la solicitud de registro.
+    @discardableResult
+    func signUp(email: String, password: String) async throws -> Bool {
+        _ = try await client.auth.signUp(email: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
+        RefreshTokenStore.clear()
+        return (try? await client.auth.session) != nil
+    }
+
+    /// Envía la solicitud de registro (con DUI y teléfono) a la base de datos
+    /// mediante `public.submit_patient_registration`. Requiere una sesión
+    /// autenticada con el correo confirmado y un perfil todavía `pending`.
+    func submitPatientRegistration(_ draft: RegistrationDraft) async throws {
+        let parameters: [String: Any] = [
+            "p_facility": draft.facility.uuidString,
+            "p_given_names": draft.given,
+            "p_family_names": draft.family,
+            "p_birth_date": draft.birthDate,
+            "p_sex": draft.sex,
+            "p_dui": draft.dui,
+            "p_phone": draft.phone
+        ]
+        let body = try JSONSerialization.data(withJSONObject: parameters)
+        _ = try await request("/rest/v1/rpc/submit_patient_registration", body: body, token: token())
     }
 
     func token() async throws -> String {

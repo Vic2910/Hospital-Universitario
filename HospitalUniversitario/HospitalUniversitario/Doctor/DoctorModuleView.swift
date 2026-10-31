@@ -117,8 +117,8 @@ struct DoctorModuleView: View {
     private func consultation(_ workspace: DoctorWorkspace) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             DoctorConsultationAgendaView(day: $model.day,
-                appointments: workspace.appointments.isEmpty ? DoctorConsultationDemo.appointments(day: model.day) : workspace.appointments,
-                search: search, period: workspace.appointments.isEmpty ? DoctorConsultationDemo.period : period, demonstration: workspace.appointments.isEmpty,
+                appointments: workspace.appointments,
+                search: search, period: period, demonstration: false,
                 select: { model.select($0) })
                 .onChange(of: model.day) { _, _ in model.select(nil); Task { await model.refresh() } }
             if !workspace.appointments.isEmpty { patientPicker(workspace) }

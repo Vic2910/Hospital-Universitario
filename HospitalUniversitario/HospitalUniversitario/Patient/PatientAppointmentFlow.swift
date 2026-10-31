@@ -58,7 +58,6 @@ struct PatientAssignedAppointment: Identifiable {
     }
 }
 struct PatientAppointmentsView: View {
-    @ObservedObject var flow: PatientAppointmentFlowStore
     @ObservedObject var modules: MobileModuleViewModel
     let profile: UserProfile?
     let patientID: UUID?
@@ -66,9 +65,7 @@ struct PatientAppointmentsView: View {
     let period: (String) -> String
     let navigate: (String) -> Void
     @State private var showDetail = false
-    private var useExamples: Bool { modules.page != nil && modules.items.isEmpty && !modules.loading && modules.error == nil }
     private var next: PatientAssignedAppointment? {
-        if useExamples { return flow.appointments.filter { $0.date >= Date() }.sorted { $0.date < $1.date }.first }
         guard let item = modules.items.filter({ ["scheduled", "confirmed"].contains($0.status) && (DoctorDate.parse($0.event_at) ?? .distantPast) >= Date() }).sorted(by: { (DoctorDate.parse($0.event_at) ?? .distantPast) < (DoctorDate.parse($1.event_at) ?? .distantPast) }).first, let date = DoctorDate.parse(item.event_at) else { return nil }
         func field(_ label: String) -> String? { item.details.first { $0.label.localizedCaseInsensitiveCompare(label) == .orderedSame }?.value }
         let value = DoctorAppointment(id: item.id, patient_id: patientID ?? item.id, patient_name: profile?.fullName ?? "No hay datos reales", record_number: "No hay datos reales", phone: field("Teléfono") ?? profile?.contacts.first { $0.kind == "phone" }?.value, ticket_number: nil,
@@ -78,7 +75,7 @@ struct PatientAppointmentsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             if let next, showDetail {
-                DoctorConsultationTicketView(appointment: next.appointment, day: next.date, time: period(next.appointment.period), demonstration: useExamples, close: { showDetail = false }, embedded: true,
+                DoctorConsultationTicketView(appointment: next.appointment, day: next.date, time: period(next.appointment.period), demonstration: false, close: { showDetail = false }, embedded: true,
                     closeLabel: "Volver a Mis citas", context: [.init(label: "Especialidad", value: next.specialty), .init(label: "Médico", value: next.doctor), .init(label: "Consultorio", value: next.room), .init(label: "DUI", value: next.dui), .init(label: "Correo", value: next.email)])
             } else {
                 PatientFormCard(titulo: "Próxima cita", icono: "calendar") {
@@ -90,22 +87,10 @@ struct PatientAppointmentsView: View {
                         DoctorConsultationField(label: "Síntomas", value: DoctorConsultationFields.symptoms(next.appointment.symptoms))
                         Text(next.specialty).font(.subheadline.weight(.semibold)); Text(next.doctor).font(.footnote)
                         Text(next.room).font(.footnote); HospitalBadge(text: "Cita asignada")
-                        if useExamples { Text("Cita de ejemplo · Sin reserva real").font(.caption) }
                         Button("Ver detalle de la cita") { showDetail = true }.buttonStyle(.bordered)
                     } else { Text("Todavía no tienes una próxima cita asignada.").font(.footnote) }
                 }
                 Button("Solicitar atención") { navigate("request") }.buttonStyle(HospitalPrimaryButtonStyle())
-                PatientFormCard(titulo: "Mis solicitudes de ejemplo", icono: "clock") {
-                    Text("Recepción debe asignar la cita. La preferencia no confirma disponibilidad.").font(.caption).foregroundStyle(HospitalTheme.secondary)
-                    ForEach(flow.requests) { request in
-                        HospitalCard {
-                            Text(request.specialty).font(.subheadline.weight(.semibold)); HospitalBadge(text: request.state.label, warning: request.state == .pending)
-                            Text(request.reason).font(.footnote)
-                            Text("Solicitada: " + request.createdAt.formatted(date: .abbreviated, time: .shortened)).font(.caption)
-                            Text("Preferencia: \(request.preference) · \(request.preferredSlot)").font(.caption)
-                        }
-                    }
-                }
                 if !modules.items.isEmpty || modules.error != nil || modules.loading {
                     MobileModuleView(model: modules, module: "appointments", role: "patient", search: search, period: period, navigate: navigate)
                 }

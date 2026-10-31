@@ -15,6 +15,8 @@ final class MobileModuleViewModel: ObservableObject {
     @Published var to = Date()
     @Published var specialty: UUID?
     @Published var reason = ""
+    /// Síntomas elegidos por el paciente; se añaden al motivo porque `request_appointment` no tiene parámetro de síntomas.
+    @Published var symptoms: [String] = []
     @Published var preferredDay = Date()
     @Published var preferredFrom = Calendar.current.date(bySettingHour: 8, minute: 0, second: 0, of: Date()) ?? Date()
     @Published var preferredTo = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: Date()) ?? Date()
@@ -54,7 +56,7 @@ final class MobileModuleViewModel: ObservableObject {
         generation = UUID(); role = ""; module = ""; facility = nil; profileID = nil; patientID = nil
         page = nil; items = []; query = ""; filterDates = false
         loading = false; saving = false; error = nil; confirmation = nil
-        specialty = nil; reason = ""; phone = ""; emergencyGiven = ""; emergencyFamily = ""
+        specialty = nil; reason = ""; symptoms = []; phone = ""; emergencyGiven = ""; emergencyFamily = ""
         emergencyPhone = ""; relationship = ""; prescriptionLines = []
         requestKey = UUID(); prescriptionKey = UUID(); emergencyKey = UUID()
         prescriptionAppointment = nil
@@ -114,14 +116,17 @@ final class MobileModuleViewModel: ObservableObject {
 
     func requestAppointment() async {
         guard canRequest, let facility, let patientID else { return }
+        let base = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        let listed = symptoms.filter { !$0.isEmpty }.joined(separator: ", ")
+        let text = listed.isEmpty ? base : base + "\nSíntomas: " + listed
         let parameters: [String: DoctorJSON] = ["p_patient": .string(patientID.uuidString), "p_facility": .string(facility.uuidString),
             "p_specialty": specialty.map { .string($0.uuidString) } ?? .null,
-            "p_reason": .string(reason.trimmingCharacters(in: .whitespacesAndNewlines)),
+            "p_reason": .string(text),
             "p_date": .string(MobileFormatting.day(preferredDay)), "p_from": .string(MobileFormatting.time(preferredFrom)),
             "p_to": .string(MobileFormatting.time(preferredTo)), "p_request_key": .string(requestKey.uuidString)]
         if await mutate("Solicitud enviada. Recepción confirmará la disponibilidad.", operation: {
             try await self.repository.perform("request_appointment", parameters)
-        }) { requestKey = UUID(); reason = "" }
+        }) { requestKey = UUID(); reason = ""; symptoms = [] }
     }
 
     func cancel(_ item: MobileItem, reason: String) async {

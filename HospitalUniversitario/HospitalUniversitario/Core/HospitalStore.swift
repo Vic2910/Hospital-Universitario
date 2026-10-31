@@ -78,6 +78,36 @@ final class HospitalStore: ObservableObject {
         selectedRole = roles.count == 1 ? roles[0] : nil
     }
 
+    // MARK: - Registro de paciente
+
+    /// Crea la cuenta de autenticación durante el registro. Devuelve `true` si
+    /// el signUp ya entregó sesión usable; `false` si habrá que iniciar sesión
+    /// antes de enviar la solicitud. No toca `busy` ni `message`: la vista de
+    /// registro gestiona su propio estado.
+    func signUpForRegistration(email: String, password: String) async throws -> Bool {
+        guard let api else { throw HospitalError.message("No se pudo cargar la configuración.") }
+        return try await api.signUp(email: email, password: password)
+    }
+
+    /// Inicia sesión sin resolver accesos, para una cuenta cuyo correo ya fue
+    /// confirmado pero cuyo perfil sigue pendiente de revisión por el hospital.
+    func signInForRegistration(email: String, password: String) async throws {
+        guard let api else { throw HospitalError.message("No se pudo cargar la configuración.") }
+        try await api.signIn(email: email, password: password)
+    }
+
+    /// Envía la solicitud de registro (DUI y teléfono incluidos) a la base de datos.
+    func submitRegistration(_ draft: RegistrationDraft) async throws {
+        guard let api else { throw HospitalError.message("No se pudo cargar la configuración.") }
+        try await api.submitPatientRegistration(draft)
+    }
+
+    /// Descarta la sesión transitoria creada durante el registro, sin alterar
+    /// el estado publicado de la tienda principal.
+    func endRegistrationSession() async {
+        _ = await api?.signOut()
+    }
+
 
     func selectRole(_ role: String) {
         guard roles.contains(role), !busy else { return }
@@ -97,7 +127,11 @@ final class HospitalStore: ObservableObject {
             if let facility = fresh.roles.first(where: { $0.code == role })?.facility_id, let profile = fresh.profile {
                 modules?.configure(role: role, facility: facility, profile: profile.id, patient: fresh.patient_id)
             }
-            if role == "patient" && ["request", "schedule"].contains(screenID) { return }
+            if role == "patient" && ["request", "schedule"].contains(screenID) {
+                if profile == nil { profile = try await api.rpc("my_profile") }
+                await modules?.load("request")
+                return
+            }
             if (role == "patient" && ["appointments", "request", "chart", "history", "prescriptions", "laboratory", "notifications"].contains(screenID)) || screenID == "notifications" {
                 await modules?.load(screenID, more: more)
                 return
@@ -125,6 +159,7 @@ final class HospitalStore: ObservableObject {
                 } catch let error as BackendFailure where error.status == 403 {
                     screenMessage = "Se requiere verificación adicional o autorización para consultar el resumen."
                 }
+                if role == "patient" { await modules?.load("appointments") }
             case "rooms":
                 if !more { rooms = []; roomsCursor = nil; roomsMore = false }
                 let page = try await api.rooms(cursor: more ? roomsCursor : nil)
@@ -149,6 +184,7 @@ final class HospitalStore: ObservableObject {
                 if let facility { overview = try await api.rpc("hospital_overview", parameters: ["p_facility": facility.uuidString]) }
             case "profile":
                 profile = try await api.rpc("my_profile")
+                await modules?.load("profile")
             default: break
             }
         } catch {

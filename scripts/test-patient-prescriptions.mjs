@@ -5,7 +5,9 @@ const open=async ui=>ui.click(ui.app.all().find(node=>node.tagName==='button'&&n
 for(const mode of ['design','empty-session']){
  const ui=createApp(['patient']);await settle();if(mode==='design'){ui.get('design-patient').listeners.click();await settle();}else await ui.login();
  assert.equal(ui.app.all().some(node=>node.tagName==='button'&&node.children.some(child=>child.tagName==='strong'&&child.textContent==='Paciente')),false,'Card Paciente retirada');
- await open(ui);const cards=ui.app.all().filter(node=>node.className==='patient-rx-card');assert.equal(cards.length,2);assert.match(cards[0].textContent,/Pendiente/);assert.match(cards[1].textContent,/Retirada/);
+ await open(ui);
+ if(mode==='empty-session'){assert.equal(ui.app.all().filter(node=>node.className==='patient-rx-card').length,0);assert.match(ui.app.textContent,/No hay recetas para mostrar/);assert.equal(ui.app.textContent.includes('CLARITROMICINA'),false,'Sin ejemplos locales en sesión real vacía');console.log('OK Recetas empty-session: sin ejemplos locales; estado vacío explícito');continue;}
+ const cards=ui.app.all().filter(node=>node.className==='patient-rx-card');assert.equal(cards.length,2);assert.match(cards[0].textContent,/Pendiente/);assert.match(cards[1].textContent,/Retirada/);
  assert.ok(ui.app.textContent.indexOf('30 oct 2026')<ui.app.textContent.indexOf('1 oct 2026'));
  for(const text of ['CLARITROMICINA 500 MG / TABLETA','Dosis:','1 tableta','Cada:','12 horas','Vía:','Oral','Durante:','10 días','Cantidad:','20 tabletas','Observaciones:'])assert.ok(cards[1].textContent.includes(text),text);
  assert.match(ui.app.textContent,/Recetas de ejemplo/);assert.equal(ui.app.all().some(node=>['form','select','textarea'].includes(node.tagName)),false);

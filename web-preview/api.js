@@ -6,6 +6,8 @@
       this.status = status;
       this.code = code;
       if (code === 'PGRST202') this.message = 'No se pudo encontrar el servicio de este módulo. Actualiza la conexión.';
+      if (code === 'email_not_confirmed') this.message = 'Tu correo aún no está confirmado. Revisa tu bandeja de entrada.';
+      if (['user_already_exists', 'email_exists', 'user_already_registered'].includes(code)) this.message = 'Ya existe una cuenta con este correo. Inicia sesión o usa otro correo.';
       if (status === 409 || ['40001','23505','PT409'].includes(code)) this.message = 'El registro cambió o ya existe. Actualiza antes de continuar.';
       if (['22023','23514','PT400','PT422'].includes(code)) this.message = 'Revisa los datos y el estado de la atención antes de continuar.';
       if (status === 403) this.message = 'Tu cuenta no tiene acceso a esta operación. Revisa tu rol, permisos y vínculo con el registro solicitado.';
@@ -45,6 +47,26 @@
       const session = await this.request('/auth/v1/token?grant_type=password', { email: email.trim(), password });
       try { this.accept(session); }
       catch (error) { await this.request('/auth/v1/logout?scope=local', {}, session.access_token).catch(() => {}); throw error; }
+    }
+    // Crea la cuenta de autenticación. Devuelve true si el signUp ya entregó
+    // una sesión usable (confirmación de correo desactivada en el proyecto);
+    // false si habrá que iniciar sesión antes de enviar la solicitud.
+    async signUp(email, password) {
+      const result = await this.request('/auth/v1/signup', { email: email.trim(), password });
+      if (result && typeof result.access_token === 'string') {
+        try { this.accept(result); }
+        catch (error) { await this.request('/auth/v1/logout?scope=local', {}, result.access_token).catch(() => {}); throw error; }
+        return true;
+      }
+      return false;
+    }
+    // Envía la solicitud de registro (con DUI y teléfono) a la base de datos.
+    // Requiere sesión autenticada con el correo confirmado y perfil pending.
+    async submitPatientRegistration(draft) {
+      return this.request('/rest/v1/rpc/submit_patient_registration', {
+        p_facility: draft.facility, p_given_names: draft.given, p_family_names: draft.family,
+        p_birth_date: draft.birthDate, p_sex: draft.sex, p_dui: draft.dui, p_phone: draft.phone
+      }, await this.token());
     }
     async token() {
       if (this.session && this.expiry > Date.now()) return this.session.access_token;

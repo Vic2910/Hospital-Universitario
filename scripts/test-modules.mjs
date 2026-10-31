@@ -19,7 +19,7 @@ const patient = createApp(['patient']);
 await patient.login(); await patient.click('Mis citas'); await patient.click('Solicitar atención');
 assert.ok(patient.get('sched-submit'));
 assert.equal(patient.app.textContent.includes('Enviar solicitud'),false);
-assert.equal(patient.calls.some(call=>call.params?.p_module==='request'),false);
+assert.equal(patient.calls.some(call=>call.url.endsWith('/request_appointment')),false);
 console.log('OK Solicitar atención reutiliza el formulario único y no envía ejemplos a Supabase');
 
 let cancelled = false;

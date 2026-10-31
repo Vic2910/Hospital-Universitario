@@ -4,6 +4,7 @@
   const app = $('#app'), notice = $('#notice');
   let api, modules, doctorDashboard, doctorConsultations, labDesign, patientHistory, patientPrescriptions, appointmentFlow, catalog, fixtures, access = null, roles = [], role = null, page = 'home', search = '', busy = false, design = false;
   let profile = null, summary = null, overview = null, items = [], queue = [], cursor = null, more = false;
+  let homeAppointments = null;
   let screenNote = '';
   let registerOpen = false;
   let labConnected = false;
@@ -34,7 +35,7 @@
   }
   function matches(value) { return !search || value.toLocaleLowerCase('es').includes(search.toLocaleLowerCase('es')); }
   function definition() { return catalog?.[role]?.find(screen => screen.id === page); }
-  function clearData() { receptionPreview=false; appointmentFlow?.reset(); patientHistory?.clear(); labConnected = false; labDesign?.reset(); doctorConsultations?.clear(); doctorDashboard?.clear(); resetSchedule(); modules?.clear(); profile = summary = overview = null; items = []; queue = []; cursor = null; more = false; screenNote = ''; }
+  function clearData() { receptionPreview=false; appointmentFlow?.reset(); patientHistory?.clear(); labConnected = false; labDesign?.reset(); doctorConsultations?.clear(); doctorDashboard?.clear(); resetSchedule(); modules?.clear(); profile = summary = overview = null; homeAppointments = null; items = []; queue = []; cursor = null; more = false; screenNote = ''; }
   function reset() { access = null; roles = []; role = null; page = 'home'; registerOpen = false; clearData(); }
   async function run(action) {
     if (busy) return;
@@ -60,8 +61,8 @@
       access = current.access; roles = current.roles; screenNote = '';
       if (!profile) profile = await api.rpc('my_profile');
       const facility = access.roles.find(item => item.code === role)?.facility_id;
-      if (role==='patient'&&['request','schedule'].includes(page)) return;
-      if (page === 'profile') { profile = await api.rpc('my_profile'); return; }
+      if (role==='patient'&&['request','schedule'].includes(page)) { modules.configure(access,role,facility); await modules.load('request'); return; }
+      if (page === 'profile') { profile = await api.rpc('my_profile'); modules.configure(access,role,facility); await modules.load('profile'); return; }
       modules.configure(access,role,facility);
       if (role === 'doctor' && ['patients','chart','laboratory'].includes(page) && !labConnected) return;
       if (modules.supports(role,page)) { await modules.load(page,append); return; }
@@ -72,6 +73,9 @@
         if (facility) {
           try { summary = await api.rpc('my_activity_summary', { p_facility: facility, p_from: from.toISOString(), p_to: to.toISOString(), p_context: role === 'doctor' ? 'staff' : 'patient' }); }
           catch (error) { if (error.status !== 403) throw error; screenNote = 'Se requiere verificación adicional o autorización para consultar el resumen.'; }
+        }
+        if (role === 'patient' && facility) {
+          homeAppointments = await api.rpc('mobile_module', { p_role: 'patient', p_module: 'appointments', p_facility: facility, p_from: null, p_to: null, p_query: '', p_cursor: null, p_limit: 25 });
         }
       } else if (page === 'rooms' || page === 'turns') {
         if (!append) { items = []; queue = []; cursor = null; more = false; }
@@ -161,13 +165,37 @@
     view.append(card, switchRow, el('p', 'Tu perfil y tus permisos son asignados por el hospital.', 'auth-footer'));
     app.append(view);
   }
-  function registerProblem(values) {
-    if (!values['reg-given'] || values['reg-given'].length > 100) return 'Introduce tus nombres (máximo 100 caracteres).';
-    if (!values['reg-family'] || values['reg-family'].length > 100) return 'Introduce tus apellidos (máximo 100 caracteres).';
-    if (values['reg-dui'].replace(/\D/g, '').length !== 9) return 'El DUI debe contener 9 dígitos, por ejemplo 0123-45678.';
-    const age = Number(values['reg-age']); if (!Number.isInteger(age) || age < 1 || age > 120) return 'Introduce una edad entre 1 y 120 años.';
-    if (!/^[+]?[0-9() -]{7,25}$/.test(values['reg-phone'])) return 'Introduce un teléfono válido.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values['reg-email'])) return 'Introduce un correo electrónico válido.';
+  // Sede única activa del hospital (hospital.facilities, código CENTRAL).
+  const REGISTRATION_FACILITY = '3d101c8a-8974-4e2c-9144-1e777f632589';
+  function registrationDraft() {
+    return {
+      facility: REGISTRATION_FACILITY,
+      given: $('#reg-given').value.trim(),
+      family: $('#reg-family').value.trim(),
+      birthDate: $('#reg-birth').value,
+      sex: $('#reg-sex').value,
+      dui: $('#reg-dui').value.trim(),
+      phone: $('#reg-phone').value.trim()
+    };
+  }
+  function registerProblem() {
+    const given = $('#reg-given').value.trim(), family = $('#reg-family').value.trim();
+    const duiDigits = $('#reg-dui').value.replace(/\D/g, '');
+    const birthValue = $('#reg-birth').value;
+    const phoneDigits = $('#reg-phone').value.replace(/\D/g, '');
+    const email = $('#reg-email').value.trim();
+    if (!given || given.length > 100) return 'Introduce tus nombres (máximo 100 caracteres).';
+    if (!family || family.length > 100) return 'Introduce tus apellidos (máximo 100 caracteres).';
+    if (duiDigits.length !== 9) return 'El DUI debe contener 9 dígitos, por ejemplo 01234567-8.';
+    if (!birthValue) return 'Introduce tu fecha de nacimiento.';
+    const birth = new Date(birthValue + 'T00:00:00');
+    if (Number.isNaN(birth.getTime())) return 'Introduce una fecha de nacimiento válida.';
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (birth > today) return 'La fecha de nacimiento no puede ser futura.';
+    if (birth < new Date('1900-01-01T00:00:00')) return 'La fecha de nacimiento debe ser igual o posterior a 1900.';
+    if (!['female', 'male', 'intersex', 'unknown'].includes($('#reg-sex').value)) return 'Selecciona tu sexo administrativo.';
+    if (phoneDigits.length !== 8) return 'El teléfono debe contener 8 dígitos, por ejemplo 7123-4567.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Introduce un correo electrónico válido.';
     if ($('#reg-password').value.length < 8) return 'La contraseña debe tener al menos 8 caracteres.';
     if ($('#reg-confirm').value !== $('#reg-password').value) return 'La confirmación de contraseña no coincide.';
     return null;
@@ -175,48 +203,81 @@
   function renderRegister() {
     const view = el('section', null, 'auth-view');
     view.append(authHeader('Crear cuenta', 'Completa tus datos para solicitar tu acceso.'));
-    const card = el('div', null, 'auth-card');
+    const successText = 'Solicitud enviada. El hospital la revisará y, al aprobarla, activará tu cuenta y quedará vinculada a tu expediente.';
+
+    // --- Formulario ---
+    const formCard = el('div', null, 'auth-card');
     const form = el('form');
     for (const [id, label, type, placeholder, autocomplete] of [
       ['reg-given', 'Nombres', 'text', 'Tus nombres', 'given-name'],
       ['reg-family', 'Apellidos', 'text', 'Tus apellidos', 'family-name'],
-      ['reg-dui', 'DUI', 'text', '0000-00000', 'off'],
-      ['reg-age', 'Edad', 'number', 'Ejemplo: 34', 'off'],
-      ['reg-phone', 'Teléfono', 'tel', '0000-0000', 'tel'],
-      ['reg-email', 'Correo electrónico', 'email', 'nombre@correo.com', 'username']
+      ['reg-dui', 'DUI', 'text', '00000000-0', 'off']
     ]) {
       const field = authField(id, label, type, placeholder, autocomplete);
       if (id === 'reg-dui') field.querySelector('input').addEventListener('input', event => {
         const digits = event.target.value.replace(/\D/g, '').slice(0, 9);
-        event.target.value = digits.length > 4 ? digits.slice(0, 4) + '-' + digits.slice(4) : digits;
-      });
-      if (id === 'reg-age') field.querySelector('input').addEventListener('input', event => {
-        event.target.value = event.target.value.replace(/\D/g, '').slice(0, 3);
+        event.target.value = digits.length > 8 ? digits.slice(0, 8) + '-' + digits.slice(8) : digits;
       });
       form.append(field);
     }
+    form.append(authField('reg-birth', 'Fecha de nacimiento', 'date', '', 'bday'));
+    const sexWrap = el('div', null, 'auth-field');
+    const sexLabel = el('label', 'Sexo administrativo'); sexLabel.htmlFor = 'reg-sex';
+    const sexSelect = el('select'); sexSelect.id = 'reg-sex'; sexSelect.name = 'reg-sex'; sexSelect.disabled = busy;
+    for (const [value, label] of [['female', 'Femenino'], ['male', 'Masculino'], ['intersex', 'Intersex'], ['unknown', 'Desconocido']]) {
+      const option = el('option', label); option.value = value; sexSelect.append(option);
+    }
+    sexWrap.append(sexLabel, sexSelect);
+    form.append(sexWrap);
+    const phoneField = authField('reg-phone', 'Teléfono', 'tel', '0000-0000', 'tel');
+    phoneField.querySelector('input').addEventListener('input', event => {
+      const digits = event.target.value.replace(/\D/g, '').slice(0, 8);
+      event.target.value = digits.length > 4 ? digits.slice(0, 4) + '-' + digits.slice(4) : digits;
+    });
+    form.append(phoneField);
+    form.append(authField('reg-email', 'Correo electrónico', 'email', 'nombre@correo.com', 'username'));
     form.append(authField('reg-password', 'Contraseña', 'password', 'Contraseña', 'new-password', revealButton('reg-password')));
     form.append(authField('reg-confirm', 'Confirmar contraseña', 'password', 'Repite tu contraseña', 'new-password', revealButton('reg-confirm')));
     const problem = el('p', null, 'auth-error'); problem.hidden = true;
-    const done = el('p', null, 'auth-notice'); done.hidden = true;
-    form.append(el('p', 'El hospital crea y activa cada cuenta; recibirás la confirmación en tu correo electrónico.', 'auth-notice'), problem, done);
-    const submit = el('button', 'Registrarme', 'primary'); submit.type = 'submit'; submit.disabled = busy;
+    form.append(el('p', 'El hospital revisa y activa cada cuenta. Al enviar, crearás tu acceso y tu solicitud quedará en espera de aprobación.', 'auth-notice'), problem);
+    const submit = el('button', 'Registrarme', 'primary'); submit.type = 'submit';
     form.append(submit);
-    form.addEventListener('submit', event => {
-      event.preventDefault(); problem.hidden = true; done.hidden = true;
-      if (!form.reportValidity()) return;
-      const values = {};
-      for (const id of ['reg-given', 'reg-family', 'reg-dui', 'reg-age', 'reg-phone', 'reg-email']) values[id] = $('#' + id).value.trim();
-      const issue = registerProblem(values);
-      if (issue) { problem.textContent = issue; problem.hidden = false; return; }
-      done.textContent = 'Formulario de demostración: no se envía a la base de datos. El hospital creará y activará tu cuenta.';
-      done.hidden = false;
-    });
-    card.append(form);
-    const switchRow = el('div', null, 'auth-link-row');
-    switchRow.append(el('span', '¿Ya tienes cuenta?'), button('Inicia sesión', () => { registerOpen = false; render(); }, 'link-button'));
-    view.append(card, switchRow);
+    const formSwitch = el('div', null, 'auth-link-row');
+    formSwitch.append(el('span', '¿Ya tienes cuenta?'), button('Inicia sesión', () => { registerOpen = false; render(); }, 'link-button'));
+    formCard.append(form, formSwitch);
+    view.append(formCard);
     app.append(view);
+
+    const setBusy = state => { submit.disabled = state; };
+    function showSuccess() {
+      formCard.hidden = true;
+      const doneCard = el('div', null, 'auth-card');
+      doneCard.append(el('p', successText, 'auth-notice'),
+        button('Volver a iniciar sesión', () => { registerOpen = false; render(); }, 'primary'));
+      view.append(doneCard);
+    }
+    // Registro en un solo paso: signUp y envío de la solicitud. Si el signUp no
+    // entrega sesión, se intenta iniciar una vez como respaldo antes de enviar.
+    async function doSubmit() {
+      const issue = registerProblem();
+      if (issue) { problem.textContent = issue; problem.hidden = false; return; }
+      problem.hidden = true; setBusy(true);
+      try {
+        const hasSession = await api.signUp($('#reg-email').value.trim(), $('#reg-password').value);
+        if (!hasSession) await api.signIn($('#reg-email').value, $('#reg-password').value);
+        await api.submitPatientRegistration(registrationDraft());
+        await api.signOut();
+        showSuccess();
+      } catch (error) {
+        problem.textContent = error.message || 'No se pudo crear la cuenta. Inténtalo de nuevo.';
+        problem.hidden = false;
+      } finally { setBusy(false); }
+    }
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      if (!form.reportValidity() || submit.disabled) return;
+      doSubmit();
+    });
   }
   function renderRoles() {
     const view = el('section', null, 'role-picker'); view.append(el('h2', 'Selecciona tu perfil'));
@@ -267,18 +328,16 @@
     if(receptionPreview)return appointmentFlow.renderReception(content);
     if(role==='patient'&&['request','schedule'].includes(page))return scheduleView(content);
     if(role==='patient'&&page==='appointments'){
-      const demo=design||(!busy&&modules.data!=null&&modules.items.length===0);
-      return appointmentFlow.render(content,{appointments:demo?appointmentFlow.appointments:HospitalPatientAppointments.fromItems(modules.items,profile,formatConsultationTime),demonstration:demo,
+      return appointmentFlow.render(content,{appointments:design?appointmentFlow.appointments:HospitalPatientAppointments.fromItems(modules.items,profile,formatConsultationTime),demonstration:design,
+        requests:design?appointmentFlow.requests:null,
         renderConnected:!design&&(modules.items.length||!modules.data)?parent=>modules.render(parent,'appointments',search):null});
     }
     if(role === 'patient' && page === 'prescriptions') {
-      const useExamples=design||(!busy&&modules.data!=null&&modules.items.length===0);
-      return patientPrescriptions.render(content,{records:useExamples?HospitalPatientPrescriptions.examples:HospitalPatientPrescriptions.fromItems(modules.items),demonstration:useExamples,search,loading:busy,
+      return patientPrescriptions.render(content,{records:design?HospitalPatientPrescriptions.examples:HospitalPatientPrescriptions.fromItems(modules.items),demonstration:design,search,loading:busy,
         error:!design&&!busy&&!modules.data?'No pudimos cargar tus recetas. Intenta de nuevo.':null,hasMore:!design&&modules.data?.has_more,retry:()=>run(()=>load()),loadMore:()=>run(()=>modules.load('prescriptions',true))});
     }
     if(role === 'patient' && page === 'history') {
-      const useExamples = design || (!busy && modules.data != null && modules.items.length === 0);
-      return patientHistory.render(content,{records:useExamples?HospitalPatientHistory.examples:HospitalPatientHistory.fromItems(modules.items),demonstration:useExamples,search,loading:busy,
+      return patientHistory.render(content,{records:design?HospitalPatientHistory.examples:HospitalPatientHistory.fromItems(modules.items),demonstration:design,search,loading:busy,
         error:!design&&!busy&&!modules.data?'No pudimos cargar tu historial. Intenta de nuevo.':null,hasMore:!design&&modules.data?.has_more,
         retry:()=>run(()=>load()),loadMore:()=>run(()=>modules.load('history',true))});
     }
@@ -307,7 +366,14 @@
     if (page === 'more' || page === 'health') return menu(content);
     if (page === 'rooms') return rooms(content);
     if (page === 'turns') return role === 'doctor' ? schedule(content) : queueView(content);
-    if (page === 'profile') return profileView(content);
+    if (page === 'profile') {
+      profileView(content);
+      if (!design && modules.supports(role,'profile')) {
+        modules.configure(access,role,access.roles.find(item => item.code === role)?.facility_id);
+        modules.render(content,'profile',search);
+      }
+      return;
+    }
     if (page === 'information') return information(content);
     if (page === 'chart' && design) {
       const rows = fixtures[role].rows.chart;
@@ -328,8 +394,7 @@
     } else empty(content);
     if (!design && screen?.layout === 'chart') for (const section of screen.sections || []) content.append(row(section, 'Información protegida'));
     if (screen?.layout === 'prescriptions' && role === 'doctor') {
-      content.append(el('p', 'Verificar alergias y contraindicaciones', 'rose-note'));
-      const action = button('+ Nueva receta', () => {}, 'primary'); action.disabled = true; content.append(action);
+      content.append(el('p', 'La emisión de recetas requiere iniciar sesión y contar con una consulta abierta.', 'rose-note'));
     }
     if (screen?.layout === 'appointments' && role === 'patient') content.append(button('Agendar cita',()=>go('schedule'),'module-action'),button('Solicitar nueva cita', () => go('request'), 'primary'));
   }
@@ -363,7 +428,19 @@
       const sample = fixtures.patient.rows.appointments[0];
       card.append(el('p', '30 de octubre', 'dash-cita-day'), el('strong', '10:00', 'dash-time'), el('p', sample[1], 'dash-medico'));
     } else {
-      card.append(el('strong', 'No tienes citas programadas.', 'dash-empty'), el('p', 'Agenda una desde el acceso «Agendar cita».', 'dash-medico'));
+      const upcoming = (homeAppointments?.items || [])
+        .filter(item => ['scheduled','confirmed'].includes(item.status) && Date.parse(item.event_at) >= Date.now())
+        .sort((a,b) => Date.parse(a.event_at) - Date.parse(b.event_at))[0];
+      if (upcoming) {
+        const field = label => upcoming.details?.find(value => value.label.toLocaleLowerCase('es') === label.toLocaleLowerCase('es'))?.value;
+        let bounds = null; try { bounds = field('Horario') ? HospitalCore.periodBounds(field('Horario')) : null; } catch { bounds = null; }
+        const date = new Date(upcoming.event_at);
+        card.append(el('p', new Intl.DateTimeFormat('es-SV', { day: 'numeric', month: 'long' }).format(date), 'dash-cita-day'),
+          el('strong', bounds ? new Intl.DateTimeFormat('es-GT', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(bounds.start)) : 'Horario por confirmar', 'dash-time'),
+          el('p', field('Medico') || upcoming.title, 'dash-medico'));
+      } else {
+        card.append(el('strong', 'No tienes citas programadas.', 'dash-empty'), el('p', 'Solicita una atención desde «Solicitar atención».', 'dash-medico'));
+      }
     }
     content.append(card);
     heading(content, 'Accesos rápidos');
@@ -387,15 +464,17 @@
     { name: 'Cirujano', icon: '✛', slots: [{ day: 'Jueves', time: '10:00 am – 12:00 m' }, { day: 'Viernes', time: '8:00 am – 9:30 am' }] },
     { name: 'Pediatra', icon: '👶', slots: [{ day: 'Mañana', time: '11:00 am – 1:00 pm' }, { day: 'Sábado', time: '9:00 am – 11:00 am' }] }
   ];
-  // Paciente de prueba precargado: la base de datos aún no devuelve estos datos.
+  // Paciente de prueba precargado: solo se usa en modo diseño; la sesión real usa la cuenta autenticada.
+  const dayKey = date => new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+  const tomorrowKey = () => { const date = new Date(); date.setDate(date.getDate() + 1); return dayKey(date); };
   const scheduleState = {
     fields: { nombres: 'Gaby', apellidos: 'Diaz', dui: '0123-45678', telefono: '7123-4567', correo: 'gaby.diaz@ejemplo.test' },
-    symptoms: new Set(), specialty: null, slot: null, reason: '', preference: '', prepared: false
+    symptoms: new Set(), specialty: null, slot: null, date: tomorrowKey(), reason: '', preference: '', prepared: false
   };
   function resetSchedule() {
     Object.assign(scheduleState, {
       fields: { nombres: 'Gaby', apellidos: 'Diaz', dui: '0123-45678', telefono: '7123-4567', correo: 'gaby.diaz@ejemplo.test' },
-      symptoms: new Set(), specialty: null, slot: null, reason: '', preference: '', prepared: false
+      symptoms: new Set(), specialty: null, slot: null, date: tomorrowKey(), reason: '', preference: '', prepared: false
     });
   }
   function scheduleFormCard(titleText, icon, body) {
@@ -448,7 +527,19 @@
     container.append(grid);
   }
   function paintFeedback(content) {
-    if (!scheduleState.prepared || !scheduleState.specialty || !scheduleState.slot) return;
+    if (!scheduleState.prepared) return;
+    if (!design) {
+      if (!scheduleState.specialty || !['Mañana','Tarde'].includes(scheduleState.preference) || !/^\d{4}-\d{2}-\d{2}$/.test(scheduleState.date)) return;
+      const note = el('article', null, 'sched-success');
+      note.id = 'sched-feedback'; note.setAttribute('role', 'status');
+      const text = el('div', null, 'sched-success-text');
+      text.append(el('strong', 'Solicitud enviada'), el('p', scheduleState.specialty.name + ' · ' + scheduleState.date + ' · ' + scheduleState.preference),
+        el('p', 'Recepción confirmará la fecha y hora de tu atención.'));
+      note.append(el('span', '✓', 'sched-success-icon'), text);
+      content.append(note);
+      return;
+    }
+    if (!scheduleState.specialty || !scheduleState.slot) return;
     const note = el('article', null, 'sched-success');
     note.id = 'sched-feedback'; note.setAttribute('role', 'status');
     const text = el('div', null, 'sched-success-text');
@@ -457,13 +548,28 @@
     note.append(el('span', '✓', 'sched-success-icon'), text);
     content.append(note);
   }
+  function schedulePatientCard() {
+    const wrap = el('div', null, 'sched-fields');
+    const person = profile?.person;
+    const phone = (profile?.contacts || []).find(item => item.kind === 'phone' && item.is_primary)?.value
+      || (profile?.contacts || []).find(item => item.kind === 'phone')?.value || '';
+    const name = [person?.given_names, person?.family_names].filter(Boolean).join(' ');
+    wrap.append(el('p', 'Datos de tu perfil del hospital. Para actualizarlos usa «Perfil».', 'sched-hint'));
+    for (const [label, value] of [['Nombres y apellidos', name], ['Correo electrónico', profile?.auth_email || ''], ['Teléfono', phone]]) {
+      const field = el('div', null, 'sched-field');
+      field.append(el('span', label), el('strong', value || 'No registrado'));
+      wrap.append(field);
+    }
+    return scheduleFormCard('Datos del paciente', '👤', wrap);
+  }
   function scheduleView(content) {
+    const real = !design;
     const intro = el('article', null, 'sched-intro');
     intro.append(el('span', 'TU SALUD, A TU TIEMPO', 'sched-eyebrow'), el('h2', 'Preparemos tu próxima cita'),
       el('p', 'Completa tus datos, cuéntanos cómo te sientes y elige tu atención.'),
-      el('small', 'Paciente y horarios de prueba · No se envía al hospital'));
+      el('small', real ? 'La solicitud se envía a la central de citas del hospital.' : 'Paciente y horarios de prueba · No se envía al hospital'));
     content.append(intro);
-    content.append(scheduleFormCard('Datos del paciente', '👤', (() => {
+    content.append(real ? schedulePatientCard() : scheduleFormCard('Datos del paciente', '👤', (() => {
       const wrap = el('div', null, 'sched-fields');
       wrap.append(el('p', 'Datos de prueba. Puedes editarlos para agendar para otra persona.', 'sched-hint'));
       wrap.append(scheduleField('Nombres', 'nombres', 'Nombres'), scheduleField('Apellidos', 'apellidos', 'Apellidos'),
@@ -473,7 +579,7 @@
     })()));
     content.append(scheduleFormCard('Síntomas frecuentes', '♡', (() => {
       const wrap = el('div', null, 'sched-wrap');
-      wrap.append(el('p', 'Selecciona lo que te aplica. Puedes elegir varios.', 'sched-hint'));
+      wrap.append(el('p', real ? 'Se añadirán al motivo de la consulta. Puedes elegir varios.' : 'Selecciona lo que te aplica. Puedes elegir varios.', 'sched-hint'));
       const grid = el('div', null, 'sched-grid');
       for (const symptom of [...symptomList, noneSymptom]) {
         const active = scheduleState.symptoms.has(symptom);
@@ -496,8 +602,9 @@
     content.append(scheduleFormCard('Tipo de doctor', '✚', (() => {
       const wrap = el('div', null, 'sched-wrap');
       const grid = el('div', null, 'sched-grid');
-      for (const specialty of specialtyList) {
-        const active = scheduleState.specialty === specialty;
+      const list = real ? (modules.data?.options || []).filter(item => item.kind === 'specialty').map(item => ({ id: item.id, name: item.name, icon: '✚', slots: [] })) : specialtyList;
+      for (const specialty of list) {
+        const active = real ? scheduleState.specialty?.id === specialty.id : scheduleState.specialty === specialty;
         const node = button(null, () => {
           scheduleState.prepared = false;
           if (active) { scheduleState.specialty = null; scheduleState.slot = null; }
@@ -505,36 +612,95 @@
           repaintSchedule();
         }, active ? 'sched-chip is-selected' : 'sched-chip');
         node.setAttribute('aria-pressed', String(active));
-        node.setAttribute('data-choice', 'specialty-' + specialtyList.indexOf(specialty));
+        node.setAttribute('data-choice', 'specialty-' + list.indexOf(specialty));
         node.append(el('span', specialty.icon), el('span', specialty.name));
         grid.append(node);
       }
       wrap.append(grid);
-      const slots = el('div', null, 'sched-slots');
-      paintSlots(slots);
-      wrap.append(slots);
+      if (real && !list.length) wrap.append(el('p', 'No hay especialidades publicadas por el hospital.', 'sched-hint'));
+      if (!real) {
+        const slots = el('div', null, 'sched-slots');
+        paintSlots(slots);
+        wrap.append(slots);
+      }
       return wrap;
     })()));
+    if (real) {
+      content.append(scheduleFormCard('Fecha preferida', '📅', (() => {
+        const wrap = el('div', null, 'sched-fields');
+        const label = el('label', 'Fecha de la atención', 'doctor-field'), input = el('input');
+        input.type = 'date'; input.value = scheduleState.date; input.min = tomorrowKey();
+        input.setAttribute('aria-label', 'Fecha preferida');
+        input.addEventListener('change', () => { scheduleState.date = input.value; invalidateSchedule(); updateScheduleButton($('#screen-content')); });
+        label.append(input);
+        wrap.append(label, el('p', 'La fecha es una preferencia; recepción confirmará la disponibilidad.', 'sched-hint'));
+        return wrap;
+      })()));
+    }
     const preferenceCard=scheduleFormCard('Preferencia de horario','☀',(()=>{
       const label=el('label','Preferencia de horario','doctor-field'),select=el('select');select.setAttribute('aria-label','Preferencia de horario');
       for(const value of ['', 'Mañana','Tarde']){const option=el('option',value||'Seleccionar');option.value=value;select.append(option);}select.value=scheduleState.preference;
-      select.addEventListener('change',()=>{scheduleState.preference=select.value;invalidateSchedule();updateScheduleButton(content);});label.append(select);return label;
+      select.addEventListener('change',()=>{scheduleState.preference=select.value;invalidateSchedule();updateScheduleButton($('#screen-content'));});label.append(select);
+      if(real)label.append(el('small','Mañana equivale a 08:00–12:00 y Tarde a 13:00–17:00; la hora exacta la confirma recepción.','sched-hint'));
+      return label;
     })());content.append(preferenceCard);
     const summary = el('article', null, 'sched-summary');
-    summary.append(el('strong', 'Tu selección'), el('p', scheduleState.specialty && scheduleState.slot
-      ? scheduleState.specialty.name + ' · ' + scheduleState.slot.day + ' · ' + scheduleState.slot.time
-      : 'Elige una especialidad y un horario para continuar.'),
-      el('small', 'Recepción asignará la cita. Completa todos los campos. DUI: 0000-00000; teléfono: 0000-0000; correo válido.'));
+    summary.append(el('strong', 'Tu selección'), el('p', real
+      ? (scheduleState.specialty ? scheduleState.specialty.name + ' · ' + (scheduleState.date || 'Fecha por definir') + ' · ' + (scheduleState.preference || 'Preferencia por definir') : 'Elige una especialidad, una fecha y una preferencia horaria para continuar.')
+      : (scheduleState.specialty && scheduleState.slot
+        ? scheduleState.specialty.name + ' · ' + scheduleState.slot.day + ' · ' + scheduleState.slot.time
+        : 'Elige una especialidad y un horario para continuar.')),
+      el('small', real
+        ? 'La solicitud queda pendiente de confirmación por la central de citas.'
+        : 'Recepción asignará la cita. Completa todos los campos. DUI: 0000-00000; teléfono: 0000-0000; correo válido.'));
     content.append(summary);
     paintFeedback(content);
     const submit = button('Solicitar atención', () => { if (!scheduleCanSubmit() || scheduleState.prepared) return;
-      const saved=appointmentFlow.submit({id:crypto.randomUUID(),fields:scheduleState.fields,specialty:scheduleState.specialty.name,reason:scheduleState.reason,symptoms:[...scheduleState.symptoms],preference:scheduleState.preference,preferredSlot:scheduleState.slot.day+' · '+scheduleState.slot.time});
-      if(saved){scheduleState.prepared = true; repaintSchedule();} }, 'primary sched-submit');
+      if (real) {
+        run(async () => {
+          const facility = access.roles.find(item => item.code === role)?.facility_id;
+          const symptoms = [...scheduleState.symptoms].filter(value => value !== noneSymptom);
+          const reason = symptoms.length ? scheduleState.reason.trim() + '\nSíntomas: ' + symptoms.join(', ') : scheduleState.reason.trim();
+          await api.rpc('request_appointment', {
+            p_patient: access.patient_id, p_facility: facility, p_specialty: scheduleState.specialty.id,
+            p_reason: reason, p_date: scheduleState.date,
+            p_from: scheduleState.preference === 'Tarde' ? '13:00' : '08:00',
+            p_to: scheduleState.preference === 'Tarde' ? '17:00' : '12:00',
+            p_request_key: crypto.randomUUID()
+          });
+          scheduleState.prepared = true;
+          await modules.load('request');
+        });
+      } else {
+        const saved=appointmentFlow.submit({id:crypto.randomUUID(),fields:scheduleState.fields,specialty:scheduleState.specialty.name,reason:scheduleState.reason,symptoms:[...scheduleState.symptoms],preference:scheduleState.preference,preferredSlot:scheduleState.slot.day+' · '+scheduleState.slot.time});
+        if(saved){scheduleState.prepared = true; repaintSchedule();}
+      } }, 'primary sched-submit');
     submit.id = 'sched-submit';
     submit.disabled = !scheduleCanSubmit() || scheduleState.prepared;
     content.append(submit);
+    if (real) {
+      const queue = el('article', null, 'sched-card');
+      queue.append(el('h2', 'Mis solicitudes', 'section-title'));
+      const requests = modules.items || [];
+      if (!requests.length) queue.append(el('p', 'Todavía no tienes solicitudes registradas.', 'sched-hint'));
+      for (const item of requests) {
+        const state = item.status === 'approved' ? 'Cita asignada' : item.status === 'rejected' ? 'Rechazada' : item.status === 'cancelled' ? 'Cancelada' : 'Pendiente';
+        const card = el('article', null, 'doctor-visit');
+        card.append(el('strong', item.title), el('span', state, 'clinical-lab-state ' + (item.status === 'pending' ? 'is-pending' : 'is-completed')),
+          el('p', item.subtitle || 'Sin motivo registrado'));
+        for (const detail of item.details || []) card.append(el('small', detail.label + ': ' + detail.value));
+        queue.append(card);
+      }
+      content.append(queue);
+    }
   }
   function scheduleCanSubmit() {
+    if (!design) {
+      const facility = access?.roles?.find(item => item.code === role)?.facility_id;
+      return !busy && !!access?.patient_id && !!facility && !!scheduleState.specialty
+        && /^\d{4}-\d{2}-\d{2}$/.test(scheduleState.date || '') && scheduleState.date >= tomorrowKey()
+        && ['Mañana','Tarde'].includes(scheduleState.preference) && scheduleState.reason.trim().length > 0;
+    }
     const f = scheduleState.fields;
     return ['Mañana','Tarde'].includes(scheduleState.preference) && !!scheduleState.specialty && !!scheduleState.slot && scheduleState.reason.trim().length > 0
       && !!f.nombres.trim() && !!f.apellidos.trim() && /^\d{4}-\d{5}$/.test(f.dui.trim())
@@ -658,8 +824,7 @@
     doctorDashboard = new HospitalDoctorDashboard({el,button,go,run,busy:() => busy});
     modules = new HospitalModules(api,{el,button,row,run,message,go,period:formatPeriod,busy:() => busy,
       doctorConsultations:(parent,module) => {
-        const demo = module.workspace.appointments.length === 0;
-        doctorConsultations.render(parent,{day:module.day,appointments:demo ? HospitalDoctorConsultations.samples(module.day) : module.workspace.appointments,demo,search,period:formatConsultationTime,
+        doctorConsultations.render(parent,{day:module.day,appointments:module.workspace.appointments,demo:false,search,period:formatConsultationTime,
           onDay:day => { module.day = day; module.select(''); module.workspace = null; run(() => module.load('consultation')); },
           onSelect:id => { module.select(id); run(() => module.loadChart()); }});
       },

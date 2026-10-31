@@ -26,7 +26,210 @@ enum PatientTestRecord {
     static let correo = "gaby.diaz@ejemplo.test"
 }
 
-/// Pantalla de Agendar cita: datos del paciente editables, síntomas frecuentes,
+/// Solicitud de atención conectada a Supabase.
+/// Usa el catálogo de especialidades publicado por el hospital (`mobile_module('request')`),
+/// los datos del perfil en solo lectura y envía la solicitud con `request_appointment`.
+/// La fecha y la preferencia (Mañana 08:00–12:00 / Tarde 13:00–17:00) son preferencias:
+/// la disponibilidad exacta la confirma recepción.
+struct PatientAppointmentRealView: View {
+    @ObservedObject var model: MobileModuleViewModel
+    let profile: UserProfile?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var sintomas: Set<String> = []
+    @State private var preference = ""
+
+    static let sintomasComunes = ["Sangrado", "Tos", "Hueso roto", "Fiebre", "Dolor de cabeza",
+                                  "Náuseas", "Falta de aire", "Dolor abdominal", "Mareo", "Dolor articular"]
+    static let ninguno = "Ninguno"
+
+    private static var manana: Date {
+        Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: Date())) ?? Date()
+    }
+
+    private var catalogo: [MobileOption] { (model.page?.options ?? []).filter { $0.kind == "specialty" } }
+
+    /// Validación del modo real: especialidad del catálogo, fecha desde mañana, preferencia y motivo.
+    private var puedeAgendar: Bool {
+        !model.saving && model.specialty != nil
+            && MobileFormatting.day(model.preferredDay) >= MobileFormatting.day(Self.manana)
+            && ["Mañana", "Tarde"].contains(preference)
+            && !model.reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Traduce la preferencia a la franja horaria que espera `request_appointment`.
+    private func aplicarPreferencia() {
+        let day = model.preferredDay
+        if preference == "Mañana" {
+            model.preferredFrom = Calendar.current.date(bySettingHour: 8, minute: 0, second: 0, of: day) ?? model.preferredFrom
+            model.preferredTo = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: day) ?? model.preferredTo
+        } else if preference == "Tarde" {
+            model.preferredFrom = Calendar.current.date(bySettingHour: 13, minute: 0, second: 0, of: day) ?? model.preferredFrom
+            model.preferredTo = Calendar.current.date(bySettingHour: 17, minute: 0, second: 0, of: day) ?? model.preferredTo
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("TU SALUD, A TU TIEMPO").font(.system(size: 10, weight: .bold)).tracking(1.4)
+                Text("Preparemos tu próxima cita").font(.system(size: 24, weight: .bold))
+                Text("Completa tus datos, cuéntanos cómo te sientes y elige tu atención.").font(.system(size: 13))
+                Text("La solicitud se envía a la central de citas del hospital.").font(.system(size: 10))
+            }
+            .foregroundStyle(.white)
+            .padding(22).frame(maxWidth: .infinity, alignment: .leading)
+            .background(LinearGradient.vinoDestacado, in: RoundedRectangle(cornerRadius: 22))
+
+            PatientFormCard(titulo: "Datos del paciente", icono: "person") {
+                Text("Datos de tu perfil del hospital. Para actualizarlos usa «Perfil».")
+                    .font(.footnote).foregroundStyle(HospitalTheme.secondary)
+                DoctorConsultationField(label: "Nombres y apellidos", value: nombreReal)
+                DoctorConsultationField(label: "Correo electrónico", value: profile?.auth_email ?? "No registrado")
+                DoctorConsultationField(label: "Teléfono", value: telefonoReal)
+            }
+
+            PatientFormCard(titulo: "Síntomas frecuentes", icono: "heart.text.square") {
+                Text("Se añadirán al motivo de la consulta. Puedes elegir varios.").font(.footnote).foregroundStyle(HospitalTheme.secondary)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 8)], spacing: 8) {
+                    ForEach(Self.sintomasComunes + [Self.ninguno], id: \.self) { sintoma in
+                        PatientSelectChip(texto: sintoma, seleccionado: sintomas.contains(sintoma)) {
+                            seleccionarSintoma(sintoma)
+                        }
+                    }
+                }
+            }
+
+            PatientFormCard(titulo: "Motivo de consulta", icono: "text.alignleft") {
+                TextEditor(text: $model.reason)
+                    .accessibilityLabel("Motivo de consulta")
+                    .font(.system(size: 14))
+                    .scrollContentBackground(.hidden)
+                    .padding(10)
+                    .frame(minHeight: 100)
+                    .background(HospitalTheme.background, in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(alignment: .topLeading) {
+                        if model.reason.isEmpty {
+                            Text("Describe con tus palabras lo que te pasa…")
+                                .font(.system(size: 14)).foregroundStyle(HospitalTheme.secondary)
+                                .padding(18).allowsHitTesting(false)
+                        }
+                    }
+            }
+
+            PatientFormCard(titulo: "Tipo de doctor", icono: "stethoscope") {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 8)], spacing: 8) {
+                    ForEach(catalogo) { item in
+                        PatientSelectChip(texto: item.name, seleccionado: model.specialty == item.id) {
+                            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                                model.specialty = model.specialty == item.id ? nil : item.id
+                            }
+                        }
+                    }
+                }
+                if catalogo.isEmpty {
+                    Text("No hay especialidades publicadas por el hospital.")
+                        .font(.footnote).foregroundStyle(HospitalTheme.secondary)
+                } else {
+                    Text("La disponibilidad exacta la confirma recepción.").font(.caption).foregroundStyle(HospitalTheme.secondary)
+                }
+            }
+
+            PatientFormCard(titulo: "Fecha preferida", icono: "calendar") {
+                DatePicker("Fecha de la atención", selection: $model.preferredDay, in: Self.manana..., displayedComponents: .date)
+                    .tint(HospitalTheme.wine)
+                Text("La fecha es una preferencia; recepción confirmará la disponibilidad.")
+                    .font(.caption).foregroundStyle(HospitalTheme.secondary)
+            }
+
+            PatientFormCard(titulo: "Preferencia de horario", icono: "sun.max") {
+                Picker("Preferencia de horario", selection: $preference) {
+                    Text("Seleccionar").tag(""); Text("Mañana").tag("Mañana"); Text("Tarde").tag("Tarde")
+                }.pickerStyle(.segmented)
+                Text("Mañana equivale a 08:00–12:00 y Tarde a 13:00–17:00; la hora exacta la confirma recepción.")
+                    .font(.caption).foregroundStyle(HospitalTheme.secondary)
+            }
+
+            PatientFormCard(titulo: "Tu selección", icono: "calendar") {
+                Text(resumen).font(.subheadline)
+                Text("La solicitud queda pendiente de confirmación por la central de citas.")
+                    .font(.footnote).foregroundStyle(HospitalTheme.secondary)
+            }
+
+            if let confirmation = model.confirmation {
+                Text(confirmation).font(.footnote).foregroundStyle(HospitalTheme.wine)
+            }
+            if let error = model.error {
+                Text(error).font(.footnote).foregroundStyle(.red)
+            }
+
+            Button {
+                guard puedeAgendar else { return }
+                model.symptoms = sintomas.contains(Self.ninguno) ? [] : sintomas.sorted()
+                aplicarPreferencia()
+                Task { await model.requestAppointment() }
+            } label: { Text("Solicitar atención") }
+                .buttonStyle(HospitalPrimaryButtonStyle())
+                .disabled(!puedeAgendar)
+
+            PatientFormCard(titulo: "Mis solicitudes", icono: "clock") {
+                Text("Recepción debe asignar la cita. La preferencia no confirma disponibilidad.")
+                    .font(.caption).foregroundStyle(HospitalTheme.secondary)
+                if model.items.isEmpty {
+                    Text("Todavía no tienes solicitudes registradas.").font(.footnote).foregroundStyle(HospitalTheme.secondary)
+                }
+                ForEach(model.items) { item in
+                    HospitalCard {
+                        Text(item.title).font(.subheadline.weight(.semibold))
+                        HospitalBadge(text: MobileFormatting.status(item.status), warning: item.status == "pending")
+                        if let subtitle = item.subtitle { Text(subtitle).font(.footnote) }
+                        Text(DoctorDate.display(item.event_at)).font(.caption)
+                        DisclosureGroup("Ver detalle") {
+                            ForEach(Array(item.details.enumerated()), id: \.offset) { _, field in
+                                DoctorConsultationField(label: field.label, value: field.value)
+                            }
+                        }.font(.footnote)
+                    }
+                }
+            }
+        }
+        .onChange(of: preference) { _, _ in aplicarPreferencia() }
+        .onChange(of: model.preferredDay) { _, _ in aplicarPreferencia() }
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private var nombreReal: String {
+        let given = profile?.person?.given_names.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let family = profile?.person?.family_names.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let full = [given, family].filter { !$0.isEmpty }.joined(separator: " ")
+        return full.isEmpty ? "No hay datos reales" : full
+    }
+
+    private var telefonoReal: String {
+        let phone = profile?.contacts.first { $0.kind == "phone" }?.value ?? ""
+        return phone.isEmpty ? "No registrado" : phone
+    }
+
+    private var resumen: String {
+        guard let id = model.specialty, let nombre = catalogo.first(where: { $0.id == id })?.name else {
+            return "Elige una especialidad, una fecha y una preferencia horaria para continuar."
+        }
+        return "\(nombre) · \(MobileFormatting.day(model.preferredDay)) · \(preference.isEmpty ? "Preferencia por definir" : preference)"
+    }
+
+    /// Selección múltiple de síntomas; «Ninguno» excluye a los demás.
+    private func seleccionarSintoma(_ valor: String) {
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+            if valor == Self.ninguno {
+                sintomas = [Self.ninguno]
+            } else {
+                sintomas.remove(Self.ninguno)
+                if sintomas.contains(valor) { sintomas.remove(valor) } else { sintomas.insert(valor) }
+            }
+        }
+    }
+}
+
+/// Pantalla de Agendar cita en modo local: datos del paciente editables, síntomas frecuentes,
 /// motivo de consulta, especialidad y horarios de prueba.
 /// Es una vista de presentación: no escribe en la base de datos.
 struct PatientAppointmentView: View {
