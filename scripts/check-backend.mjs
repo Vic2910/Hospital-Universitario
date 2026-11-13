@@ -1,12 +1,17 @@
-// Read-only connectivity and authorization checks. No account creation or writes.
+// Read-only connectivity checks. Does not create accounts, patients or sessions.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-const config = JSON.parse(readFileSync(new URL('../HospitalUniversitario/HospitalUniversitario/Shared/contract.json', import.meta.url)));
-for (const name of ['public_facilities', 'my_access', 'read_resource', 'my_profile', 'my_queue_status', 'my_activity_summary', 'mobile_module', 'doctor_workspace', 'mobile_issue_prescription']) {
-  const uuid = '00000000-0000-4000-8000-000000000001';
-  const body = name === 'read_resource' ? { p_resource: 'rooms' } : name === 'my_queue_status' ? { p_ticket: uuid } : name === 'my_activity_summary' ? { p_facility: uuid, p_from:'2026-10-23T00:00:00Z', p_to:'2026-10-24T00:00:00Z', p_context:'patient' } : name === 'mobile_module' ? {p_role:'patient',p_module:'appointments',p_facility:uuid} : name === 'doctor_workspace' ? {p_facility:uuid,p_from:'2026-10-28T00:00:00Z',p_to:'2026-10-29T00:00:00Z'} : name === 'mobile_issue_prescription' ? {p_encounter:uuid,p_items:[{}],p_request_key:uuid} : {};
-  const response = await fetch(`${config.url}/rest/v1/rpc/${name}`, { method: 'POST', headers: { apikey: config.publishableKey, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  if (name === 'public_facilities') assert.equal(response.status, 200);
-  else assert.ok([401, 403].includes(response.status), `${name}: expected access denied, got ${response.status}`);
-  console.log(`${name}: HTTP ${response.status} (esperado)`);
+import {readFileSync} from 'node:fs';
+const config=JSON.parse(readFileSync(new URL('../HospitalUniversitario/HospitalUniversitario/Shared/contract.json',import.meta.url)));
+assert.equal(new URL(config.url).host,'uvebpsbbwofthucghccc.supabase.co');
+const settings=await fetch(config.url+'/auth/v1/settings',{headers:{apikey:config.publishableKey},signal:AbortSignal.timeout(25000)});
+assert.equal(settings.status,200);
+const value=await settings.json();
+assert.equal(value.disable_signup,false,'El registro público debe estar habilitado');
+assert.equal(value.mailer_autoconfirm,true,'El flujo vigente no debe exigir confirmación de correo');
+console.log('OK Hospital Móviles: Auth responde con la clave pública. Registro habilitado:',!value.disable_signup,'Confirmación automática:',value.mailer_autoconfirm);
+for(const table of ['profiles','patients','user_roles']){
+ const response=await fetch(config.url+'/rest/v1/'+table+'?select=*&limit=0',{headers:{apikey:config.publishableKey},signal:AbortSignal.timeout(25000)});
+ assert.ok([401,403].includes(response.status),'Anonymous access must be denied: '+table+' ('+response.status+')');
+ console.log('OK Sin sesión: acceso a '+table+' rechazado ('+response.status+')');
 }
+console.log('Solo conectividad y rechazo anónimo; registro real y aislamiento entre usuarios requieren recorrido autenticado.');

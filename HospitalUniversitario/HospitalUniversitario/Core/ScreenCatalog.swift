@@ -28,20 +28,6 @@ struct ActivitySummary: Decodable {
     let scheduled_appointments: Int?
     let waiting_patients: Int?
     let pending_prescriptions: Int?
-    let tickets: [SummaryTicket]?
-    struct SummaryTicket: Decodable { let id: UUID; let number: Int; let status: String }
-}
-
-struct QueueStatus: Decodable {
-    struct ConsultationRoom: Decodable { let id: UUID; let name: String }
-    let ticket_id: UUID
-    let number: Int
-    let status: String
-    let people_ahead: Int
-    let display_number: String?
-    let serving_number: String?
-    let consultation_room: ConsultationRoom?
-    let estimated_wait_minutes: Int?
 }
 
 struct UserProfile: Decodable {
@@ -61,8 +47,8 @@ struct UserProfile: Decodable {
 struct HospitalOverview: Decodable {
     struct Notice: Decodable, Identifiable { let id: UUID; let title: String; let body: String }
     struct OnDuty: Decodable { let name: String; let specialty: String; let department: String }
-    let capacity: Int
-    let occupied: Int
+    let capacity: Int?
+    let occupied: Int?
     let information: [Notice]
     let on_duty: [OnDuty]
 }

@@ -1,116 +1,75 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { runInNewContext } from 'node:vm';
-const root = new URL('../', import.meta.url);
-const contract = JSON.parse(readFileSync(new URL('HospitalUniversitario/HospitalUniversitario/Shared/contract.json', root)));
-const context = { Date, console, AbortSignal };
-runInNewContext(readFileSync(new URL('HospitalUniversitario/HospitalUniversitario/Shared/hospital-core.js', root), 'utf8'), context);
-runInNewContext(readFileSync(new URL('web-preview/api.js', root), 'utf8'), context);
-const core = context.HospitalCore;
-const uuid = '00000000-0000-4000-8000-000000000001';
-const plain = value => JSON.parse(JSON.stringify(value));
-const access = { profile: { id: uuid, status: 'active', preferred_name: 'Prueba' }, roles: [{ code: 'doctor', facility_id: uuid }], staff_id: uuid, patient_id: null };
-let count = 0;
-async function test(name, action) { await action(); count++; console.log(`OK ${name}`); }
-function storage(initial = {}) {
-  const values = new Map(Object.entries(initial));
-  return { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+const read=name=>readFileSync(new URL('../'+name,import.meta.url),'utf8');
+const contract=JSON.parse(read('HospitalUniversitario/HospitalUniversitario/Shared/contract.json'));
+const context={Date,console,AbortSignal};
+runInNewContext(read('HospitalUniversitario/HospitalUniversitario/Shared/hospital-core.js'),context);
+runInNewContext(read('web-preview/api.js'),context);
+const c=context.HospitalCore,plain=v=>JSON.parse(JSON.stringify(v)),id='00000000-0000-4000-8000-000000000001';
+for (const invalid of [
+  {...contract, url:'https://otro-proyecto.example.test'},
+  {...contract, url:contract.url + '/otro'},
+  {...contract, publishableKey:'invalid-key'}
+]) {
+  assert.throws(()=>new context.HospitalAPI(invalid, {fetch:()=>assert.fail('No debe salir a la red')}), /Hospital Móviles/);
 }
-function response(data, status = 200) { return { ok: status >= 200 && status < 300, status, text: async () => data == null ? '' : JSON.stringify(data) }; }
-function session(suffix = '') { return { access_token: 'access' + suffix, refresh_token: 'refresh' + suffix, expires_in: 3600 }; }
-function client(fetch, store = storage()) { return new context.HospitalAPI(contract, { fetch, storage: store }); }
-await test('Roles: médico activo y vinculado', () => assert.deepEqual(plain(core.routes(access)), ['doctor']));
-await test('Roles: rechaza perfil suspendido, sin vínculo y administrador', () => {
-  assert.deepEqual(plain(core.routes({ ...access, profile: { status: 'suspended' } })), []);
-  assert.deepEqual(plain(core.routes({ ...access, staff_id: null })), []);
-  assert.deepEqual(plain(core.routes({ ...access, roles: [{ code: 'administrator' }] })), []);
-  assert.deepEqual(plain(core.routes(null)), []);
-});
-await test('Roles: paciente y doble rol solo con vínculos verificados', () => {
-  const both = { ...access, patient_id: uuid, roles: [...access.roles, { code: 'patient' }] };
-  assert.deepEqual(plain(core.routes(both)), ['doctor', 'patient']);
-  assert.deepEqual(plain(core.routes({ ...both, staff_id: null })), ['patient']);
-  assert.equal(core.turnResource('doctor'), 'staff_shifts');
-  assert.equal(core.turnResource('patient'), 'queue_tickets');
-  assert.throws(() => core.turnResource('administrator'));
-});
-await test('Consultas: cursor y filtro de propietario son compartidos', () => {
-  const cursor = { id: uuid, value: uuid };
-  assert.deepEqual(plain(core.readRequest('rooms', cursor)).p_cursor, cursor);
-  assert.deepEqual(plain(core.readRequest('queue_tickets', null, uuid)).p_filters, [{ column: 'patient_id', op: 'eq', value: uuid }]);
-  const window = core.weekWindow('2026-10-23T12:00:00');
-  const shifts = plain(core.readRequest('staff_shifts', null, uuid, window));
-  assert.deepEqual(shifts.p_filters, [{ column: 'staff_id', op: 'eq', value: uuid },{ column:'period', op:'overlaps', value:window }]);
-  assert.equal(shifts.p_sort,'period');
-  const bounds = core.periodBounds(window);
-  assert.equal(new Date(bounds.start).getDay(),1);
-  assert.equal(new Date(bounds.end).getDay(),1);
-  assert.ok(new Date(bounds.end) > new Date(bounds.start));
-  assert.throws(() => core.readRequest('profiles'));
-  assert.throws(() => core.readRequest('queue_tickets', null, 'invalid'));
-});
-await test('tstzrange: convierte zonas horarias, fracciones e intervalos nocturnos', () => {
-  assert.deepEqual(plain(core.periodBounds('["2026-10-23 22:00:00-06","2026-10-24 06:00:00-06")')), { start: '2026-10-24T04:00:00.000Z', end: '2026-10-24T12:00:00.000Z' });
-  assert.equal(core.periodBounds('["2026-10-23 07:00:00.123+00:00","2026-10-23 08:00:00+00:00")').start, '2026-10-23T07:00:00.123Z');
-  for (const invalid of ['empty', '[,)', '(2026-10-23,2026-10-24]', '["2026-10-24","2026-10-23")']) assert.throws(() => core.periodBounds(invalid));
-});
-await test('Auth: credenciales en POST, RPC con bearer y clave pública', async () => {
-  const calls = [];
-  const api = client(async (url, options) => { calls.push({ url, options }); return response(url.includes('/token?') ? session() : access); });
-  await api.signIn('  doctor@example.test ', 'private-test');
-  const resolved = await api.access();
-  assert.equal(calls[0].url, contract.url + '/auth/v1/token?grant_type=password');
-  assert.equal(JSON.parse(calls[0].options.body).email, 'doctor@example.test');
-  assert.equal(calls[1].options.headers.Authorization, 'Bearer access');
-  assert.equal(calls[1].options.headers.apikey, contract.publishableKey);
-  assert.deepEqual(plain(resolved.roles), ['doctor']);
-  assert.equal(api.storage.getItem(api.storageKey), 'refresh');
-});
-await test('Auth: una renovación para solicitudes concurrentes y rota el token', async () => {
-  let requests = 0;
-  const store = storage({ 'hospital.refresh-token.v1': 'old-refresh' });
-  const api = client(async (url, options) => {
-    requests++; assert.ok(url.endsWith('grant_type=refresh_token'));
-    assert.equal(JSON.parse(options.body).refresh_token, 'old-refresh');
-    await Promise.resolve(); return response(session('-new'));
-  }, store);
-  assert.deepEqual(await Promise.all([api.token(), api.token(), api.token()]), ['access-new', 'access-new', 'access-new']);
-  assert.equal(requests, 1); assert.equal(store.getItem(api.storageKey), 'refresh-new');
-});
-await test('Auth: credenciales inválidas y error de red son visibles', async () => {
-  const api = client(async () => response({ message: 'Do not expose backend details' }, 400));
-  await assert.rejects(() => api.signIn('x@example.test', 'bad'), /Credenciales/);
-  assert.equal(api.session, null);
-  const offline = client(async () => { throw new Error('offline'); });
-  await assert.rejects(() => offline.signIn('x@example.test', 'bad'), /conexión/);
-});
-await test('Datos: acepta páginas reales y rechaza contratos incompatibles', async () => {
-  const room = { id: uuid, floor_id: uuid, room_type_id: uuid, code: '101', active: true, created_at: '2026-10-23T07:00:00Z', updated_at: '2026-10-23T07:00:00Z', row_version: 1 };
-  let data = { data: [room], has_more: true, next_cursor: { id: uuid, value: uuid } };
-  const api = client(async (url, options) => {
-    if (url.includes('/token?')) return response(session());
-    assert.equal(JSON.parse(options.body).p_resource, 'rooms');
-    return response(data);
-  });
-  await api.signIn('test@example.test', 'test');
-  assert.equal((await api.read('rooms')).data[0].code, '101');
-  data = { ...data, data: [{ ...room, active: 'true' }] };
-  await assert.rejects(() => api.read('rooms'), /incompatibles/);
-});
-await test('Datos: ticket con campos nulos; acceso denegado se propaga', async () => {
-  const ticket = Object.fromEntries(Object.entries(contract.models.QueueTicket).map(([field, type]) => [field, type.endsWith('?') ? null : ['Int', 'Int64'].includes(type) ? 1 : type === 'UUID' ? uuid : 'waiting']));
-  let denied = false;
-  const api = client(async url => response(url.includes('/token?') ? session() : { data: [ticket], has_more: false, next_cursor: null }, denied ? 403 : 200));
-  await api.signIn('test@example.test', 'test');
-  assert.equal((await api.read('queue_tickets', null, uuid)).data[0].called_at, null);
-  denied = true;
-  await assert.rejects(() => api.read('queue_tickets', null, uuid), /no tiene acceso/);
-});
-await test('Logout: scope local y borra credenciales aun sin conexión', async () => {
-  let fail = false;
-  const api = client(async url => { if (fail) throw new Error('offline'); return response(session()); });
-  await api.signIn('test@example.test', 'test'); fail = true;
-  assert.match(await api.signOut(), /cierre remoto/);
-  assert.equal(api.session, null); assert.equal(api.storage.getItem(api.storageKey), null);
-});
-console.log(`${count} pruebas completadas. No se modificó Supabase.`);
+console.log('OK Configuración: rechazo de otro proyecto o clave incompatible antes de usar la red');
+const user={id,email:'ana@example.test',user_metadata:{role:'doctor'}},profile={id,first_name:'Ana',last_name:'Prueba',phone:'7000-1111'};
+const pending=c.backendAccess(user,profile,[{user_id:id,role:'paciente',active:true}],[],[]);
+assert.equal(pending.profile.status,'active');assert.deepEqual(plain(c.routes(pending)),['patient']);
+for(const module of ['appointments','request','chart','history','laboratory','prescriptions']) {
+  assert.deepEqual(plain(c.backendPlan('module',{p_module:module},pending)),[],'Sin vínculo no hay consulta clínica');
+  assert.deepEqual(plain(c.backendPresent('module',{p_module:module},pending,[])).items,[]);
+}
+assert.deepEqual(plain(c.backendPlan('patientDashboard',{},pending)),[]);
+assert.equal(c.backendPresent('patientDashboard',{},pending,[]).next_appointment,null);
+assert.throws(()=>c.backendPlan('requestAttention',{},pending));
+const multi=c.backendAccess(user,{...profile,first_name:'María Elena',last_name:'López Pérez'},[{user_id:id,role:'paciente',active:true}],[],[]);
+assert.equal(multi.profile.greeting_name,'María López');
+const access=c.backendAccess(user,profile,[{user_id:id,role:'paciente',active:true}],[{id,profile_id:id}],[]);
+assert.deepEqual(plain(c.routes(access)),['patient']);
+const dashboardPath=decodeURIComponent(c.backendPlan('patientDashboard',{now:'2026-11-13T10:00:00Z'},access)[0].path);
+assert.match(dashboardPath,/patient_id=eq\./);assert.match(dashboardPath,/status=in\.\(programada,confirmada\)/);
+assert.match(dashboardPath,/starts_at=gte\./);assert.match(dashboardPath,/order=starts_at.asc,id.asc/);assert.match(dashboardPath,/limit=1$/);
+const other={id,patient_id:'00000000-0000-4000-8000-000000000002',starts_at:'2026-11-14T10:00:00Z',status:'confirmada'};
+assert.equal(c.backendPresent('patientDashboard',{now:'2026-11-13T10:00:00Z'},access,[[other]]).next_appointment,null);
+assert.deepEqual(plain(c.routes(c.backendAccess(user,profile,[],[{id,profile_id:id}],[]))),[],'User metadata never grants a role');
+assert.deepEqual(plain(c.routes(c.backendAccess(user,profile,[{user_id:id,role:'paciente',active:false}],[{id,profile_id:id}],[]))),[]);
+const doctor=c.backendAccess(user,profile,[{user_id:id,role:'doctor',active:true}],[],[{id,profile_id:id,active:true}]);
+assert.deepEqual(plain(c.routes(doctor)),['doctor']);
+assert.throws(()=>c.backendAccess(user,{id:'other'},[],[],[]));
+console.log('OK Acceso: roles activos del servidor y vínculos propios; metadatos sin autoridad');
+assert.throws(()=>c.backendPlan('registerPatient',{dui:'01234567-8'},pending), /personal autorizado/);
+assert.throws(()=>c.backendPlan('registerPatient',{},access), /personal autorizado/);
+for(const module of ['appointments','request','chart','history','laboratory','prescriptions']){
+  const plan=plain(c.backendPlan('module',{p_module:module},access));
+  assert.ok(decodeURIComponent(plan[0].path).includes(id));
+  assert.equal(plan[0].method,'GET');
+}
+assert.throws(()=>c.backendPlan('module',{p_module:'chart'},doctor));
+assert.throws(()=>c.backendPlan('unavailable',{},access));
+const bounds=c.periodBounds(c.weekWindow('2026-11-13T10:00:00Z'));
+assert.equal(new Date(bounds.start).getDay(),1);assert.equal(new Date(bounds.end).getDay(),1);
+const shifts=decodeURIComponent(c.backendPlan('shifts',{},doctor)[0].path);
+assert.match(shifts,/staff_id=eq\./);assert.match(shifts,/starts_at=lt\./);assert.match(shifts,/ends_at=gt\./);
+console.log('OK Consultas: filtros propios, semana, esquema nuevo y rechazo de operaciones inexistentes');
+const page=c.backendPresent('module',{p_module:'laboratory'},access,[[{id,reason:'Examen',status:'completado',ordered_at:'2026-11-13',lab_test_types:{name:'Estudio'},lab_results:[{summary:'NO PUBLICADO',published_to_patient_at:null},{summary:'PUBLICADO',published_to_patient_at:'2026-11-13'}]}]]);
+assert.equal(page.items[0].details.length,1);assert.equal(page.items[0].details[0].value,'PUBLICADO');
+const roomPage=c.backendPresent('rooms',{},access,[Array.from({length:26},()=>({id}))]);assert.equal(roomPage.data.length,25);assert.equal(roomPage.has_more,true);
+console.log('OK Presentación: resultados publicados y paginación sin filas perdidas');
+const stored=new Map(),storage={getItem:k=>stored.get(k)||null,setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)};
+const response=(data,status=200)=>({ok:status<300,status,json:async()=>data,text:async()=>JSON.stringify(data)});
+let refreshes=0,offline=false;
+const api=new context.HospitalAPI(contract,{storage,fetch:async(url,request)=>{
+  if(offline)throw new Error('offline');
+  if(url.includes('grant_type=refresh_token')){refreshes++;return response({access_token:'renewed',refresh_token:'rotated',expires_in:3600});}
+  if(url.includes('/token?'))return response({access_token:'test',refresh_token:'refresh',expires_in:3600});
+  return response(null);
+}});
+await api.signIn('ana@example.test','test-password');api.expiry=0;
+await Promise.all([api.token(),api.token()]);assert.equal(refreshes,1);assert.equal(storage.getItem(api.storageKey),'rotated');
+offline=true;await api.signOut();assert.equal(stored.size,0);assert.equal(api.context,null);
+assert.ok(api.storageKey.includes('uvebpsbbwofthucghccc'));
+console.log('OK Sesión: renovación concurrente, aislamiento de proyecto y cierre sin red');
+assert.equal(contract.models.Room.floor_id,'Int');assert.equal(contract.models.StaffShift.starts_at,'String');

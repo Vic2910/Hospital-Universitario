@@ -6,6 +6,13 @@ import xml.etree.ElementTree as ET
 
 root = Path(__file__).resolve().parent.parent
 project_dir = root / "HospitalUniversitario"
+contract = json.loads((project_dir / "HospitalUniversitario/Shared/contract.json").read_text(encoding="utf-8"))
+assert contract["url"] == "https://uvebpsbbwofthucghccc.supabase.co", "Destino no autorizado"
+assert contract["publishableKey"].startswith("sb_publishable_"), "Se requiere clave pública publicable"
+config = (project_dir / "Configuration/Supabase.xcconfig").read_text(encoding="utf-8")
+assert f'SUPABASE_URL = {contract["url"].replace("https://", "https:/$()/")}' in config, "URL iOS/web distinta"
+assert f'SUPABASE_PUBLISHABLE_KEY = {contract["publishableKey"]}' in config, "Clave iOS/web distinta"
+assert '#include "Supabase.xcconfig"' in (project_dir / "Configuration/App.xcconfig").read_text(encoding="utf-8")
 project = (project_dir / "HospitalUniversitario.xcodeproj/project.pbxproj").read_text(encoding="utf-8")
 definitions = re.findall(r"^\t\t([A-F0-9]{24})\s+(?:/\*.*?\*/\s*)?=\s*\{", project, re.M)
 assert len(definitions) == len(set(definitions)), "Duplicate Xcode object IDs"

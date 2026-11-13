@@ -25,4 +25,3 @@ Carthage/Build/
 
 # Local credentials, test provisioning payloads and session material
 .local/
-HospitalUniversitario/Configuration/Supabase.local.xcconfig

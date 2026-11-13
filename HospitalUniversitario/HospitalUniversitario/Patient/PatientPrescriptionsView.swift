@@ -53,7 +53,7 @@ struct PatientPrescriptionsView: View {
             if demonstration { Text("Recetas de ejemplo · No corresponden a una prescripción real").font(.caption).foregroundStyle(HospitalTheme.secondary) }
             if loading { ProgressView("Cargando tus recetas…") }
             if let error { Text(error).font(.footnote); Button("Reintentar", action: retry) }
-            if filtered.isEmpty && !loading && error == nil { HospitalCard { Text("No hay recetas para mostrar.").font(.subheadline); Text("Tus recetas aparecerán aquí cuando estén disponibles.").font(.footnote).foregroundStyle(HospitalTheme.secondary) } }
+            if filtered.isEmpty && !loading && error == nil { HospitalCard { Text("No tienes recetas registradas.").font(.subheadline); Text("Tus recetas aparecerán aquí cuando estén disponibles.").font(.footnote).foregroundStyle(HospitalTheme.secondary) } }
             ForEach(filtered) { record in
                 Text(record.dateLabel).font(.subheadline.weight(.semibold)).foregroundStyle(HospitalTheme.secondary)
                 ForEach(Array(record.medicines.enumerated()), id: \.offset) { _, medicine in

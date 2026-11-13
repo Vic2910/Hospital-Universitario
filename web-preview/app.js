@@ -5,7 +5,9 @@
   let api, modules, patientLabModules, patientClinical, doctorDashboard, doctorConsultations, labDesign, patientHistory, patientPrescriptions, appointmentFlow, catalog, fixtures, access = null, roles = [], role = null, page = 'home', search = '', busy = false, design = false;
   let profile = null, summary = null, overview = null, items = [], queue = [], cursor = null, more = false;
   let screenNote = '';
+  let nextAppointment = null, dashboardError = null;
   let registerOpen = false;
+  let registrationDraft = {};
   let labConnected = false;
   let receptionPreview = false;
   const statuses = { pending: 'Pendiente', confirmed: 'Confirmado', cancelled: 'Cancelado', waiting: 'En espera', called: 'Llamado', in_service: 'En atención', completed: 'Finalizado' };
@@ -35,20 +37,28 @@
   function matches(value) { return !search || value.toLocaleLowerCase('es').includes(search.toLocaleLowerCase('es')); }
   function definition() { return catalog?.[role]?.find(screen => screen.id === page); }
   function clearData() { patientLabModules?.clear();patientClinical?.reset(); receptionPreview=false; appointmentFlow?.reset(); patientHistory?.clear(); labConnected = false; labDesign?.reset(); doctorConsultations?.clear(); doctorDashboard?.clear(); resetSchedule(); modules?.clear(); profile = summary = overview = null; items = []; queue = []; cursor = null; more = false; screenNote = ''; }
-  function reset() { access = null; roles = []; role = null; page = 'home'; registerOpen = false; clearData(); }
+  function reset() { nextAppointment = null; dashboardError = null; registrationDraft = {}; access = null; roles = []; role = null; page = 'home'; registerOpen = false; clearData(); }
   async function run(action) {
     if (busy) return;
     busy = true; message(null); render();
     try { await action(); } catch (error) {
       if (error.status === 401) { api.clear(); reset(); }
-      if (error.status === 403) {modules?.clear();patientLabModules?.clear();}
+      if (error.status === 403) {
+        const requestDraft = role === 'patient' && ['request','schedule','health'].includes(page) ? {...modules.request} : null;
+        const requestKey = modules?.keys.request;
+        modules?.clear();patientLabModules?.clear();
+        if (requestDraft) {
+          modules.configure(access,role,access.roles.find(item=>item.code===role)?.context_id);
+          modules.request=requestDraft;modules.keys.request=requestKey;
+        }
+      }
       message(error.message || 'No se pudo completar la operación.');
     }
     finally { busy = false; render(); }
   }
   async function resolve() {
     const current = await api.access();
-    if (!current.roles.length) throw new Error('Tu cuenta debe estar activa y vinculada a un Médico o Paciente con el rol correspondiente.');
+    if (!current.roles.length) throw new Error('Tu cuenta no tiene un rol activo permitido en esta app.');
     access = current.access; roles = current.roles;
     role = roles.length === 1 ? roles[0] : null; page = 'home';
   }
@@ -58,34 +68,28 @@
       const current = await api.access();
       if (!current.roles.includes(role)) { api.clear(); reset(); throw new Error('El acceso cambió. Inicia sesión de nuevo.'); }
       access = current.access; roles = current.roles; screenNote = '';
-      if (!profile) profile = await api.rpc('my_profile');
-      const facility = access.roles.find(item => item.code === role)?.facility_id;
-      if (role==='patient'&&['request','schedule','health'].includes(page)) return;
-      if (page === 'profile') { profile = await api.rpc('my_profile'); return; }
+      nextAppointment = null; dashboardError = null;
+      if (!profile) profile = await api.operation('profile');
+      const facility = access.roles.find(item => item.code === role)?.context_id;
+      if (role==='patient'&&['request','schedule','health'].includes(page)) { modules.configure(access,role,facility); await modules.load('request'); return; }
+      if (page === 'profile') { profile = await api.operation('profile'); return; }
       modules.configure(access,role,facility);
       if (role === 'doctor' && ['patients','chart','laboratory'].includes(page) && !labConnected) return;
       if (modules.supports(role,page)) { await modules.load(page,append);if(role==='patient'&&page==='chart'){patientLabModules.configure(access,role,facility);await patientLabModules.load('laboratory');}return; }
       if (page === 'home') {
         summary = null;
-        const from = new Date(); from.setHours(0, 0, 0, 0);
-        const to = new Date(from); to.setDate(to.getDate() + (role === 'patient' ? 31 : 1));
-        if (facility) {
-          try { summary = await api.rpc('my_activity_summary', { p_facility: facility, p_from: from.toISOString(), p_to: to.toISOString(), p_context: role === 'doctor' ? 'staff' : 'patient' }); }
-          catch (error) { if (error.status !== 403) throw error; screenNote = 'Se requiere verificación adicional o autorización para consultar el resumen.'; }
-        }
+        if(role==='patient') nextAppointment = (await api.operation('patientDashboard')).next_appointment;
       } else if (page === 'rooms' || page === 'turns') {
         if (!append) { items = []; queue = []; cursor = null; more = false; }
-        const resource = page === 'rooms' ? 'rooms' : HospitalCore.turnResource(role);
-        const owner = role === 'doctor' ? access.staff_id : access.patient_id;
-        const result = await api.read(resource, append ? cursor : null, owner);
-        items = append ? [...items, ...result.data] : result.data; cursor = result.next_cursor; more = result.has_more;
-        if (resource === 'queue_tickets') {
-          for (const ticket of result.data.filter(item => ['waiting', 'called', 'in_service'].includes(item.status))) queue.push(await api.rpc('my_queue_status', { p_ticket: ticket.id }));
-        }
-      } else if (page === 'information') overview = facility ? await api.rpc('hospital_overview', { p_facility: facility }) : null;
-      else if (page === 'profile') profile = await api.rpc('my_profile');
+        if(page==='turns' && role==='patient'){screenNote='Hospital Móviles no publica una fila numerada. Consulta Mis citas.';return;}
+        const result = await api.read(page==='rooms'?'rooms':'staff_shifts',append?cursor:null);
+        items=append?[...items,...result.data]:result.data;cursor=result.next_cursor;more=result.has_more;
+      } else if (page === 'information') overview = facility ? await api.operation('overview', { p_facility: facility }) : null;
+      else if (page === 'profile') profile = await api.operation('profile');
     } catch (error) {
       clearData();
+      nextAppointment = null;
+      if (page === 'home') dashboardError = error.message;
       if (error.status === 401) { api.clear(); reset(); }
       throw error;
     }
@@ -98,10 +102,11 @@
     if (design) return fixtures[role].name;
     return access?.profile?.preferred_name || (profile?.person ? `${profile.person.given_names} ${profile.person.family_names}` : role === 'doctor' ? 'Doctor' : 'Paciente');
   }
-  function title() { return receptionPreview ? 'Recepción de ejemplo' : role==='patient'&&['request','schedule','health'].includes(page) ? 'Solicitar atención' : page === 'home' ? 'Hola, ' + displayName() : definition()?.title || ({ more: 'Más', health: 'Mi salud', rooms: 'Habitaciones', schedule: 'Solicitar atención' })[page] || 'Hospital'; }
+  function title() { return receptionPreview ? 'Recepción de ejemplo' : role==='patient'&&page==='home' ? 'Mi espacio de salud' : role==='patient'&&['request','schedule','health'].includes(page) ? 'Solicitar atención' : page === 'home' ? 'Hola, ' + displayName() : definition()?.title || ({ more: 'Más', health: 'Mi salud', rooms: 'Habitaciones', schedule: 'Solicitar atención' })[page] || 'Hospital'; }
   function render() {
     app.replaceChildren();
     document.body.classList.toggle('authenticated', !!role);
+    if (applicantView.active) return applicantView.render(app);
     if (!access) return registerOpen ? renderRegister() : renderLogin();
     if (!role) return renderRoles();
     renderPortal();
@@ -157,20 +162,12 @@
     });
     card.append(form);
     const switchRow = el('div', null, 'auth-link-row');
-    switchRow.append(el('span', '¿No tienes cuenta?'), button('Regístrate', () => { registerOpen = true; render(); }, 'link-button'));
+    switchRow.append(el('span', '¿No tienes cuenta?'), button('Regístrate', () => { run(async () => { registerOpen = true; }); }, 'link-button'));
     view.append(card, switchRow, el('p', 'Tu perfil y tus permisos son asignados por el hospital.', 'auth-footer'));
     app.append(view);
   }
   function registerProblem(values) {
-    if (!values['reg-given'] || values['reg-given'].length > 100) return 'Introduce tus nombres (máximo 100 caracteres).';
-    if (!values['reg-family'] || values['reg-family'].length > 100) return 'Introduce tus apellidos (máximo 100 caracteres).';
-    if (values['reg-dui'].replace(/\D/g, '').length !== 9) return 'El DUI debe contener 9 dígitos, por ejemplo 0123-45678.';
-    const age = Number(values['reg-age']); if (!Number.isInteger(age) || age < 1 || age > 120) return 'Introduce una edad entre 1 y 120 años.';
-    if (!/^[+]?[0-9() -]{7,25}$/.test(values['reg-phone'])) return 'Introduce un teléfono válido.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values['reg-email'])) return 'Introduce un correo electrónico válido.';
-    if ($('#reg-password').value.length < 8) return 'La contraseña debe tener al menos 8 caracteres.';
-    if ($('#reg-confirm').value !== $('#reg-password').value) return 'La confirmación de contraseña no coincide.';
-    return null;
+    return HospitalCore.validateApplicantProfile({ given: values['reg-given'], family: values['reg-family'], birthDate: values['reg-birth'], dui: values['reg-dui'], phone: values['reg-phone'], email: values['reg-email'], password: $('#reg-password').value, confirm: $('#reg-confirm').value }, HospitalCore.localIsoDay(new Date()));
   }
   function renderRegister() {
     const view = el('section', null, 'auth-view');
@@ -180,43 +177,78 @@
     for (const [id, label, type, placeholder, autocomplete] of [
       ['reg-given', 'Nombres', 'text', 'Tus nombres', 'given-name'],
       ['reg-family', 'Apellidos', 'text', 'Tus apellidos', 'family-name'],
-      ['reg-dui', 'DUI', 'text', '0000-00000', 'off'],
-      ['reg-age', 'Edad', 'number', 'Ejemplo: 34', 'off'],
+      ['reg-dui', 'DUI', 'text', '00000000-0', 'off'],
+      ['reg-birth', 'Fecha de nacimiento', 'date', '', 'bday'],
       ['reg-phone', 'Teléfono', 'tel', '0000-0000', 'tel'],
+      ['reg-city', 'Ciudad (opcional)', 'text', 'Tu ciudad', 'address-level2'],
       ['reg-email', 'Correo electrónico', 'email', 'nombre@correo.com', 'username']
     ]) {
       const field = authField(id, label, type, placeholder, autocomplete);
       if (id === 'reg-dui') field.querySelector('input').addEventListener('input', event => {
-        const digits = event.target.value.replace(/\D/g, '').slice(0, 9);
-        event.target.value = digits.length > 4 ? digits.slice(0, 4) + '-' + digits.slice(4) : digits;
+        event.target.value = HospitalCore.formatDui(event.target.value);
       });
-      if (id === 'reg-age') field.querySelector('input').addEventListener('input', event => {
-        event.target.value = event.target.value.replace(/\D/g, '').slice(0, 3);
-      });
+      if (registrationDraft[id]) field.querySelector('input').value = registrationDraft[id];
+      if(id==='reg-city') field.querySelector('input').required=false;
       form.append(field);
     }
     form.append(authField('reg-password', 'Contraseña', 'password', 'Contraseña', 'new-password', revealButton('reg-password')));
     form.append(authField('reg-confirm', 'Confirmar contraseña', 'password', 'Repite tu contraseña', 'new-password', revealButton('reg-confirm')));
     const problem = el('p', null, 'auth-error'); problem.hidden = true;
     const done = el('p', null, 'auth-notice'); done.hidden = true;
-    form.append(el('p', 'El hospital crea y activa cada cuenta; recibirás la confirmación en tu correo electrónico.', 'auth-notice'), problem, done);
+    const continueDemo = button('Explorar demostración sin crear cuenta', () => {
+      registerOpen = false; applicantView.open(); message(null); setModeLabel(); render();
+    }, 'primary');
+    continueDemo.hidden = !!access;
+    form.append(el('p', 'El registro crea únicamente tu cuenta de la app. Recepción gestiona tu expediente y programa tus citas.', 'auth-notice'), problem, done);
     const submit = el('button', 'Registrarme', 'primary'); submit.type = 'submit'; submit.disabled = busy;
     form.append(submit);
     form.addEventListener('submit', event => {
       event.preventDefault(); problem.hidden = true; done.hidden = true;
       if (!form.reportValidity()) return;
       const values = {};
-      for (const id of ['reg-given', 'reg-family', 'reg-dui', 'reg-age', 'reg-phone', 'reg-email']) values[id] = $('#' + id).value.trim();
+      for (const id of ['reg-given', 'reg-family', 'reg-dui', 'reg-birth', 'reg-phone', 'reg-city', 'reg-email']) values[id] = $('#' + id)?.value.trim() || '';
       const issue = registerProblem(values);
-      if (issue) { problem.textContent = issue; problem.hidden = false; return; }
-      done.textContent = 'Formulario de demostración: no se envía a la base de datos. El hospital creará y activará tu cuenta.';
-      done.hidden = false;
+      if (issue) { problem.textContent = issue.message; problem.hidden = false; return; }
+      if (busy) return;
+      const password = $('#reg-password')?.value;
+      registrationDraft = {...values};
+      run(async () => {
+        if (!access) {
+          const metadata={first_name:values['reg-given'],last_name:values['reg-family'],birth_date:values['reg-birth'],phone:values['reg-phone'],city:values['reg-city'],dui:HospitalCore.formatDui(values['reg-dui'])};
+          if (!await api.signUp(values['reg-email'], password, metadata)) {
+            registerOpen=false;
+            message('Cuenta creada. El servidor todavía exige confirmar el correo; el hospital debe desactivar ese requisito en Auth. No vuelvas a crear la cuenta.');
+            return;
+          }
+          await resolve();
+        }
+        registrationDraft = {}; registerOpen = false;
+        await resolve();
+      });
+
     });
     card.append(form);
+    card.append(continueDemo);
     const switchRow = el('div', null, 'auth-link-row');
     switchRow.append(el('span', '¿Ya tienes cuenta?'), button('Inicia sesión', () => { registerOpen = false; render(); }, 'link-button'));
     view.append(card, switchRow);
     app.append(view);
+  }
+  function renderLiveAttention(content) {
+    content.append(el('p','Esta solicitud no reserva una cita. Recepción confirmará la disponibilidad.','auth-notice'));
+    if (modules.data) {
+      const state=modules.request;
+      const {form,finish}=modules.form(content,'Enviar solicitud',async()=>{
+        if (!state.specialty || !state.reason.trim() || state.reason.length>2000 || !['manana','tarde'].includes(state.period)) throw new Error('Revisa la especialidad, motivo y preferencia.');
+        await modules.mutation('requestAttention',{p_patient:access.patient_id,p_facility:modules.facility,p_specialty:state.specialty,p_reason:state.reason.trim(),period:state.period,p_request_key:modules.keys.request},'Solicitud enviada. Recepción confirmará la disponibilidad.',()=>{modules.keys.request=crypto.randomUUID();state.reason='';});
+      });
+      modules.field(form,'Especialidad',state,'specialty','text',modules.data.specialties.map(item=>[item.id,item.name]));
+      modules.field(form,'Motivo de la consulta',state,'reason','textarea');
+      modules.field(form,'Preferencia',state,'period','text',[['manana','Mañana'],['tarde','Tarde']]);
+      finish();
+    }
+    content.append(el('h2','Mis solicitudes','section-title'));
+    modules.render(content,'request','');
   }
   function renderRoles() {
     const view = el('section', null, 'role-picker'); view.append(el('h2', 'Selecciona tu perfil'));
@@ -240,7 +272,7 @@
     searchbox.append(el('span', '⌕'), field);
     const content = el('div', null, 'screen-content'); content.id = 'screen-content'; content.setAttribute('aria-busy', String(busy)); renderContent(content);
     const clinicalFlow = ['patients','chart','laboratory'].includes(page) && (design || (role === 'doctor' && !labConnected));
-    if(clinicalFlow || page === 'profile' || (role === 'patient' && ['chart','laboratory','appointments','request','schedule','health','information'].includes(page))) { portal.className += ' clinical-flow'; portal.append(header,content,bottomBar()); }
+    if(clinicalFlow || page === 'profile' || (role === 'patient' && ['home','chart','laboratory','appointments','request','schedule','health','information'].includes(page))) { portal.className += ' clinical-flow'; portal.append(header,content,bottomBar()); }
     else portal.append(header,searchbox,content,bottomBar());
     app.append(portal);
   }
@@ -265,19 +297,26 @@
     if (screenNote) content.append(el('p', screenNote, 'scope-note'));
     const screen = definition();
     if(receptionPreview)return appointmentFlow.renderReception(content);
-    if(role==='patient'&&['request','schedule','health'].includes(page))return scheduleView(content);
+    if (!design && role==='patient' && !access.patient_id && ['appointments','laboratory','prescriptions','chart','history','request','schedule','health'].includes(page)) {
+      const titles={appointments:'No tienes citas programadas',laboratory:'No tienes resultados de laboratorio',prescriptions:'No tienes recetas disponibles'};
+      content.append(row(titles[page] || (['request','schedule','health'].includes(page) ? 'Solicita atención en recepción' : 'Tu información clínica aún no está disponible'),
+        'Acércate a recepción o consulta los canales oficiales de contacto del hospital. El personal debe crear o vincular tu expediente y programar tu atención.'));
+      content.append(button('Información del hospital',()=>go('information'),'text-button'),button('Actualizar estado',()=>run(()=>load()),'text-button'));
+      return;
+    }
+    if(role==='patient'&&['request','schedule','health'].includes(page))return design ? scheduleView(content) : renderLiveAttention(content);
     if(role==='patient'&&page==='appointments'){
-      const demo=design||(!busy&&modules.data!=null&&modules.items.length===0);
-      return appointmentFlow.render(content,{appointments:demo?appointmentFlow.appointments:HospitalPatientAppointments.fromItems(modules.items,profile,formatConsultationTime),demonstration:demo,
-        renderConnected:!design&&(modules.items.length||!modules.data)?parent=>modules.render(parent,'appointments',search):null});
+      const demo=design;
+      return appointmentFlow.render(content,{appointments:demo?appointmentFlow.appointments:HospitalPatientAppointments.fromItems(modules.items,profile,formatConsultationTime),demonstration:demo,loading:busy,error:!design&&!busy&&!modules.data,
+        renderConnected:!design?parent=>modules.render(parent,'appointments',search):null});
     }
     if(role === 'patient' && page === 'prescriptions') {
-      const useExamples=design||(!busy&&modules.data!=null&&modules.items.length===0);
+      const useExamples=design;
       return patientPrescriptions.render(content,{records:useExamples?HospitalPatientPrescriptions.examples:HospitalPatientPrescriptions.fromItems(modules.items),demonstration:useExamples,search,loading:busy,
         error:!design&&!busy&&!modules.data?'No pudimos cargar tus recetas. Intenta de nuevo.':null,hasMore:!design&&modules.data?.has_more,retry:()=>run(()=>load()),loadMore:()=>run(()=>modules.load('prescriptions',true))});
     }
     if(role === 'patient' && page === 'history') {
-      const useExamples = design || (!busy && modules.data != null && modules.items.length === 0);
+      const useExamples = design;
       return patientHistory.render(content,{records:useExamples?HospitalPatientHistory.examples:HospitalPatientHistory.fromItems(modules.items),demonstration:useExamples,search,loading:busy,
         error:!design&&!busy&&!modules.data?'No pudimos cargar tu historial. Intenta de nuevo.':null,hasMore:!design&&modules.data?.has_more,
         retry:()=>run(()=>load()),loadMore:()=>run(()=>modules.load('history',true))});
@@ -292,7 +331,7 @@
     }
     if (design && ['patients','chart','laboratory'].includes(page)) return labDesign.render(content,{role,page});
     if (!design && modules.supports(role,page) && page !== 'profile') {
-      modules.configure(access,role,access.roles.find(item => item.code === role)?.facility_id);
+      modules.configure(access,role,access.roles.find(item => item.code === role)?.context_id);
       return modules.render(content,page,search);
     }
     if (page === 'home') return home(content);
@@ -346,10 +385,10 @@
   }
 
   function patientDashboard(content) {
-    const name = displayName();
+    const name = design ? displayName() : access.profile.greeting_name || '';
     const greeting = el('article', null, 'dash-greeting');
     const text = el('div', null, 'dash-text');
-    text.append(el('h2', 'Hola, ' + name + ' 👋'), el('p', 'Aquí está el resumen de tu día.'));
+    text.append(el('h2', name ? '¡Hola, ' + name + '!' : '¡Hola!'), el('p', 'Aquí está el resumen de tu día.'));
     const initials = name.split(/\s+/).map(part => part.charAt(0)).join('').slice(0, 2).toUpperCase();
     greeting.append(text, el('span', initials || 'PA', 'dash-avatar'));
     content.append(greeting);
@@ -360,17 +399,28 @@
     todayText.append(el('span', 'HOY', 'dash-label'), el('strong', today));
     todayRow.append(el('span', '▣', 'dash-row-icon'), todayText);
     card.append(todayRow, el('hr'), el('span', 'PRÓXIMA CITA', 'dash-label'));
-    if (design) {
+    if (busy) {
+      card.append(el('p','Consultando tus citas…','dash-empty'));
+    } else if (dashboardError && !design) {
+      card.append(el('strong','No se pudieron cargar tus citas','dash-empty'),el('p',dashboardError,'dash-medico'));
+    } else if (design) {
       const sample = fixtures.patient.rows.appointments[0];
       card.append(el('p', '30 de octubre', 'dash-cita-day'), el('strong', '10:00', 'dash-time'), el('p', sample[1], 'dash-medico'));
+    } else if (nextAppointment) {
+      const date=new Date(nextAppointment.starts_at);
+      card.append(el('p',new Intl.DateTimeFormat('es-GT',{weekday:'long',day:'numeric',month:'long'}).format(date),'dash-cita-day'),
+        el('strong',new Intl.DateTimeFormat('es-GT',{hour:'numeric',minute:'2-digit'}).format(date),'dash-time'),
+        el('p',nextAppointment.doctor_name || 'Nombre del médico no disponible','dash-medico'),
+        el('p',nextAppointment.status==='confirmed'?'Confirmada':'Programada','dash-medico'));
     } else {
-      card.append(el('strong', 'No tienes citas programadas.', 'dash-empty'), el('p', 'Agenda una desde el acceso «Agendar cita».', 'dash-medico'));
+      card.append(el('strong', 'No tienes citas programadas', 'dash-empty'), el('p', 'Cuando recepción programe tu próxima cita, la encontrarás aquí.', 'dash-medico'));
     }
     content.append(card);
+    if(dashboardError && !design) content.append(button('Reintentar',()=>run(()=>load()),'text-button'));
+    if(!design && !access.patient_id) content.append(el('p','Recepción debe crear o vincular tu expediente. Puedes seguir explorando la app.','scope-note'));
     heading(content, 'Accesos rápidos');
     const grid = el('div', null, 'dash-grid');
-    for (const [id, label, icon] of [['appointments', 'Mis citas', '▦'], ['laboratory', 'Laboratorios', '⚗'], ['chart', 'Mi expediente', '▤'], ['prescriptions', 'Recetas', '▤']]) {
-      if (!matches(label)) continue;
+    for (const [id, label, icon] of [['appointments', 'Mis citas', '▦'], ['request', 'Solicitar atención', '✚'], ['laboratory', 'Laboratorios', '⚗'], ['prescriptions', 'Recetas', '▤']]) {
       const node = button(null, () => go(id), 'dash-card');
       node.append(el('span', icon, 'dash-icon'), el('strong', label));
       grid.append(node);
@@ -570,8 +620,8 @@
     }
     heading(content, 'Agenda semanal');
     for (const values of rows.filter(values => matches(values.join(' ')))) { const card = row(values[0],values[1],values[2]); card.className += ' schedule-row'; content.append(card); }
-    if (!design) for (const shift of items.filter(item => item.status === 'pending')) content.append(button('Confirmar jornada · ' + formatPeriod(shift.period),() => run(async () => {
-      await api.rpc('confirm_shift',{p_id:shift.id,p_expected_version:shift.row_version}); await load(); message('Jornada confirmada.');
+    if (!design) for (const shift of items.filter(item => item.status === 'pending')) content.append(button('Confirmar jornada · ' + formatPeriod(shift.period || `["${shift.starts_at}","${shift.ends_at}")`),() => run(async () => {
+      await api.operation('confirmShift',{p_id:shift.id,p_expected_version:shift.row_version}); await load(); message('Jornada confirmada.');
     }),'module-action'));
     if (!rows.length && !busy) empty(content, 'No hay turnos para mostrar.'); loadMore(content);
   }
@@ -628,7 +678,7 @@
     const contact=el('section',null,'sched-card hospital-info-card');contact.append(el('h2','Orientación y contacto','section-title'),el('h3','¿Necesitas ayuda?'),el('span','Clínica Universitaria · UNICAES','sched-hint'),el('strong','+503 2484-0668','hospital-contact-number'),link('Llamar a la clínica','tel:+50324840668'),el('span','WhatsApp institucional','sched-hint'),el('strong','+503 7742-3033'),link('Abrir WhatsApp institucional','https://wa.me/50377423033','info-text-link'),link('Ver directorio oficial de UNICAES','https://catolica.edu.sv/contactos-facultades-y-unidades-unidaes/','info-source'));content.append(contact);
     const specialties=el('section',null,'sched-card hospital-info-card'),published=!design&&overview?.on_duty?.length>0,names=published?[...new Set(overview.on_duty.map(item=>item.specialty))].sort():specialtyList.map(item=>item.name);
     specialties.append(el('h2','Especialidades','section-title'),el('span',published?'Especialidades de médicos publicados':'Catálogo de demostración','clinical-lab-state'));const grid=el('div',null,'hospital-specialties');for(const name of names){const item=el('article',null,'hospital-specialty');item.append(el('span','✚'),el('strong',name));grid.append(item);}specialties.append(grid,el('p','Confirma la disponibilidad al solicitar atención.','sched-hint'),button('Solicitar atención',()=>go('health'),'primary'));content.append(specialties);
-    if(!design&&overview){const notices=el('details',null,'sched-card hospital-info-card');notices.append(el('summary','Avisos y actividad del hospital'),row('Ocupación general',`${overview.occupied} de ${overview.capacity} camas`));for(const person of overview.on_duty)notices.append(row(person.name,person.specialty));for(const note of overview.information)notices.append(row(note.title,note.body));content.append(notices);}
+    if(!design&&overview){const notices=el('details',null,'sched-card hospital-info-card');notices.append(el('summary','Avisos y actividad del hospital'),row('Ocupación general',overview.occupied==null||overview.capacity==null?'Sin información publicada':`${overview.occupied} de ${overview.capacity} camas`));for(const person of overview.on_duty)notices.append(row(person.name,person.specialty));for(const note of overview.information)notices.append(row(note.title,note.body));content.append(notices);}
     content.append(button('Consultar habitaciones',()=>go('rooms'),'menu-row'));
   }
   function formScaffold(content, screen) {
@@ -645,11 +695,12 @@
     const action = button(screen.layout === 'request' ? 'Enviar solicitud' : 'Guardar consulta', () => {}, 'primary'); action.disabled = true; content.append(action);
   }
   function setModeLabel() {
-    $('#preview-mode').textContent = receptionPreview ? 'MODO DISEÑO · Recepción simulada · Sin permisos ni operaciones reales.' : design ? 'MODO DISEÑO · Datos de ejemplo locales. Sin sesión y sin conexión a Supabase.' : 'Conexión real a Supabase. Inicia sesión con una cuenta autorizada.';
-    document.body.classList.toggle('design-mode',design);
+    $('#preview-mode').textContent = receptionPreview ? 'MODO DISEÑO · Recepción simulada · Sin permisos ni operaciones reales.' : applicantView.active ? 'MODO DISEÑO · Solicitante de ejemplo. Sin credenciales y sin conexión a Supabase.' : design ? 'MODO DISEÑO · Datos de ejemplo locales. Sin sesión y sin conexión a Supabase.' : 'Conexión real a Supabase. Inicia sesión con una cuenta autorizada.';
+    document.body.classList.toggle('design-mode',design || applicantView.active);
   }
   async function enterDesign(candidate) {
     if (busy) return;
+    applicantView.close();
     if (!design && access) { message('Cierra tu sesión antes de abrir el modo de diseño.'); return; }
     await run(async () => {
       if (!fixtures) fixtures = await (await fetch('/design-fixtures.json')).json();
@@ -657,6 +708,7 @@
       access = { profile:{status:'active'}, roles:[] }; setModeLabel();
     });
   }
+  const applicantView = new HospitalApplicantDemo({el, button, header: authHeader, message, rerender: () => render(), exit: () => { applicantView.close(); design = false; reset(); message(null); setModeLabel(); render(); }});
   try {
     const [configResponse, screensResponse] = await Promise.all([fetch('/shared/contract.json',{cache:'no-store'}), fetch('/shared/screens.json',{cache:'no-store'})]);
     if (!configResponse.ok || !screensResponse.ok) throw new Error('No se pudo cargar la configuración.');
@@ -671,7 +723,7 @@
     doctorDashboard = new HospitalDoctorDashboard({el,button,go,run,busy:() => busy});
     modules = new HospitalModules(api,{el,button,row,run,message,go,period:formatPeriod,busy:() => busy,
       doctorConsultations:(parent,module) => {
-        const demo = module.workspace.appointments.length === 0;
+        const demo = false;
         doctorConsultations.render(parent,{day:module.day,appointments:demo ? HospitalDoctorConsultations.samples(module.day) : module.workspace.appointments,demo,search,period:formatConsultationTime,
           onDay:day => { module.day = day; module.select(''); module.workspace = null; run(() => module.load('consultation')); },
           onSelect:id => { module.select(id); run(() => module.loadChart()); }});
@@ -684,15 +736,22 @@
       doctorPatientHistory:(parent,module) => {
         const patients = [...new Map(module.workspace.appointments.map(item => [item.patient_id,{id:item.patient_id,name:item.patient_name,record:item.record_number}])).values()].sort((a,b) => a.name.localeCompare(b.name,'es'));
         doctorDashboard.renderHistory(parent,{patients,loadHistory:async (patient,from,to) => {
-          const chart = await api.rpc('doctor_chart',{p_patient:patient,p_from:from,p_to:to,p_query:''}); return chart.history;
+          const chart = await api.operation('patientChart',{p_patient:patient,p_from:from,p_to:to,p_query:''}); return chart.history;
         }});
       }});
   } catch (error) { message(error.message); }
   $('#design-patient').addEventListener('click', () => {if(receptionPreview){receptionPreview=false;page='appointments';setModeLabel();render();}else enterDesign('patient');});
   $('#design-reception').addEventListener('click',async()=>{if(busy)return;if(!design&&access){message('Cierra tu sesión para abrir Recepción de demostración.');return;}if(!design||role!=='patient')await enterDesign('patient');if(!design||busy)return;role='patient';page='appointments';receptionPreview=true;setModeLabel();render();});
   $('#design-doctor').addEventListener('click', () => enterDesign('doctor'));
-  $('#live-mode').addEventListener('click', () => { if (!design || busy) return; design = false; reset(); message(null); setModeLabel(); render(); });
+  $('#design-applicant').addEventListener('click', () => { if (busy) return; if (access && !applicantView.active) { message('Cierra tu sesión antes de abrir el modo de diseño.'); return; } design = false; reset(); applicantView.open(); message(null); setModeLabel(); render(); });
+  $('#live-mode').addEventListener('click', () => { if (busy || !(design || applicantView.active)) return; applicantView.close(); design = false; reset(); message(null); setModeLabel(); render(); });
   render();
+  if (api && sessionStorage.getItem(api.storageKey)) {
+    await run(async () => {
+      try { await resolve(); if (role) await load(); }
+      catch (error) { if ([400,401,403].includes(error.status)) { api.clear(); reset(); } throw error; }
+    });
+  }
   document.addEventListener('visibilitychange', () => { if (!document.hidden && role && !design && !busy) run(() => load()); });
   setInterval(() => { if (!document.hidden && !design && !busy && ((role === 'patient' && ['turns','notifications'].includes(page)) || (role === 'doctor' && ['home','patients','notifications'].includes(page)))) run(() => load()); },30000);
 })();

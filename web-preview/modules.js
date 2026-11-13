@@ -9,7 +9,7 @@
       this.identity = ''; this.role = ''; this.facility = null; this.access = null; this.screen = '';
       this.data = null; this.workspace = null; this.chart = null; this.context = null; this.selected = '';
       this.items = []; this.lines = []; this.documents = new Map(); this.filters = {from:'',to:'',query:''};
-      this.day = localDay(new Date()); this.request = {specialty:'',reason:'',day:this.day,from:'08:00',to:'12:00'};
+      this.day = localDay(new Date()); this.request = {specialty:'',reason:'',period:'manana',day:this.day,from:'08:00',to:'12:00'};
       this.consultation = {subjective:'',objective:'',assessment:'',plan:''}; this.seedDraft = true;
       this.diagnosis = {query:'',by:'description',selected:''}; this.diagnoses = [];
       this.lab = {test:'',instructions:''}; this.rx = {medication:'',unit:'',route:'',dose:'',interval:'',quantity:'',instructions:'',days:'',starts:this.day,ends:''};
@@ -17,7 +17,7 @@
       this.keys = Object.fromEntries(['request','start','save','lab','rx','emergency'].map(key => [key,root.crypto.randomUUID()]));
     }
     configure(access, role, facility) {
-      const identity = access.profile.id + '/' + role + '/' + facility;
+      const identity = access.profile.id + '/' + role + '/' + facility + '/' + (access.patient_id || '');
       if (this.identity !== identity) { this.clear(); this.identity = identity; }
       this.role = role; this.access = access; this.facility = facility;
     }
@@ -33,7 +33,7 @@
       if (this.role === 'doctor' && !['profile','notifications'].includes(page)) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(this.day)) throw new Error('Selecciona una fecha de atención válida.');
         const from = new Date(this.day + 'T00:00:00'), to = new Date(from); to.setDate(to.getDate()+1);
-        this.workspace = await this.api.rpc('doctor_workspace',{p_facility:this.facility,p_from:from.toISOString(),p_to:to.toISOString()});
+        this.workspace = await this.api.operation('workspace',{p_facility:this.facility,p_from:from.toISOString(),p_to:to.toISOString()});
         if (!Array.isArray(this.workspace.appointments) || !Array.isArray(this.workspace.orders)) throw new Error('Respuesta de agenda inválida.');
         if (this.selected && !this.workspace.appointments.some(item => item.id === this.selected)) this.select('');
         if (this.appointment && ['consultation','chart','laboratory','prescriptions'].includes(page)) await this.loadChart();
@@ -41,7 +41,7 @@
       if (this.role === 'patient' || ['prescriptions','profile','notifications'].includes(page)) {
         const from = this.filters.from ? new Date(this.filters.from) : null, to = this.filters.to ? new Date(this.filters.to) : null;
         if ((from && !Number.isFinite(from.getTime())) || (to && !Number.isFinite(to.getTime())) || (from && to && from > to)) throw new Error('Revisa el intervalo de fechas.');
-        const result = await this.api.rpc('mobile_module',{p_role:this.role,p_module:page,p_facility:this.facility,
+        const result = await this.api.operation('module',{p_role:this.role,p_module:page,p_facility:this.facility,
           p_from:from?.toISOString() || null,p_to:to?.toISOString() || null,p_query:this.filters.query,p_cursor:more ? this.data?.next_cursor : null,p_limit:25});
         if (!Array.isArray(result.items) || !Array.isArray(result.options) || (result.has_more && !result.next_cursor)) throw new Error('Respuesta de módulo inválida.');
         this.items = more ? [...this.items,...result.items] : result.items; this.data = result;
@@ -59,7 +59,7 @@
       for (const key of ['start','save','lab','rx']) this.keys[key] = root.crypto.randomUUID();
     }
     async loadChart() {
-      this.context = await this.api.rpc('doctor_chart',{p_patient:this.appointment.patient_id,p_from:null,p_to:null,p_query:''});
+      this.context = await this.api.operation('patientChart',{p_patient:this.appointment.patient_id,p_from:null,p_to:null,p_query:''});
       this.chart = this.context;
       if (this.seedDraft) {
         const encounter = this.encounter;
@@ -68,7 +68,7 @@
       }
     }
     async mutation(name, parameters, success, after) {
-      await this.api.rpc(name,parameters); if (after) after();
+      await this.api.operation(name,parameters); if (after) after();
       try { await this.load(this.screen); this.ui.message(success); }
       catch { throw new Error(success + ' No se pudo actualizar la lista; usa Actualizar.'); }
     }
@@ -130,11 +130,11 @@
         card.append(this.node('p',dateTime(item.event_at),'module-date'));
         const details = this.node('details'); details.append(this.node('summary','Ver detalle'));
         for (const field of item.details) this.detail(details,field.label,field.label === 'Horario' ? this.ui.period(field.value) : field.value); card.append(details);
-        if (page !== 'chart' && item.action === 'mark_read') this.command(card,'Marcar como leída',() => this.mutation('update_record',{p_resource:'notifications',p_id:item.id,p_values:{read_at:new Date().toISOString()},p_expected_version:item.row_version},'Notificación leída.'));
+        if (page !== 'chart' && item.action === 'mark_read') this.command(card,'Marcar como leída',() => this.mutation('updateItem',{p_resource:'notifications',p_id:item.id,p_values:{read_at:new Date().toISOString()},p_expected_version:item.row_version},'Notificación leída.'));
         if (page !== 'chart' && item.action === 'cancel_appointment') {
           const cancellation = {reason:''}, {form,finish} = this.form(card,'Confirmar cancelación',async () => {
             if (!cancellation.reason.trim()) throw new Error('Escribe el motivo de cancelación.');
-            await this.mutation('transition_appointment',{p_id:item.id,p_status:'cancelled',p_reason:cancellation.reason,p_expected_version:item.row_version},'Cita cancelada.');
+            await this.mutation('cancelAppointment',{p_id:item.id,p_status:'cancelled',p_reason:cancellation.reason,p_expected_version:item.row_version},'Cita cancelada.');
           });
           this.field(form,'Motivo de cancelación',cancellation,'reason').required = true; finish();
         }
@@ -150,13 +150,13 @@
     profileForm(parent) {
       const state = this.profile, {form,finish} = this.form(parent,'Guardar teléfono',async () => {
         if (!/^[+]?[0-9() -]{7,25}$/.test(state.phone)) throw new Error('Introduce un teléfono válido.');
-        await this.mutation('update_my_phone',{p_value:state.phone},'Teléfono actualizado.');
+        await this.mutation('updatePhone',{p_value:state.phone},'Teléfono actualizado.');
       }); this.field(form,'Teléfono',state,'phone','tel').required = true; finish();
       if (this.role === 'patient') {
         parent.append(this.node('h2','Contacto de emergencia','section-title'));
         const emergency = this.form(parent,'Guardar contacto',async () => {
           if (![state.given,state.family,state.relationship].every(value => value.trim()) || !/^[+]?[0-9() -]{7,25}$/.test(state.emergencyPhone)) throw new Error('Completa nombre, apellidos, parentesco y teléfono válidos.');
-          await this.mutation('set_my_emergency_contact',{p_id:this.data?.emergency?.id || null,p_given_names:state.given,p_family_names:state.family,p_phone:state.emergencyPhone,p_relationship:state.relationship,p_expected_version:this.data?.emergency?.row_version || null,p_request_key:this.keys.emergency},'Contacto actualizado.',() => { this.keys.emergency = root.crypto.randomUUID(); });
+          await this.mutation('emergencyContact',{p_id:this.data?.emergency?.id || null,p_given_names:state.given,p_family_names:state.family,p_phone:state.emergencyPhone,p_relationship:state.relationship,p_expected_version:this.data?.emergency?.row_version || null,p_request_key:this.keys.emergency},'Contacto actualizado.',() => { this.keys.emergency = root.crypto.randomUUID(); });
         });
         for (const [label,key,type] of [['Nombres','given','text'],['Apellidos','family','text'],['Teléfono de emergencia','emergencyPhone','tel'],['Parentesco','relationship','text']]) this.field(emergency.form,label,state,key,type).required = true;
         emergency.finish();
@@ -166,7 +166,7 @@
         const group = this.node('label',null,'module-toggle'), toggle = this.node('input'); toggle.type = 'checkbox'; toggle.checked = item.enabled; toggle.disabled = this.ui.busy();
         toggle.addEventListener('change',() => this.ui.run(async () => {
           const enabled = toggle.checked;
-          await this.mutation(item.preference_id ? 'update_record' : 'create_record',item.preference_id ? {p_resource:'notification_preferences',p_id:item.preference_id,p_values:{enabled},p_expected_version:item.row_version} : {p_resource:'notification_preferences',p_values:{profile_id:this.access.profile.id,topic_id:item.id,channel:'in_app',enabled},p_request_key:root.crypto.randomUUID()},'Preferencia guardada.');
+          throw new Error('Las preferencias todavía no están habilitadas en Hospital Móviles.');
         })); group.append(toggle,this.node('span',item.name)); parent.append(group);
       }
       const passwords = {password:'',repeat:''}, passwordForm = this.form(parent,'Actualizar contraseña',async () => {
@@ -218,34 +218,34 @@
       if (!items.length) parent.append(this.ui.row('Sin notificaciones','No hay avisos recientes.'));
       for (const item of items) {
         const card = this.ui.row(item.title,item.body,item.read_at ? 'Leída' : 'No leída'); card.append(this.node('p',dateTime(item.created_at)));
-        if (!item.read_at) this.command(card,'Marcar como leída',() => this.mutation('update_record',{p_resource:'notifications',p_id:item.id,p_values:{read_at:new Date().toISOString()},p_expected_version:item.row_version},'Notificación leída.')); parent.append(card);
+        if (!item.read_at) this.command(card,'Marcar como leída',() => this.mutation('updateItem',{p_resource:'notifications',p_id:item.id,p_values:{read_at:new Date().toISOString()},p_expected_version:item.row_version},'Notificación leída.')); parent.append(card);
       }
     }
     consultationForm(parent) {
       if (!this.appointment) return;
       if (!this.appointment.encounter_id) {
-        const button = this.command(parent,'Iniciar consulta',() => this.mutation('start_consultation',{p_appointment:this.selected,p_request_key:this.keys.start},'Consulta iniciada.',() => { this.keys.start = root.crypto.randomUUID(); this.seedDraft = true; }),true);
+        const button = this.command(parent,'Iniciar consulta',() => this.mutation('startConsultation',{p_appointment:this.selected,p_request_key:this.keys.start},'Consulta iniciada.',() => { this.keys.start = root.crypto.randomUUID(); this.seedDraft = true; }),true);
         button.disabled ||= !['checked_in','in_progress'].includes(this.appointment.status); return;
       }
       const encounter = this.encounter; if (!encounter) return;
       if (encounter.status !== 'open') { for (const [key,label] of [['subjective','Motivo'],['objective','Exploración'],['assessment','Evaluación'],['plan','Plan']]) this.detail(parent,label,encounter[key]); return; }
       const {form,finish} = this.form(parent,'Guardar consulta',async () => {
         if (!Object.values(this.consultation).every(value => value.trim() && value.length <= 10000)) throw new Error('Completa todos los campos de la consulta.');
-        await this.mutation('save_consultation',{p_encounter:encounter.id,p_note:this.noteID,p_values:{...this.consultation},p_diagnosis:this.diagnosis.selected || null,p_expected_version:this.noteVersion,p_request_key:this.keys.save},'Consulta guardada.',() => { this.keys.save = root.crypto.randomUUID(); this.seedDraft = true; });
+        await this.mutation('saveConsultation',{p_encounter:encounter.id,p_note:this.noteID,p_values:{...this.consultation},p_diagnosis:this.diagnosis.selected || null,p_expected_version:this.noteVersion,p_request_key:this.keys.save},'Consulta guardada.',() => { this.keys.save = root.crypto.randomUUID(); this.seedDraft = true; });
       });
       for (const [key,label] of [['subjective','Motivo y síntomas'],['objective','Exploración física'],['assessment','Evaluación clínica'],['plan','Plan e indicaciones']]) this.field(form,label,this.consultation,key,'textarea').required = true; finish();
       this.field(parent,'Buscar diagnóstico por',this.diagnosis,'by','text',[['description','Descripción'],['code','Código CIE-10']]);
       this.field(parent,'Buscar diagnóstico',this.diagnosis,'query');
       this.command(parent,'Buscar diagnóstico',async () => {
         const query = this.diagnosis.query.trim(); if (query.length < 2 || query.length > 120) throw new Error('Escribe entre 2 y 120 caracteres.');
-        const result = await this.api.rpc('read_resource',{p_resource:'diagnosis_codes',p_filters:[{column:this.diagnosis.by === 'code' ? 'code' : 'description',op:'ilike',value:'%'+query+'%'}],p_limit:25,p_sort:'code',p_direction:'asc',p_cursor:null}); this.diagnoses = result.data;
+        throw new Error('El catálogo de diagnósticos todavía no está adaptado a Hospital Móviles.');
       });
       this.field(parent,'Diagnóstico principal',this.diagnosis,'selected','text',this.diagnoses.map(item => [item.id,item.code+' · '+item.description]));
       if (encounter.note_id) {
         const details = this.node('details'); details.append(this.node('summary','Firmar y cerrar consulta'));
         this.command(details,'Confirmar firma y cierre',async () => {
           if (Object.keys(this.consultation).some(key => this.consultation[key] !== (encounter[key] || ''))) throw new Error('Guarda los cambios antes de cerrar la consulta.');
-          await this.mutation('close_consultation',{p_encounter:encounter.id,p_note:encounter.note_id,p_note_version:encounter.note_version,p_expected_version:encounter.row_version},'Consulta firmada y cerrada.');
+          await this.mutation('closeConsultation',{p_encounter:encounter.id,p_note:encounter.note_id,p_note_version:encounter.note_version,p_expected_version:encounter.row_version},'Consulta firmada y cerrada.');
         }); parent.append(details);
       }
     }
@@ -259,7 +259,7 @@
       const filters = this.node('div',null,'module-filters'); this.field(filters,'Desde',this.filters,'from','datetime-local'); this.field(filters,'Hasta',this.filters,'to','datetime-local');
       this.command(filters,'Buscar historial',async () => {
         if (this.filters.from && this.filters.to && this.filters.from > this.filters.to) throw new Error('Revisa las fechas del historial.');
-        this.chart = await this.api.rpc('doctor_chart',{p_patient:this.appointment.patient_id,p_from:this.filters.from ? new Date(this.filters.from).toISOString() : null,p_to:this.filters.to ? new Date(this.filters.to).toISOString() : null,p_query:this.search});
+        this.chart = await this.api.operation('patientChart',{p_patient:this.appointment.patient_id,p_from:this.filters.from ? new Date(this.filters.from).toISOString() : null,p_to:this.filters.to ? new Date(this.filters.to).toISOString() : null,p_query:this.search});
       }); parent.append(filters);
       for (const encounter of this.chart.history) { const card = this.ui.row(dateTime(encounter.started_at),'',labels[encounter.status]); for (const key of ['subjective','objective','assessment','plan']) if (encounter[key]) card.append(this.node('p',encounter[key])); parent.append(card); }
       if (!this.chart.history.length) parent.append(this.ui.row('Sin consultas','No hay consultas propias en este intervalo.'));
@@ -268,7 +268,7 @@
       if (this.encounter?.status === 'open') {
         const {form,finish} = this.form(parent,'Emitir orden',async () => {
           if (!this.workspace.tests.some(test => test.id === this.lab.test) || this.lab.instructions.length > 10000) throw new Error('Selecciona un estudio válido.');
-          await this.mutation('doctor_issue_lab_order',{p_encounter:this.encounter.id,p_test:this.lab.test,p_instructions:this.lab.instructions,p_request_key:this.keys.lab},'Orden emitida.',() => { this.keys.lab = root.crypto.randomUUID(); this.lab.test = ''; this.lab.instructions = ''; });
+          await this.mutation('issueLab',{p_encounter:this.encounter.id,p_test:this.lab.test,p_instructions:this.lab.instructions,p_request_key:this.keys.lab},'Orden emitida.',() => { this.keys.lab = root.crypto.randomUUID(); this.lab.test = ''; this.lab.instructions = ''; });
         });
         this.detail(form,'Clínica',this.workspace.facility_name); this.detail(form,'Médico emisor',this.workspace.doctor_name);
         this.field(form,'Tipo de laboratorio',this.lab,'test','text',this.workspace.tests.map(test => [test.id,test.name])).required = true;
@@ -310,7 +310,7 @@
         });
         if (this.lines.length) {
           const confirm = this.node('details'); confirm.append(this.node('summary','Emitir y firmar receta'));
-          this.command(confirm,'Confirmar emisión',() => this.mutation('mobile_issue_prescription',{p_encounter:this.encounter.id,p_items:this.lines.map(line => ({...line})),p_request_key:this.keys.rx},'Receta emitida.',() => { this.keys.rx = root.crypto.randomUUID(); this.lines = []; }),true); parent.append(confirm);
+          this.command(confirm,'Confirmar emisión',() => this.mutation('issuePrescription',{p_encounter:this.encounter.id,p_items:this.lines.map(line => ({...line})),p_request_key:this.keys.rx},'Receta emitida.',() => { this.keys.rx = root.crypto.randomUUID(); this.lines = []; }),true); parent.append(confirm);
         }
       } else parent.append(this.ui.row('Emisión de recetas','Selecciona una consulta abierta para emitir una receta.'));
       this.renderData(parent,'prescriptions');

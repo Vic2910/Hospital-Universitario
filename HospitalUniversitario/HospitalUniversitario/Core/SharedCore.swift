@@ -14,11 +14,12 @@ struct BackendConfiguration: Decodable {
 
     static func load(bundle: Bundle = .main) throws -> BackendConfiguration {
         guard let value = bundle.object(forInfoDictionaryKey: "SUPABASE_URL") as? String,
-              let url = URL(string: value), url.scheme == "https", url.host != nil,
+              let url = URL(string: value),
+              url.absoluteString == "https://uvebpsbbwofthucghccc.supabase.co",
               !value.contains("$("),
               let key = bundle.object(forInfoDictionaryKey: "SUPABASE_PUBLISHABLE_KEY") as? String,
-              !key.isEmpty, !key.contains("$("), !key.hasPrefix("sb_secret_") else {
-            throw HospitalError.message("Configura Supabase.local.xcconfig con la URL y la clave pública del hospital.")
+              key.hasPrefix("sb_publishable_"), !key.contains("$(") else {
+            throw HospitalError.message("Revisa Supabase.xcconfig con la configuración pública de Hospital Móviles.")
         }
         return BackendConfiguration(url: url, publishableKey: key)
     }
@@ -46,7 +47,7 @@ final class SharedCore {
         context.exception = nil
         guard let result = context.objectForKeyedSubscript("HospitalCore")?.objectForKeyedSubscript(name)?.call(withArguments: arguments),
               context.exception == nil, !result.isUndefined else {
-            throw HospitalError.message("No se pudo interpretar la respuesta del hospital.")
+            throw HospitalError.message(context.exception?.toString() ?? "No se pudo interpretar la respuesta del hospital.")
         }
         return result
     }
@@ -62,17 +63,12 @@ final class SharedCore {
 
     func weekWindow() throws -> String { try call("weekWindow", arguments: []).toString() }
 
-    func request(resource: String, cursor: [String: Any]?, owner: UUID? = nil, window: String? = nil) throws -> Data {
-        let object = try call("readRequest", arguments: [resource, cursor as Any? ?? NSNull(), owner?.uuidString as Any? ?? NSNull(), window as Any? ?? NSNull()]).toDictionary()!
-        return try JSONSerialization.data(withJSONObject: object)
-    }
-
     func interval(_ value: String) -> DateInterval? {
         guard let bounds = try? call("periodBounds", arguments: [value]).toDictionary(),
               let start = bounds["start"] as? String, let end = bounds["end"] as? String else { return nil }
         let parser = ISO8601DateFormatter()
         parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        guard let first = parser.date(from: start), let last = parser.date(from: end) else { return nil }
+        guard let first = parser.date(from: start) ?? ISO8601DateFormatter().date(from: start), let last = parser.date(from: end) ?? ISO8601DateFormatter().date(from: end) else { return nil }
         return DateInterval(start: first, end: last)
     }
 

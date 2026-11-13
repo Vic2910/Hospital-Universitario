@@ -13,13 +13,17 @@
   }
   class HospitalAPI {
     constructor(contract, options = {}) {
+      if (contract.url !== 'https://uvebpsbbwofthucghccc.supabase.co' || !contract.publishableKey?.startsWith('sb_publishable_')) {
+        throw new Error('La configuración debe corresponder al proyecto Hospital Móviles y usar una clave pública publicable.');
+      }
       this.contract = contract;
       this.fetch = options.fetch || root.fetch.bind(root);
       this.storage = options.storage || root.sessionStorage;
       this.session = null;
       this.expiry = 0;
       this.refreshing = null;
-      this.storageKey = 'hospital.refresh-token.v1';
+      this.storageKey = 'hospital.moviles.uvebpsbbwofthucghccc.refresh.v1';
+      this.storage.removeItem('hospital.refresh-token.v1');
     }
     async request(path, body, token, method = 'POST') {
       const headers = { apikey: this.contract.publishableKey, 'Content-Type': 'application/json' };
@@ -46,6 +50,13 @@
       try { this.accept(session); }
       catch (error) { await this.request('/auth/v1/logout?scope=local', {}, session.access_token).catch(() => {}); throw error; }
     }
+    async signUp(email, password, data) {
+      const result = await this.request('/auth/v1/signup', { email: email.trim(), password, data });
+      if (!result?.access_token) return false;
+      try { this.accept(result); }
+      catch (error) { await this.request('/auth/v1/logout?scope=local', {}, result.access_token).catch(() => {}); throw error; }
+      return true;
+    }
     async token() {
       if (this.session && this.expiry > Date.now()) return this.session.access_token;
       if (this.refreshing) return this.refreshing;
@@ -61,43 +72,33 @@
       try { return await this.refreshing; } finally { this.refreshing = null; }
     }
     async access() {
-      const access = await this.request('/rest/v1/rpc/my_access', {}, await this.token());
-      return { access, roles: root.HospitalCore.routes(access) };
+      const token = await this.token();
+      const user = await this.request('/auth/v1/user', null, token, 'GET');
+      if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(user.id || '')) throw new Error('Identidad inválida.');
+      const get = (table, fields, key, extra = '') => this.request('/rest/v1/' + table + '?select=' + fields + '&' + key + '=eq.' + user.id + extra, null, token, 'GET');
+      const [profiles, roles, patients, staff] = await Promise.all([
+        get('profiles','id,first_name,last_name,phone,birth_date,city','id'),
+        get('user_roles','user_id,role,active','user_id'),
+        get('patients','id,profile_id','profile_id'),get('staff','id,profile_id,active','profile_id')]);
+      this.context = root.HospitalCore.backendAccess(user,profiles[0],roles,patients,staff);
+      return {access:this.context,roles:root.HospitalCore.routes(this.context)};
     }
-    async rpc(name, parameters = {}) {
-      if (!['my_profile', 'my_activity_summary', 'my_queue_status', 'hospital_overview', 'mobile_module',
-        'doctor_workspace', 'doctor_chart', 'doctor_issue_lab_order', 'mobile_issue_prescription',
-        'request_appointment', 'transition_appointment', 'start_consultation', 'save_consultation', 'close_consultation',
-        'update_record', 'create_record', 'update_my_phone', 'set_my_emergency_contact', 'confirm_shift', 'read_resource'].includes(name)) throw new Error('Consulta no disponible.');
-      return this.request('/rest/v1/rpc/' + name, parameters, await this.token());
+    async operation(kind, parameters = {}) {
+      if (!this.context) await this.access();
+      const plan = root.HospitalCore.backendPlan(kind,parameters,this.context);
+      const results = [];
+      for (const step of plan) results.push(await this.request(step.path,step.body,await this.token(),step.method));
+      return root.HospitalCore.backendPresent(kind,parameters,this.context,results);
     }
     async changePassword(password) {
       return this.request('/auth/v1/user', {password}, await this.token(), 'PUT');
     }
-    async documentURL(id) {
-      if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) throw new Error('Documento inválido.');
-      const response = await this.fetch('/document-access', {method:'POST', headers:{Authorization:'Bearer ' + await this.token(),'Content-Type':'application/json'}, body:JSON.stringify({document_id:id}), cache:'no-store', signal:AbortSignal.timeout(25000)});
-      if (!response.ok) throw new APIError(response.status);
-      const result = await response.json(), url = new URL(result.url);
-      if (url.protocol !== 'https:' || url.origin !== new URL(this.contract.url).origin || !url.pathname.startsWith('/storage/v1/object/sign/hospital-files/')) throw new Error('El documento no devolvió un enlace seguro.');
-      return url.href;
+    async documentURL() { throw new Error('Los documentos todavía no están habilitados en Hospital Móviles.'); }
+    async read(resource, cursor) {
+      if (resource === 'appointments') throw new Error('Hospital Móviles no publica una fila numerada. Consulta Mis citas.');
+      return this.operation(resource === 'rooms' ? 'rooms' : 'shifts', {cursor,window:root.HospitalCore.weekWindow()});
     }
-    async read(resource, cursor, owner) {
-      if (resource === 'staff_shifts' && (!cursor || !this.shiftWindow)) this.shiftWindow = root.HospitalCore.weekWindow();
-      const page = await this.request('/rest/v1/rpc/read_resource', root.HospitalCore.readRequest(resource, cursor, owner, resource === 'staff_shifts' ? this.shiftWindow : null), await this.token());
-      if (!page || !Array.isArray(page.data) || typeof page.has_more !== 'boolean' || (page.has_more && !page.next_cursor)) throw new Error('Respuesta de datos inválida.');
-      const model = this.contract.models[({ rooms: 'Room', staff_shifts: 'StaffShift', queue_tickets: 'QueueTicket' })[resource]];
-      for (const item of page.data) {
-        for (const [field, declaredType] of Object.entries(model)) {
-          if (declaredType.endsWith('?') && item[field] == null) continue;
-          const type = declaredType.replace('?', '');
-          const valid = type === 'Bool' ? typeof item[field] === 'boolean' : ['Int', 'Int64'].includes(type) ? Number.isSafeInteger(item[field]) : type === 'UUID' ? typeof item[field] === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item[field]) : typeof item[field] === 'string';
-          if (!valid) throw new Error('El servidor devolvió datos incompatibles con el contrato.');
-        }
-      }
-      return page;
-    }
-    clear() { this.session = null; this.expiry = 0; this.shiftWindow = null; this.storage.removeItem(this.storageKey); }
+    clear() { this.context = null; this.session = null; this.expiry = 0; this.shiftWindow = null; this.storage.removeItem(this.storageKey); }
     async signOut() {
       let warning = null;
       try { await this.request('/auth/v1/logout?scope=local', {}, await this.token()); }

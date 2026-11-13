@@ -21,7 +21,7 @@
       if(loading)parent.append(el('p','Cargando tus recetas…','scope-note'));
       if(error){parent.append(el('p',error,'scope-note'));if(retry)parent.append(button('Reintentar',retry,'module-action'));}
       const rows=records.filter(record=>fold([record.dateLabel,record.pickup,...record.medicines.map(medicine=>medicine.name+' '+medicine.observations)].join(' ')).includes(fold(search))).sort((a,b)=>(Date.parse(b.issuedAt)||0)-(Date.parse(a.issuedAt)||0));
-      if(!rows.length&&!loading&&!error){const empty=el('article',null,'sched-card');empty.append(el('strong','No hay recetas para mostrar.'),el('p','Tus recetas aparecerán aquí cuando estén disponibles.','sched-hint'));parent.append(empty);}
+      if(!rows.length&&!loading&&!error){const empty=el('article',null,'sched-card');empty.append(el('strong','No tienes recetas registradas.'),el('p','Tus recetas aparecerán aquí cuando estén disponibles.','sched-hint'));parent.append(empty);}
       for(const record of rows){
         parent.append(el('h3',record.dateLabel,'patient-rx-date'));
         for(const medicine of record.medicines){

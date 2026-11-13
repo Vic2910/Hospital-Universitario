@@ -47,6 +47,9 @@
 .dash-medico{font-size:12px;opacity:.9}
 .dash-empty{font-size:14px;font-weight:600}
 .dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dash-greeting h2,.dash-card strong,.dash-medico{overflow-wrap:anywhere}
+.dash-card{min-width:0}
+@media(max-width:340px){.dash-grid{gap:8px}.dash-card{padding:12px}.dash-avatar{width:44px;height:44px}.dash-text h2{font-size:19px}}
 .dash-card{display:grid;gap:12px;justify-items:start;background:#fff;border-radius:14px;padding:14px;min-height:92px;text-align:left;border:1px solid rgba(164,19,60,.18);transition:transform .12s ease,opacity .12s ease}
 .dash-card:active{transform:scale(.97);opacity:.85}
 .dash-icon{width:40px;height:40px;border-radius:50%;display:grid;place-content:center;background:var(--rose);color:var(--wine);font-size:16px}
@@ -149,7 +152,7 @@
 .clinical-lab-state{justify-self:start;display:inline-flex;border-radius:999px;padding:6px 10px;background:var(--rose);color:var(--wine);font-size:11px;font-weight:600}.clinical-lab-state.is-completed{background:#e3f6ea}
 .clinical-lab-list details{display:grid;gap:10px}.clinical-lab-list summary{cursor:pointer;min-height:44px;padding:12px 0;font-weight:600;color:var(--wine)}.clinical-lab-list details .consult-field{margin-top:10px}
 
-.clinical-lab-state.is-processing{background:#e7f1fd}.clinical-lab-state.is-pending{background:#fff2d9}
+.clinical-lab-state.is-processing{background:#e7f1fd}.clinical-lab-state.is-pending{background:#fff2d9}.clinical-lab-state.is-rejected{background:#fde2e2}.applicant-periods{display:flex;gap:10px}.applicant-nav{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:12px}.applicant-nav .applicant-tab{flex:1 1 0;min-width:0;border:0;border-radius:10px;padding:10px 8px;background:#fff;color:var(--wine);font-size:13px;font-weight:600}.applicant-nav .applicant-tab.is-active{background:var(--wine);color:#fff}.applicant-nav .text-button{width:100%}.period-choice[aria-pressed="true"]{border-color:var(--wine);box-shadow:inset 0 0 0 1px var(--wine)}
 
 .clinical-result-table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}.clinical-result-table th,.clinical-result-table td{padding:8px 4px;border-bottom:1px solid #77072720;text-align:left;overflow-wrap:anywhere}.clinical-result-table th{color:var(--wine);font-weight:600}
 
@@ -220,3 +223,11 @@
 .lab-detail-identity{display:flex;align-items:center;gap:14px;min-width:0}.lab-detail-identity .consult-field{min-width:0}.lab-detail-identity .consult-field p{font-size:18px;font-weight:600}.lab-detail-contact{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:14px;background:var(--rose);border-radius:14px}.lab-detail-contact>div{min-width:0;overflow-wrap:anywhere}.lab-detail-patient .consult-field,.lab-detail-exam .consult-field{margin:0;min-width:0}.lab-detail-patient strong,.lab-detail-exam p{overflow-wrap:anywhere}.lab-detail-result .clinical-result-value{border:1px solid var(--rose);padding:18px;gap:10px}.lab-detail-result .clinical-result-value>strong{font-size:25px}.lab-detail-result .clinical-result-value>small:last-child{border-top:1px solid #77072718;padding-top:10px}.clinical-result-label{text-transform:uppercase;letter-spacing:.6px;font-size:10px!important}.lab-detail-result .clinical-result-value>span{font-size:14px;line-height:1.5}
 
 .record-person-content{display:grid;gap:16px;min-width:0}
+
+/* Solicitante: controles adaptables y texto íntegro en anchos de iPhone. */
+.applicant-nav{flex-shrink:0;padding:0 16px 24px}
+.applicant-nav button,.applicant-periods button{min-height:44px;white-space:normal;overflow-wrap:anywhere}
+.applicant-periods>*{flex:1;min-width:0}
+.auth-card:has(#ap-specialty) select,.auth-card:has(#ap-specialty) textarea{width:100%;min-width:0;max-width:100%;padding:14px;border:1px solid var(--rose);border-radius:12px;background:var(--paper);font:inherit}
+.auth-card:has(#ap-specialty) textarea{min-height:96px;resize:vertical}
+.auth-card:has(#ap-specialty),.auth-card:has(.applicant-periods),.auth-card:has(.doctor-visit){overflow-wrap:anywhere}

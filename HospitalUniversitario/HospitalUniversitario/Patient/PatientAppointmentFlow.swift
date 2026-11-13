@@ -66,7 +66,7 @@ struct PatientAppointmentsView: View {
     let period: (String) -> String
     let navigate: (String) -> Void
     @State private var showDetail = false
-    private var useExamples: Bool { modules.page != nil && modules.items.isEmpty && !modules.loading && modules.error == nil }
+    private var useExamples: Bool { false }
     private var next: PatientAssignedAppointment? {
         if useExamples { return flow.appointments.filter { $0.date >= Date() }.sorted { $0.date < $1.date }.first }
         guard let item = modules.items.filter({ ["scheduled", "confirmed"].contains($0.status) && (DoctorDate.parse($0.event_at) ?? .distantPast) >= Date() }).sorted(by: { (DoctorDate.parse($0.event_at) ?? .distantPast) < (DoctorDate.parse($1.event_at) ?? .distantPast) }).first, let date = DoctorDate.parse(item.event_at) else { return nil }
@@ -78,7 +78,12 @@ struct PatientAppointmentsView: View {
     var body: some View {
         Group {
             if showDetail { assignedTicket }
-            else {
+            else if next == nil {
+                VStack(spacing: 16) {
+                    Text(modules.loading ? "Cargando tus citas…" : modules.error != nil ? "No pudimos cargar tus citas. Intenta de nuevo." : "No tienes citas registradas.")
+                    MobileModuleView(model: modules, module: "appointments", role: "patient", search: search, period: period, navigate: navigate)
+                }
+            } else {
                 Button { showDetail = true } label: {
                     HStack(spacing: 16) {
                         Image(systemName: "calendar.badge.checkmark").font(.system(size: 25)).foregroundStyle(HospitalTheme.wine)

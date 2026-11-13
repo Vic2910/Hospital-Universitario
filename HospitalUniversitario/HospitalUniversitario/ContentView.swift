@@ -10,6 +10,7 @@ struct ContentView: View {
     @State private var password = ""
     @State private var showPassword = false
     @State private var showRegister = false
+    @State private var showApplicantDemo = false
     @State private var showRecoveryInfo = false
     @State private var search = ""
     @Environment(\.scenePhase) private var scenePhase
@@ -17,7 +18,13 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             if store.access == nil {
-                if showRegister { RegisterView(onBack: { showRegister = false }) }
+                if showApplicantDemo { ApplicantDemoView(onExit: { showApplicantDemo = false }) }
+                else if showRegister {
+                    RegisterView(store: store, onBack: { showRegister = false }, onContinueDemo: {
+                        showRegister = false
+                        showApplicantDemo = true
+                    })
+                }
                 else { login }
             }
             else if store.selectedRole == nil { rolePicker }
@@ -87,6 +94,8 @@ struct ContentView: View {
                         Text("¿No tienes cuenta?").font(.footnote).foregroundStyle(HospitalTheme.secondary)
                         HospitalLink("Regístrate") { showRegister = true }
                     }.frame(maxWidth: .infinity)
+                    HospitalLink("Vista de diseño del solicitante") { showApplicantDemo = true }
+                        .frame(maxWidth: .infinity)
                     Text("Tu perfil y tus permisos son asignados por el hospital.")
                         .font(.footnote).foregroundStyle(HospitalTheme.secondary).frame(maxWidth: .infinity, alignment: .center)
                 }.padding(.horizontal, 16).padding(.bottom, 24)
@@ -115,6 +124,7 @@ struct ContentView: View {
     private var screen: HospitalScreen? { store.screens.first { $0.id == store.screenID } }
     private var isDoctor: Bool { store.selectedRole == "doctor" }
     private var title: String {
+        if !isDoctor && store.screenID == "home" { return "Mi espacio de salud" }
         if store.screenID == "home" { return "Hola, \(store.name == "Bienvenido" ? (isDoctor ? "Doctor" : "Paciente") : store.name)" }
         if !isDoctor && ["request", "schedule", "health"].contains(store.screenID) { return "Solicitar atención" }
         return screen?.title ?? (store.screenID == "rooms" ? "Habitaciones" : store.screenID == "health" ? "Mi salud" : "Más")
@@ -133,7 +143,7 @@ struct ContentView: View {
             }
             .foregroundStyle(.white).padding(.horizontal, 24).padding(.top, 18).padding(.bottom, (store.screenID == "profile" || (!isDoctor && ["chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) || (showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID))) ? 24 : 48)
             .frame(maxWidth: .infinity, alignment: .leading).background(HospitalTheme.wine.ignoresSafeArea(edges: .top))
-            if store.screenID != "profile" && !(!isDoctor && ["chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) && !(showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID)) {
+            if store.screenID != "profile" && !(!isDoctor && ["home", "chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) && !(showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID)) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").font(.system(size: 11))
                 TextField(screen?.search ?? "Buscar servicios…", text: $search).font(.system(size: 12)).autocorrectionDisabled()
@@ -170,21 +180,33 @@ struct ContentView: View {
     }
 
     @ViewBuilder private var liveContent: some View {
-        if isDoctor, store.screenID == "prescriptions", let doctor = store.doctor, let modules = store.modules {
+        if !isDoctor, store.access?.patient_id == nil, ["appointments", "laboratory", "prescriptions", "chart", "history", "request", "schedule", "health"].contains(store.screenID) {
+            HospitalCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    Image(systemName: "heart.text.clipboard").font(.largeTitle).foregroundStyle(HospitalTheme.wine)
+                    Text(["request", "schedule", "health"].contains(store.screenID) ? "Solicita atención en recepción" : store.screenID == "appointments" ? "No tienes citas programadas" : store.screenID == "laboratory" ? "No tienes resultados de laboratorio" : store.screenID == "prescriptions" ? "No tienes recetas disponibles" : "Tu información clínica aún no está disponible")
+                        .font(.headline)
+                    Text("Acércate a recepción o consulta los canales oficiales de contacto del hospital. El personal debe crear o vincular tu expediente y programar tu atención.")
+                        .font(.subheadline).foregroundStyle(HospitalTheme.secondary)
+                    Button("Información del hospital") { go("information") }
+                    Button("Actualizar estado") { Task { await store.refreshScreen() } }
+                }
+            }
+        } else if isDoctor, store.screenID == "prescriptions", let doctor = store.doctor, let modules = store.modules {
             DoctorPrescriptionView(doctor: doctor, model: modules, search: search, period: store.period, navigate: go)
-        } else if !isDoctor, ["request", "schedule", "health"].contains(store.screenID) {
-            PatientAppointmentView(flow: appointmentFlow)
+        } else if !isDoctor, ["request", "schedule", "health"].contains(store.screenID), let modules = store.modules {
+            PatientAttentionLiveView(model: modules, navigate: go, period: store.period)
         } else if !isDoctor, store.screenID == "appointments", let modules = store.modules {
             PatientAppointmentsView(flow: appointmentFlow, modules: modules, profile: store.profile, patientID: store.access?.patient_id, search: search, period: store.period, navigate: go)
         } else if !isDoctor, ["chart", "laboratory"].contains(store.screenID), let modules = store.modules, let laboratory = store.patientLaboratory {
             PatientClinicalView(model: modules, laboratory: laboratory, module: store.screenID, profile: store.profile, navigate: go)
         } else if !isDoctor, store.screenID == "prescriptions", let modules = store.modules {
-            let useExamples = modules.page != nil && modules.items.isEmpty && !modules.loading && modules.error == nil
+            let useExamples = false
             PatientPrescriptionsView(records: useExamples ? PatientPrescriptionRecord.examples : modules.items.map(PatientPrescriptionRecord.from),
                 demonstration: useExamples, search: search, loading: modules.loading, error: modules.error, hasMore: modules.page?.has_more == true,
                 retry: { Task { await modules.load("prescriptions") } }, loadMore: { Task { await modules.load("prescriptions", more: true) } })
         } else if !isDoctor, store.screenID == "history", let modules = store.modules {
-            let useExamples = modules.page != nil && modules.items.isEmpty && !modules.loading && modules.error == nil
+            let useExamples = false
             PatientHistoryView(records: useExamples ? PatientHistoryRecord.examples : modules.items.map(PatientHistoryRecord.from),
                 demonstration: useExamples, search: search, loading: modules.loading, error: modules.error, hasMore: modules.page?.has_more == true,
                 retry: { Task { await modules.load("history") } }, loadMore: { Task { await modules.load("history", more: true) } })
@@ -213,11 +235,15 @@ struct ContentView: View {
     private func matches(_ value: String) -> Bool { search.isEmpty || value.localizedCaseInsensitiveContains(search) }
 
     /// Inicio del paciente: dashboard nuevo con saludo, fecha/cita y accesos rápidos.
-    /// El nombre real llegará con el modelo de paciente; por ahora usa el del store si existe.
+    /// Usa el perfil autenticado; el vínculo clínico solo condiciona las lecturas clínicas.
     private var patientDashboard: some View {
         PatientDashboardView(
-            nombrePaciente: store.name == "Bienvenido" ? "Gaby Diaz" : store.name,
-            proximaCita: nil,
+            nombrePaciente: store.access?.profile?.greeting_name ?? "",
+            proximaCita: store.nextAppointment,
+            sinExpediente: store.access?.patient_id == nil,
+            cargando: store.busy,
+            error: store.message,
+            retry: { Task { await store.refreshScreen() } },
             navigate: go
         )
     }
@@ -229,7 +255,7 @@ struct ContentView: View {
                 metric(store.summary.map { String((isDoctor ? $0.scheduled_appointments : $0.upcoming_appointments) ?? 0) } ?? "—", label: isDoctor ? "Citas programadas" : "Próximas citas", destination: isDoctor ? "patients" : "appointments")
                 metric(store.summary.map { String((isDoctor ? $0.waiting_patients : $0.new_results) ?? 0) } ?? "—", label: isDoctor ? "Pacientes en espera" : "Resultado nuevo", destination: isDoctor ? "patients" : "laboratory")
                 metric(store.summary.map { String((isDoctor ? $0.new_results : $0.active_prescriptions) ?? 0) } ?? "—", label: isDoctor ? "Resultados nuevos" : "Recetas activas", destination: isDoctor ? "laboratory" : "prescriptions")
-                metric(isDoctor ? (store.summary.map { String($0.pending_prescriptions ?? 0) } ?? "—") : store.summary?.tickets?.first.map { String($0.number) } ?? "—", label: isDoctor ? "Recetas pendientes" : "Turno actual", destination: isDoctor ? "prescriptions" : "turns")
+                metric(isDoctor ? (store.summary.map { String($0.pending_prescriptions ?? 0) } ?? "—") : "—", label: isDoctor ? "Recetas pendientes" : "Turno actual", destination: isDoctor ? "prescriptions" : "turns")
             }
             heading(isDoctor ? "Accesos clínicos" : "Accesos rápidos")
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
@@ -286,11 +312,7 @@ struct ContentView: View {
                 HospitalCard {
                     Text(store.period(shift.period)).font(.system(size: 12, weight: .medium))
                     HospitalBadge(text: HospitalLabels.status(shift.status), warning: shift.status != "confirmed")
-                    if shift.status == "pending", let modules = store.modules {
-                        Button("Confirmar jornada", systemImage: "calendar.badge.checkmark") {
-                            Task { if await modules.confirmShift(id: shift.id, version: Int(shift.row_version)) { await store.refreshScreen() } }
-                        }.disabled(modules.saving)
-                    }
+
                 }
             }
             if store.shiftsMore { Button("Cargar más") { Task { await store.refreshScreen(more: true) } }.disabled(store.busy) }
@@ -301,21 +323,8 @@ struct ContentView: View {
     private var queue: some View {
         VStack(alignment: .leading, spacing: 20) {
             heading("Turno de atención")
-            if store.queueStatuses.isEmpty { empty("No tienes un turno activo.") }
-            ForEach(store.queueStatuses, id: \.ticket_id) { status in
-                HospitalCard {
-                    VStack(spacing: 22) {
-                        Text("Tu número").font(.system(size: 12)).foregroundStyle(HospitalTheme.secondary)
-                        Text(status.display_number ?? String(status.number)).font(.system(size: 42, weight: .semibold)).foregroundStyle(HospitalTheme.wine)
-                        HospitalBadge(text: HospitalLabels.status(status.status), warning: status.status == "waiting")
-                    }.frame(maxWidth: .infinity).padding(.vertical, 15)
-                }
-                heading("Información de la fila")
-                detail("Turno actual en atención", value: status.serving_number ?? "Sin turno en atención")
-                detail("Personas antes de ti", value: String(status.people_ahead))
-                detail("Consultorio asignado", value: status.consultation_room?.name ?? "Por asignar")
-            }
-            if store.shiftsMore { Button("Cargar más") { Task { await store.refreshScreen(more: true) } }.disabled(store.busy) }
+            HospitalNotice(text: "Hospital Móviles no publica una fila numerada. Consulta tus citas para conocer la atención programada.")
+            Button("Mis citas") { store.screenID = "appointments" }
         }
     }
 

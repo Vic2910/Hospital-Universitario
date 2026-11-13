@@ -87,7 +87,7 @@ struct HospitalInformationView: View {
             if let overview {
                 DisclosureGroup("Avisos y actividad del hospital") {
                     VStack(alignment: .leading, spacing: 14) {
-                        DoctorConsultationField(label: "Ocupación general", value: "\(overview.occupied) de \(overview.capacity) camas")
+                        DoctorConsultationField(label: "Ocupación general", value: overview.occupied.flatMap { occupied in overview.capacity.map { "\(occupied) de \($0) camas" } } ?? "Sin información publicada")
                         ForEach(overview.on_duty.indices, id: \.self) { index in DoctorConsultationField(label: overview.on_duty[index].name, value: overview.on_duty[index].specialty) }
                         ForEach(overview.information) { note in DoctorConsultationField(label: note.title, value: note.body) }
                     }.padding(.vertical, 12)

@@ -3,39 +3,19 @@ import Foundation
 
 struct Room: Codable, Identifiable, Equatable {
     let id: UUID
-    let floor_id: UUID
-    let room_type_id: UUID
+    let floor_id: Int
+    let kind: String
     let code: String
     let active: Bool
-    let created_at: String
-    let updated_at: String
-    let row_version: Int64
 }
 
 struct StaffShift: Codable, Identifiable, Equatable {
     let id: UUID
     let staff_id: UUID
-    let department_id: UUID
-    let period: String
+    let starts_at: String
+    let ends_at: String
+    let shift_type: String
     let status: String
-    let created_at: String
-    let updated_at: String
-    let row_version: Int64
-}
-
-struct QueueTicket: Codable, Identifiable, Equatable {
-    let id: UUID
-    let queue_id: UUID
-    let patient_id: UUID
-    let triage_level_id: UUID?
-    let number: Int
-    let status: String
-    let arrived_at: String
-    let called_at: String?
-    let started_at: String?
-    let finished_at: String?
-    let created_at: String
-    let updated_at: String
-    let row_version: Int64
+    var period: String { "[\"\(starts_at)\",\"\(ends_at)\")" }
 }
 

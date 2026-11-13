@@ -20,10 +20,11 @@
       const field=label=>item.details?.find(value=>value.label.toLowerCase()===label.toLowerCase())?.value;
       return{id:item.id,date:item.event_at,time:period(field('Horario')||''),name:profile?.person?[profile.person.given_names,profile.person.family_names].join(' '):'No hay datos reales',age:field('Edad')||'No hay datos reales',dui:field('DUI')||'No hay datos reales',phone:field('Teléfono')||profile?.contacts?.find(item=>item.kind==='phone')?.value||'No hay datos reales',email:profile?.auth_email||'No hay datos reales',specialty:item.title,doctor:field('Medico')||'No hay datos reales',room:field('Consultorio')||'No hay datos reales',reason:field('Motivo de la consulta')||item.subtitle||'No hay datos reales',symptoms:field('Síntomas')||'No hay datos reales',state:item.status};
     });}
-    render(parent,{appointments,demonstration,renderConnected}){
+    render(parent,{appointments,demonstration,renderConnected,loading=false,error=false}){
       const{el,button,repaint}=this.ui,next=[...appointments].filter(item=>Date.parse(item.date)>=Date.now()).sort((a,b)=>Date.parse(a.date)-Date.parse(b.date))[0];
       const close=()=>{this.selected=false;repaint();};
       if(!this.selected){
+        if (!demonstration && !appointments.length) { parent.append(el('p',loading?'Cargando tus citas…':error?'No pudimos cargar tus citas. Intenta de nuevo.':'No tienes citas registradas.','auth-notice')); if(renderConnected) renderConnected(parent); return; }
         const card=button(null,()=>{this.selected=true;repaint();},'patient-assigned-entry');card.setAttribute('aria-label','Cita asignada');
         const icon=el('span','\u25a6','patient-assigned-entry-icon');icon.setAttribute('aria-hidden','true');const text=el('span',null,'patient-assigned-entry-text');text.append(el('strong','Cita asignada'),el('small','Consulta los detalles de tu atención'));const arrow=el('span','\u203a','patient-assigned-entry-arrow');arrow.setAttribute('aria-hidden','true');card.append(icon,text,arrow);parent.append(card);return;
       }

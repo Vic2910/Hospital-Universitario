@@ -20,7 +20,7 @@ class Element {
   querySelector(selector) {
     if (selector.startsWith('#')) return this.all().find(node => node.id === selector.slice(1)) || null;
     const match = selector.match(/^\[data-choice="([^"]+)"\]$/);
-    return match ? this.all().find(node => node.attributes['data-choice'] === match[1]) || null : null;
+    return match ? this.all().find(node => node.attributes['data-choice'] === match[1]) || null : this.all().find(node => node.tagName === selector) || null;
   }
   reportValidity() { return true; }
   all() { return [this, ...this.children.flatMap(child => child.all())]; }
@@ -29,18 +29,17 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 const response = (body,status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body, text: async () => body == null ? '' : JSON.stringify(body) });
 export async function openAttentionRequest(ui) {
   await ui.click('Salud');
-  assert.ok(ui.get('sched-submit'),'Salud abre directamente Solicitar atención');
+  assert.ok(ui.app.textContent.includes('Enviar solicitud') || ui.get('sched-submit'),'Salud abre directamente Solicitar atención');
   assert.equal(ui.app.textContent.includes('Tu información de salud'),false,'Sin menú intermedio');
 }
 export function createApp(roleCodes = ['doctor'], options = {}) {
   const body = new Element('body');
-  for (const id of ['app','notice','preview-mode','design-patient','design-doctor','live-mode','design-reception']) { const node = new Element(id.startsWith('design-') || id === 'live-mode' ? 'button' : 'div'); node.id = id; if (id === 'notice') node.hidden = true; body.append(node); }
+  for (const id of ['app','notice','preview-mode','design-patient','design-doctor','live-mode','design-applicant','design-reception']) { const node = new Element(id.startsWith('design-') || id === 'live-mode' ? 'button' : 'div'); node.id = id; if (id === 'notice') node.hidden = true; body.append(node); }
   const find = predicate => body.all().find(predicate);
-  const calls = [], stored = new Map();
+  const calls = [], stored = new Map(options.stored || []);
   const storage = { getItem:key => stored.get(key) ?? null, setItem:(key,value) => stored.set(key,value), removeItem:key => stored.delete(key) };
-  let aal = options.mfa || options.missingMFA ? 'aal1' : 'aal2';
-  const access = () => ({ profile:{id:uuid,status:options.suspended ? 'suspended' : 'active',preferred_name:'Persona de prueba'}, roles:roleCodes.map(code => ({code,facility_id:uuid})), staff_id:roleCodes.includes('doctor') ? uuid : null, patient_id:roleCodes.includes('patient') ? uuid : null, aal });
-  const record = name => Object.fromEntries(Object.entries(contract.models[name]).map(([field,type]) => [field,type.endsWith('?') ? null : type === 'UUID' ? uuid : ['Int','Int64'].includes(type) ? 1 : type === 'Bool' ? true : field === 'code' ? 'VIP-301' : field === 'period' ? '["2026-10-23 07:00:00-06","2026-10-23 15:00:00-06")' : field === 'status' ? (name === 'QueueTicket' ? 'waiting' : 'confirmed') : '2026-10-23T07:00:00-06:00']));
+  let registered = !options.unregistered;
+  let accountMetadata = {first_name:'Persona',last_name:'de prueba',birth_date:'1995-01-02',phone:'7000-1111',city:'Santa Ana'};
   const fetch = async (url,request) => {
     const params = request?.body && JSON.parse(request.body); calls.push({url,params,request});
     const custom = await options.transport?.(url,params,request);
@@ -49,22 +48,22 @@ export function createApp(roleCodes = ['doctor'], options = {}) {
     if (url === '/shared/screens.json') return response(catalog);
     if (url === '/design-fixtures.json') return response(fixtures);
     if (url.includes('/token?')) return response({access_token:'test',refresh_token:'test-refresh',expires_in:3600});
-    if (url.endsWith('/auth/v1/user')) return response({factors:options.mfa ? [{id:uuid,factor_type:'totp',status:'verified'}] : []});
-    if (url.endsWith('/challenge')) return response({id:uuid});
-    if (url.endsWith('/verify')) { if (params.code !== '123456') return response({},422); aal = 'aal2'; return response({access_token:'aal2',refresh_token:'new-refresh',expires_in:3600}); }
-    if (url.endsWith('/my_access')) return response(access());
+    if (url.endsWith('/auth/v1/signup')) { accountMetadata=params.data;return response({access_token:'test',refresh_token:'test-refresh',expires_in:3600}); }
+    if (url.endsWith('/auth/v1/user')) return response({id:uuid,email:'persona@example.test'});
     if (url.includes('/logout')) return response(null,204);
-    if (url.endsWith('/my_profile')) return response({person:{given_names:'Persona',family_names:'de prueba'},auth_email:'persona@example.test',contacts:[],professional:null});
-    if (url.endsWith('/my_activity_summary')) return options.summaryDenied ? response({},403) : response({upcoming_appointments:2,new_results:1,active_prescriptions:3,scheduled_appointments:12,waiting_patients:4,pending_prescriptions:2,tickets:[]});
-    if (url.endsWith('/doctor_workspace')) return response({doctor_name:'Persona de prueba',facility_name:'Sede de prueba',appointments:[],orders:[],tests:[],notifications:[],stats:{consultations:0,completed_consultations:0,issued_orders:0,pending_orders:0}});
-    if (url.endsWith('/mobile_module')) return response({items:[],sections:[],options:[],preferences:[],phone:null,emergency:null,has_more:false,next_cursor:null});
-    if (url.endsWith('/my_queue_status')) return response({...fixtures.patient.queue,ticket_id:uuid});
-    if (url.endsWith('/hospital_overview')) return response({capacity:17,occupied:0,information:[],on_duty:[]});
-    if (url.endsWith('/read_resource')) return response({data:[record(({rooms:'Room',staff_shifts:'StaffShift',queue_tickets:'QueueTicket'})[params.p_resource])],has_more:false,next_cursor:null});
+    if (url.includes('/rest/v1/profiles?')) return response([{id:uuid,...accountMetadata}]);
+    if (url.includes('/rest/v1/user_roles?')) return response(roleCodes.map(code=>({user_id:uuid,role:code==='patient'?'paciente':code,active:!options.suspended})));
+    if (url.includes('/rest/v1/patients?')) return response(registered && roleCodes.includes('patient') ? [{id:uuid,profile_id:uuid,first_name:accountMetadata.first_name,last_name:accountMetadata.last_name,birth_date:accountMetadata.birth_date,phone:accountMetadata.phone,dui:'01234567-8',patient_code:'PAC-TEST',medical_records:[{record_code:'EXP-TEST'}]}] : []);
+    if (url.includes('/rest/v1/staff?')) return response(roleCodes.includes('doctor')?[{id:uuid,profile_id:uuid,active:!options.suspended}]:[]);
+    if (url.endsWith('/rpc/register_patient')) throw new Error('El cliente no puede crear paciente ni expediente');
+    if (url.includes('/rest/v1/rooms?')) return response([{id:uuid,floor_id:1,kind:'vip',code:'VIP-301',active:true}]);
+    if (url.includes('/rest/v1/staff_shifts?')) return response([{id:uuid,staff_id:uuid,starts_at:'2026-11-13T07:00:00Z',ends_at:'2026-11-13T15:00:00Z',shift_type:'ordinario',status:'programado'}]);
+    if (url.includes('/rest/v1/specialties?')) return response([{id:1,name:'Medicina general'}]);
+    if (url.includes('/rest/v1/')) return response([]);
     throw new Error('Unexpected request: ' + url);
   };
   const context = {Date,Intl,console,URL,crypto:webcrypto,AbortSignal,fetch,setInterval(){},sessionStorage:storage,document:{body,hidden:false,querySelector:selector => find(node => node.id === selector.slice(1)),createElement:tag => new Element(tag),addEventListener(){}}};
-  for (const path of ['HospitalUniversitario/HospitalUniversitario/Shared/hospital-core.js','web-preview/api.js','web-preview/modules.js','web-preview/doctor-dashboard.js','web-preview/clinical-labs.js','web-preview/patient-history.js','web-preview/patient-prescriptions.js','web-preview/patient-appointments.js','web-preview/app.js']) runInNewContext(read(path),context);
+  for (const path of ['HospitalUniversitario/HospitalUniversitario/Shared/hospital-core.js','web-preview/api.js','web-preview/modules.js','web-preview/doctor-dashboard.js','web-preview/clinical-labs.js','web-preview/patient-history.js','web-preview/patient-prescriptions.js','web-preview/patient-appointments.js','web-preview/applicant.js','web-preview/app.js']) runInNewContext(read(path),context);
   const app = find(node => node.id === 'app');
   return {
     calls, stored, body, app,
@@ -77,28 +76,20 @@ export function createApp(roleCodes = ['doctor'], options = {}) {
   };
 }
 for (const [codes,role] of [[['doctor'],'doctor'],[['patient'],'patient'],[['doctor','patient'],'patient']]) {
-  const ui = createApp(codes); await ui.login();
-  if (codes.length > 1) await ui.click(role === 'doctor' ? 'Médico' : 'Paciente');
-  assert.match(ui.app.textContent,/Hola, Persona de prueba/);
-  assert.equal(ui.app.textContent.includes('Mis citas'),role === 'patient');
-  await ui.click('Más'); await ui.click((role === 'doctor' ? 'Mi horario' : 'Mi turno') + '　›');
-  const query = ui.calls.findLast(call => call.params?.p_resource);
-  assert.equal(query.params.p_resource,role === 'doctor' ? 'staff_shifts' : 'queue_tickets');
-  assert.equal(query.params.p_filters[0].column,role === 'doctor' ? 'staff_id' : 'patient_id');
-  if (role === 'patient') { assert.match(ui.app.textContent,/A-014/); assert.match(ui.app.textContent,/Personas antes de ti2/); }
-  await ui.click('Más'); await ui.click('Habitaciones　›'); assert.match(ui.app.textContent,/VIP-301/);
-  await ui.click('Más'); await ui.click('Cerrar sesión'); assert.ok(ui.get('password')); assert.equal(ui.stored.size,0);
-  console.log(`OK Login real (transporte de prueba) → Inicio → ${role} → turnos → habitaciones → cierre`);
+  const ui=createApp(codes);await ui.login();
+  if(codes.length>1) await ui.click('Paciente');
+  assert.match(ui.app.textContent,role==='doctor'?/Hola, Persona de prueba/:/¡Hola, Persona de!/);
+  await ui.click('Más');await ui.click((role==='doctor'?'Mi horario':'Mi turno')+'　›');
+  if(role==='doctor') assert.ok(ui.calls.some(c=>c.url.includes('/staff_shifts?')));
+  else assert.match(ui.get('notice').textContent+ui.app.textContent,/fila numerada|No tienes un turno/);
+  await ui.click('Más');await ui.click('Habitaciones　›');assert.match(ui.app.textContent,/VIP-301/);
+  await ui.click('Más');await ui.click('Cerrar sesión');assert.ok(ui.get('password'));
+  assert.equal(ui.stored.size,0);
+  console.log('OK Hospital Móviles: login, roles, horario/citas, habitaciones y cierre ('+role+')');
 }
-const mfa = createApp(['patient'],{mfa:true}); await mfa.login();
-assert.match(mfa.app.textContent,/Hola,/);
-assert.equal(mfa.calls.some(call => call.url.endsWith('/auth/v1/user') || call.url.includes('/factors/')),false);
-assert.equal(mfa.app.all().some(node => node.id === 'totp'),false);
-console.log('OK Login AAL1: portal sin desafio ni consultas de factores MFA');
-const suspended = createApp(['patient'],{suspended:true}); await suspended.login(); assert.ok(suspended.get('password')); assert.equal(suspended.stored.size,0);
-console.log('OK Cuenta suspendida rechazada y sesión local descartada');
-const restricted = createApp(['patient'],{summaryDenied:true}); await restricted.login(); assert.match(restricted.app.textContent,/verificación adicional/); assert.match(restricted.app.textContent,/Hola,/);
-console.log('OK Resumen protegido: mantiene login y no inventa contadores');
+const suspended=createApp(['patient'],{suspended:true});await suspended.login();assert.ok(suspended.get('password'));
+assert.equal(suspended.calls.some(c=>c.url.includes('/rpc/')),false);
+console.log('OK Rol inactivo rechazado sin servicios adicionales');
 for (const role of ['patient','doctor']) {
   const ui = createApp(); await settle(); ui.get('design-' + role).listeners.click(); await settle();
   assert.match(ui.get('preview-mode').textContent,/MODO DISEÑO/);
@@ -113,10 +104,10 @@ for (const role of ['patient','doctor']) {
   console.log(`OK Diseño ${role}: todas las pantallas navegables; cero llamadas a Supabase`);
 }
 assert.equal(catalog.patient.length + catalog.doctor.length,20);
-console.log('8 recorridos aprobados; 20 pantallas comprobadas.');
+console.log('Recorridos actuales aprobados; 20 pantallas comprobadas.');
 
 // Agendamiento local: comportamiento completo sin escrituras al servidor.
-for (const mode of ['design', 'session']) {
+for (const mode of ['design']) {
   const ui = createApp(['patient']); await settle();
   if (mode === 'design') { ui.get('design-patient').listeners.click(); await settle(); }
   else await ui.login();

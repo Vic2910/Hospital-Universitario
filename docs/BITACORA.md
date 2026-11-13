@@ -1,5 +1,91 @@
 # Bitácora de trabajo
 
+## 2026-11-13 — Dashboard de paciente sin bloqueo por expediente
+
+- **Objetivo:** recuperar el Home iOS y reflejarlo en web para cuentas de paciente con o sin vínculo clínico.
+- **Cambios:** PatientDashboardView/Components (saludo real, tarjeta vino con próxima cita, cuatro accesos, carga/error/vacío); ContentView (portal sin pantalla bloqueante y orientación de recepción); HospitalStore/HospitalAPI (datos de Home); hospital-core.js (acceso de cuenta separado del vínculo, planes clínicos vacíos sin paciente y próxima cita propia); MobileModuleViewModel y modules.js (limpieza al cambiar vínculo); app.js/style.css; suites core/preview/registro/dashboard y prueba Swift. README, AGENTS e índice actualizados. [Nota breve](DASHBOARD_CUENTA_2026-11-13.md).
+- **Verificaciones:** test-preview, test-core, test-patient-registration y test-patient-dashboard aprobados con transporte simulado para los cuatro accesos, cuentas con/sin vínculo, nombre real compuesto, filtros propios, cero escrituras clínicas, errores/reintento, cambio de vínculo y cierre. check-project y git diff --check aprobados (avisos LF/CRLF). Consulta real exclusivamente de metadatos para relaciones appointments/staff/profiles. Sin cambios remotos ni cuentas de prueba.
+- **Pendientes:** compilación/pruebas Swift en Mac, revisión visual y recorrido autenticado real. El nombre del médico solo se muestra si RLS lo publica; si no, código real de empleado o dato no disponible. Registro conserva alta solo de cuenta; recepción gestiona expediente/citas.
+
+## 2026-11-13 — Registro solo de cuenta y sin confirmación de correo
+
+- **Objetivo:** aplicar la decisión explícita de que el usuario solo se registre en la app y recepción gestione expediente/citas, sin confirmación de correo.
+- **Implementación iOS/web:** retiradas llamadas y métodos de alta clínica; núcleo compartido rechaza esa operación. Estado Cuenta registrada con actualizar/cerrar sesión, sin completar expediente. DUI declarado en metadatos sin autorización ni vinculación automática. Regresión JS y prueba nativa actualizadas; README, AGENTS, transición e índice actualizados. [Informe, rutas y límites](REGISTRO_SOLO_CUENTA_2026-11-13.md).
+- **Supabase real:** aplicada migración `disable_patient_self_enrollment` que revoca EXECUTE de register_patient para PUBLIC/anon/authenticated. Privilegios posteriores verificados; RPC de recepción conservadas. HTTPS confirma registro habilitado y `mailer_autoconfirm=true`; se observó el ajuste efectivo, no se modificó Auth mediante el conector. Sin cuentas/pacientes/citas de prueba ni cambios de RLS.
+- **Verificaciones:** test-core, test-preview, test-patient-registration y check-project aprobados; pruebas JS con transporte simulado. Se corrigieron eventos/selectores de la regresión de solicitudes antes de aprobarla. Asesores consultados, avisos ajenos al alcance registrados en informe. Comprobación HTTPS real repetida con aserción de correo desactivado aprobada. Sintaxis de app.js/api.js y git diff --check aprobados.
+- **Pendientes:** compilación/pruebas Swift y revisión visual en Mac; registro autenticado real y gestión/vinculación desde recepción con identidad autorizada. La prueba nativa es fuente preparada, no ejecutada en Windows.
+
+## 2026-11-13 — Verificación de conexión exclusiva a Hospital Móviles
+
+- **Objetivo:** revisar iOS/web, retirar restos del backend sustituido y verificar la nueva conexión.
+- **Cambios:** URL exacta y clave publicable exigidas en `Core/SharedCore.swift` y `web-preview/api.js`; regresión en `scripts/test-core.mjs` y cotejo iOS/web en `scripts/check-project.py`. Retirados nueve scripts de transición de un solo uso y el JSON del diccionario anterior; manifiesto actualizado. README e índice actualizados; [informe de revisión](REVISION_CONEXION_2026-11-13.md). Se preservaron cambios locales anteriores y referencias visuales.
+- **Verificaciones:** conector Supabase confirma Hospital Móviles activo; HTTPS real confirma Auth 200, correo obligatorio y rechazo anónimo 401 en perfiles/pacientes/roles. Primer intento de red bloqueado por sandbox; repetición autorizada aprobada. test-core, test-preview, test-patient-registration, generate-models --check y check-project aprobados. Las pruebas JS usan transporte simulado. `git diff --check` aprobado con la configuración vigente y avisos LF/CRLF; una comprobación adicional con autocrlf desactivado interpreta los CRLF como espacios y no se usa como resultado del proyecto. Sin dominio ni RPC antiguos en iOS/web/scripts.
+- **Pendientes:** compilar y probar Swift en Mac, revisar interfaz y recorrer registro/login con una identidad autorizada. Operaciones clínicas pendientes enumeradas en la transición. No se crearon cuentas/pacientes ni se modificaron esquema, permisos o Auth. La disponibilidad de la conexión no acredita todos los módulos.
+
+## 2026-11-13 — Diagnóstico de transición a Hospital Móviles
+
+- **Objetivo:** analizar el reemplazo del backend anterior manteniendo SwiftUI y web en paralelo, antes de implementarlo.
+- **Hallazgos:** nuevo proyecto activo; estructura y RPC incompatibles con los contratos actuales. Web conserva URL/CSP anteriores; iOS requiere configuración local independiente, ausente en esta copia. [Informe y pasos necesarios](ANALISIS_HOSPITAL_MOVILES_2026-11-13.md).
+- **Rutas modificadas:** solo este registro, `docs/README.md` e informe nuevo. Se preservaron cambios locales anteriores; no se cambió la conexión ni Supabase.
+- **Verificaciones:** test-preview aprobado (ocho recorridos/veinte pantallas, transporte simulado), check-project aprobado y git diff --check aprobado con avisos LF/CRLF. Listados y SELECT de metadatos reales del proyecto nuevo; sin escrituras ni autenticación de prueba.
+- **Pendientes:** adaptar contratos/modelos/repositorios en ambas plataformas, configurar nuevo destino y sesiones, validar acceso real y compilar/probar en Mac. No se ejecutó Xcode ni revisión visual.
+
+## 2026-11-12 — Último bloqueo: atención sin expediente
+
+- **Resultado:** consultas reales de solo lectura de funciones, columnas, FK/CHECK y políticas confirman que el registro no admite atención y las operaciones de atención exigen paciente o crean uno desde Recepción. No se modificó la aplicación, Supabase, permisos ni datos persistentes.
+- **Cambios mínimos:** [contrato de dos RPC](CONTRATO_ATENCION_SIN_EXPEDIENTE.md), reutilizando `registration_requests` y proponiendo ampliar `appointment_requests`, sin tablas paralelas; aviso de superación en propuesta/borrador históricos e índice. Añadida regresión pendiente/rechazado en `scripts/test-patient-registration.mjs`: sin acceso clínico, llamadas inexistentes ni creación indirecta de expediente.
+- **Verificación actual:** las 14 suites JS sin efectos externos aprobadas; `generate-models --check`, `python scripts/check-project.py` y `git diff --check` aprobados. SQL real únicamente de metadatos; ninguna escritura probada. Sin Xcode ni revisión visual nueva.
+- **Pendiente:** backend debe acordar/autorizar ampliación y desplegar las dos RPC y adaptación de Recepción del contrato; después integrar ambos clientes y comprobar persistencia en entorno autorizado. Registro/login/citas actuales se conservan.
+
+## 2026-11-12 — Registro funcional y solicitudes reales del Paciente
+
+- **Objetivo:** implementar lo permitido por el backend existente sin modificar Supabase ni crear datos persistentes de prueba. Recuperación previa en `.local/patient-functional-backup/`; se preservaron cambios anteriores.
+- **Implementación iOS/web:** Auth signup, sedes públicas, envío de nombres/apellidos/DUI/nacimiento/teléfono a `submit_patient_registration`; pantalla y estado propio mediante `my_access`, recuperación de sesión pendiente y reintento tras fallo parcial sin duplicar Auth. Sin creación de persona/expediente desde el registro. Atención para pacientes vinculados con `request_appointment` y lectura `mobile_module('request')`; se mantienen separados de citas. Retirados fallbacks a ejemplos en citas/recetas/historial reales, con vacíos y errores; diseño explícito conservado.
+- **Rutas:** `Auth/RegisterView.swift`, `Core/{HospitalAPI,HospitalStore}.swift`, `ContentView.swift`, `Shared/hospital-core.js`, `Patient/{PatientAttentionLiveView,PatientAppointmentFlow,PatientDashboardComponents,PatientPrescriptionsView}.swift`; `web-preview/{api,app,patient-appointments,patient-prescriptions}.js`; nueva suite `scripts/test-patient-registration.mjs`, nuevo `scripts/check-registration-backend.mjs`, ajustes en seis suites de regresión y reglas de Applicant, pruebas nativas de Applicant y comprobación CRLF en `generate-models.mjs`; README e índice. [Informe completo](PACIENTE_REGISTRO_FUNCIONAL_2026-11-12.md).
+- **Pruebas locales:** las 14 suites JS disponibles sin efectos externos aprobadas, incluyendo registro válido/inválido, doble envío, fallo parcial, reintento, restauración, estados, permisos/red, solicitud con paciente y aislamiento de ejemplos. Sintaxis JS, check-project y diff --check. `generate-models --check` inicialmente detectó únicamente CRLF/LF; equivalencia normalizada comprobada y herramienta corregida.
+- **Comprobaciones reales:** SELECT de columnas, FK/CHECK/índices/permisos/RLS/trigger Auth y definiciones de RPC. HTTPS público 200: registro habilitado, email habilitado/autoconfirmado y una sede. Primera salida de red bloqueada por sandbox; repetición autorizada aprobada. Ninguna escritura, alta Auth, aprobación, migración, modificación de permisos o inscripción MFA.
+- **Bloqueos/límites:** registro y solicitudes implementados pero pendientes de prueba real de persistencia y recorrido iOS. Solicitud/consulta de atención sin expediente bloqueada por falta de contrato autorizado; `registration_requests` es alta/vinculación revisada, no atención. No se ejecutó Xcode ni revisión visual en navegador. Pruebas nativas añadidas, pendientes de Mac. Las pruebas históricas no se atribuyen a esta intervención.
+
+## 2026-11-12 — Verificación del diccionario de datos
+
+- **Objetivo:** contrastar el diccionario del informe con el esquema real, sin ampliar el trabajo al módulo Paciente del adjunto.
+- **Cambios:** advertencia histórica en `Informe_Hospital_Universitario.md`; informe `REVISION_DICCIONARIO_2026-11-12.md`, instantánea `diccionario-metadatos-2026-11-12.json`, diferencias `diccionario-diferencias-2026-11-12.json` e índice `docs/README.md`. Se conservan los cambios anteriores.
+- **Verificaciones:** SELECT reales de metadatos en Supabase y cotejo Python: 91 tablas documentadas frente a 93 actuales; 819 columnas cotejadas en las tablas documentadas; faltan dos tablas, dos columnas y cuatro CHECK. Sin lecturas clínicas ni escrituras remotas. No hubo cambios visuales o funcionales ni compilación Swift.
+- **Pendientes:** políticas, privilegios, triggers, índices y RPC equivalentes de registro requieren revisión independiente. [Detalle y evidencia](REVISION_DICCIONARIO_2026-11-12.md).
+
+## 2026-11-12 - Frontend del solicitante sin expediente (iOS y web, sin conexión)
+
+- **Solicitud:** implementar en local la fecha de nacimiento, el DUI con formato, la pantalla de datos personales, la navegación del solicitante, la solicitud sin cita y los estados visuales, con SwiftUI y `web-preview/` sincronizados. Sin cambios en Supabase, migraciones, Auth ni permisos.
+- **Decisiones:** reglas y estados en `Shared/hospital-core.js` para iOS y web; `scheduled` solo derivado; registro sin confirmación de correo; el borrador SQL permanece separado y no aplicado.
+- **Cambios:** `Shared/hospital-core.js`; iOS: `Applicant/ApplicantRules.swift`, `Applicant/ApplicantDemoStore.swift`, `Applicant/ApplicantDemoView.swift`, `Auth/RegisterView.swift` (reescrito), `ContentView.swift`, `HospitalUniversitarioTests/ApplicantRulesTests.swift`; web: `web-preview/applicant.js`, `app.js`, `index.html`, `server.mjs`, `style.css`, `scripts/test-preview.mjs`; nuevo `scripts/test-applicant.mjs`; documentación `docs/APLICANTE_FRONTEND_2026-11-12.md`, `README.md`, índice.
+- **Verificaciones ejecutadas:** `scripts/test-applicant.mjs` aprobada; `scripts/test-core.mjs` aprobada; `test-preview`, `test-patient-appointments`, `test-modules`, `test-doctor-*`, `test-clinical-labs`, `test-patient-*`, `test-profile` y `test-account-tools` aprobadas; `node --check` de `applicant.js` y `app.js`; `python scripts/check-project.py` aprobado; `git diff --check` sin errores.
+- **No verificado:** compilación SwiftUI y `ApplicantRulesTests` (sin Xcode en Windows); revisión visual; `test-account-codes` falla por falta de `.local/test-accounts.json` (entorno, no relacionado).
+- **Bloqueos:** decisión E (código real del rol de recepción) y decisión F (definición real de `period_bounds`) requieren consultas de solo lectura en Supabase que no pude ejecutar. El frontend no usa ningún código de rol ni muestra horas.
+- **Pendientes:** consultas de la sección 10 de la propuesta; autorización de la migración; conexión del registro y las solicitudes con bandera de configuración; `my_attention_requests()` (decisión C); compilación en Mac.
+
+## 2026-11-12 - Borrador de migración y pruebas del solicitante (no aplicado)
+
+- **Solicitud:** preparar el borrador SQL y las pruebas de la solicitud de atención sin expediente, sin ejecutar migraciones ni modificar Supabase.
+- **Decisiones aplicadas:** `attention.verify` solo para `reception`; activación de cuenta y expediente en una sola transacción; `link_existing_patient` solo con conflicto de DUI y coincidencia verificada; `applicant_session()` separado de `session_active()`; la solicitud nunca crea cita.
+- **Cambios:** `docs/sql/drafts/applicant-flow.DRAFT.sql` (tablas, funciones, wrappers y permisos con verificación previa que aborta), `docs/sql/drafts/test-applicant-flow.DRAFT.sql` (18 pruebas con rollback), y la sección 15 de `docs/PROPUESTA_REGISTRO_SOLICITUD_2026-11-12.md` con las respuestas a los seis puntos de revisión.
+- **Verificaciones:** ninguna ejecutada contra Supabase ni en PostgreSQL local. Las firmas de `has_permission`, `session_active`, `register_patient`, `link_patient_account` y la numeración de expedientes siguen sin confirmar.
+- **Pendientes y bloqueos:** función de numeración `private.next_medical_record_number()` (no existe en el repositorio); código de rol de recepción; columnas de `idempotency_keys`; horarios AM/PM; decisiones A–F de la sección 15.10; confirmación de firmas con las consultas de solo lectura de la sección 10.
+
+## 2026-11-12 - Revisión 2 de la propuesta: registro sin verificación de correo
+
+- **Decisiones:** se mantiene `mailer_autoconfirm = true` y el registro público; sin pantallas ni reenvío de confirmación; el solicitante entra sin `active`; DUI no vincula cuentas automáticamente; los módulos clínicos conservan `session_active()` y `my_access`.
+- **Cambios:** `docs/PROPUESTA_REGISTRO_SOLICITUD_2026-11-12.md` reescrito con control `applicant_session()` solo para RPC del solicitante, tabla mínima `applicant_declarations` para el DUI declarado, RPC de recepción sin vinculación automática y consultas de solo lectura actualizadas.
+- **Verificaciones:** `GET /auth/v1/settings` confirma la configuración que exigen las decisiones (sin cambios necesarios). Firmas y permisos de RPC siguen sin verificarse. No se ejecutaron migraciones ni cambios de configuración.
+- **Pendientes:** decisiones de la sección 13 del documento; ejecución de las consultas de solo lectura; autorización de la migración.
+
+## 2026-11-12 - Propuesta de registro y solicitud de atención sin expediente (Fases 0 y 1)
+
+- **Solicitud:** diagnóstico y propuesta para que una persona se registre, confirme su correo, solicite atención sin expediente y que recepción (Android) verifique, cree o vincule el expediente y agende. Sin cambios de código, base de datos ni configuración.
+- **Decisiones registradas:** registro en iOS sin expediente; confirmación de correo; solicitud sin cita automática; estado visible para el paciente; pacientes con expediente sin cambios.
+- **Verificaciones realizadas:** `GET /auth/v1/settings` con la clave publicable: `disable_signup: false` (registro público activo) y `mailer_autoconfirm: true` (correo confirmado automáticamente). `GET /rest/v1/` exige clave secreta: **no se pudieron leer firmas ni permisos de RPC**. `git status` limpio antes de escribir el documento.
+- **Cambios:** nuevo `docs/PROPUESTA_REGISTRO_SOLICITUD_2026-11-12.md`; esta entrada; enlace en `docs/README.md`.
+- **Pendientes y bloqueos:** ejecutar las consultas de solo lectura de la sección 9 del informe para confirmar cuerpos de `request_appointment`, `my_access`, `can_person`, `register_patient`, trigger de Auth y permisos. Decisiones de la sección 8 pendientes de autorización. No se implementó nada; no se ejecutaron pruebas de app porque no hubo cambios funcionales.
+
 ## 2026-10-30 - Dashboard del paciente
 
 - **Solicitud:** rediseñar el inicio del rol Paciente en SwiftUI, con la captura `Captura de pantalla 2026-10-30 133626.png` como referencia de estructura (saludo con avatar, card de próxima cita, cuatro accesos rápidos) pero con la paleta vino/rojo del proyecto, conservando la barra inferior y la navegación existentes, y replicándolo en la web por la convención vigente.
@@ -350,3 +436,10 @@ Acceso Paciente → schedule, jerarquía visual vino/rojo, resumen, validación 
 - **Rutas:** Modules/ClinicalPatientIdentityView.swift (nuevo), Modules/ClinicalLabDesignView.swift, Patient/PatientClinicalView.swift, web-preview/{clinical-labs.js,style.css}, scripts/test-patient-chart.mjs, README.md, docs/{BITACORA.md,MI_EXPEDIENTE_LABORATORIOS_PACIENTE_2026-10-31.md}.
 - **Verificaciones:** comparación de tarjeta Doctor/Paciente para el mismo ejemplo aprobada; cuatro campos y tres contactos en sesión propia; test-patient-chart, test-clinical-labs, test-doctor-patients y test-preview aprobados; check-project.py, sintaxis JS y diff --check. DOM/transporte simulado, sin cambios de Supabase.
 - **Pendientes:** revisión visual en navegador y compilación Xcode en Mac. Se conserva el contrato autorizado y no se inventan datos reales ausentes. [Informe](MI_EXPEDIENTE_LABORATORIOS_PACIENTE_2026-10-31.md).
+## 2026-11-12 — Revisión funcional del solicitante antes de conectar Supabase
+
+- **Objetivo:** revisar registro → datos → inicio → solicitud → lista, validaciones, estados y regresión iOS/web, sin cambios de backend. Se preservó el trabajo previo sin atribuirlo a esta revisión.
+- **Correcciones:** continuación explícita desde registro de demostración en ambas plataformas; salida antes de completar datos; aislamiento MainActor del registro/contenedor, import Combine y bloqueo de validación si falta JavaScript; tarjeta SwiftUI apilada; controles web adaptables y etiquetas accesibles. Los ejemplos rechazado/cancelado ya presentes se comprobaron; script visual corregido para informar ausencia de DevTools y usar la nueva continuación.
+- **Rutas:** `Auth/RegisterView.swift`, `ContentView.swift`, `Applicant/{ApplicantRules,ApplicantDemoStore,ApplicantDemoView}.swift`, `web-preview/{app.js,applicant.js,style.css}`, `scripts/visual-applicant.mjs`, README e índice de docs; [informe completo](REVISION_FRONTEND_2026-11-12.md).
+- **Verificaciones ejecutadas:** test-applicant, test-preview (ocho recorridos/veinte pantallas), test-core (once), test-modules (siete), test-patient-appointments, test-patient-chart, test-patient-history, test-patient-prescriptions, test-profile, test-doctor-dashboard, test-doctor-patients, test-doctor-consultations y test-clinical-labs aprobados. Check-project, sintaxis de tres JS y diff --check aprobados. HTTP 200 en raíz y applicant.js del servidor existente; el intento de arrancar otro servidor recibió EADDRINUSE.
+- **Límites/bloqueos:** Edge headless no expuso DevTools; no hubo capturas ni revisión visual válida. La continuación nueva del registro se revisó estáticamente, pendiente de ejecución en navegador. No se compiló Swift ni se ejecutaron pruebas nativas en Windows. TextField(axis:) se revisó frente al deployment iOS 18.2; verificación definitiva en Xcode pendiente. Todas las pruebas funcionales usan DOM/reglas/transporte simulado; ninguna prueba real ni modificación de Supabase/Auth/SQL. Pasos manuales y revisión de tamaños iPhone documentados en el informe.

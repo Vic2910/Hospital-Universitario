@@ -13,7 +13,8 @@ final class MobileModuleViewModel: ObservableObject {
     @Published var filterDates = false
     @Published var from = Calendar.current.startOfDay(for: Date())
     @Published var to = Date()
-    @Published var specialty: UUID?
+    @Published var specialty: String?
+    @Published var preferredPeriod = "manana"
     @Published var reason = ""
     @Published var preferredDay = Date()
     @Published var preferredFrom = Calendar.current.date(bySettingHour: 8, minute: 0, second: 0, of: Date()) ?? Date()
@@ -40,12 +41,11 @@ final class MobileModuleViewModel: ObservableObject {
 
     var canRequest: Bool {
         specialty != nil && !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && reason.count <= 2000 && MobileFormatting.day(preferredDay) >= MobileFormatting.day(Date())
-            && MobileFormatting.time(preferredFrom) < MobileFormatting.time(preferredTo)
+            && reason.count <= 2000 && ["manana", "tarde"].contains(preferredPeriod)
     }
 
     func configure(role: String, facility: UUID, profile: UUID, patient: UUID?) {
-        guard self.role != role || self.facility != facility || profileID != profile else { return }
+        guard self.role != role || self.facility != facility || profileID != profile || patientID != patient else { return }
         clear()
         self.role = role; self.facility = facility; profileID = profile; patientID = patient
     }
@@ -115,19 +115,19 @@ final class MobileModuleViewModel: ObservableObject {
     func requestAppointment() async {
         guard canRequest, let facility, let patientID else { return }
         let parameters: [String: DoctorJSON] = ["p_patient": .string(patientID.uuidString), "p_facility": .string(facility.uuidString),
-            "p_specialty": specialty.map { .string($0.uuidString) } ?? .null,
+            "p_specialty": specialty.map { .string($0) } ?? .null,
             "p_reason": .string(reason.trimmingCharacters(in: .whitespacesAndNewlines)),
             "p_date": .string(MobileFormatting.day(preferredDay)), "p_from": .string(MobileFormatting.time(preferredFrom)),
-            "p_to": .string(MobileFormatting.time(preferredTo)), "p_request_key": .string(requestKey.uuidString)]
+            "period": .string(preferredPeriod), "p_to": .string(MobileFormatting.time(preferredTo)), "p_request_key": .string(requestKey.uuidString)]
         if await mutate("Solicitud enviada. Recepción confirmará la disponibilidad.", operation: {
-            try await self.repository.perform("request_appointment", parameters)
+            try await self.repository.perform("requestAttention", parameters)
         }) { requestKey = UUID(); reason = "" }
     }
 
     func cancel(_ item: MobileItem, reason: String) async {
         guard !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, item.action == "cancel_appointment" else { return }
         await mutate("Cita cancelada.") {
-            try await self.repository.perform("transition_appointment", ["p_id": .string(item.id.uuidString),
+            try await self.repository.perform("cancelAppointment", ["p_id": .string(item.id.uuidString),
                 "p_status": .string("cancelled"), "p_reason": .string(reason), "p_expected_version": .number(item.row_version)])
         }
     }
@@ -135,7 +135,7 @@ final class MobileModuleViewModel: ObservableObject {
     func markRead(_ item: MobileItem) async {
         guard item.action == "mark_read" else { return }
         await mutate("Notificación marcada como leída.") {
-            try await self.repository.perform("update_record", ["p_resource": .string("notifications"),
+            try await self.repository.perform("updateItem", ["p_resource": .string("notifications"),
                 "p_id": .string(item.id.uuidString), "p_values": .object(["read_at": .string(DoctorDate.timestamp(Date()))]),
                 "p_expected_version": .number(item.row_version)])
         }
@@ -146,7 +146,7 @@ final class MobileModuleViewModel: ObservableObject {
         guard value.range(of: "^[+]?[0-9() -]{7,25}$", options: .regularExpression) != nil else {
             error = "Introduce un teléfono válido."; return
         }
-        await mutate("Teléfono actualizado.") { try await self.repository.perform("update_my_phone", ["p_value": .string(value)]) }
+        await mutate("Teléfono actualizado.") { try await self.repository.perform("updatePhone", ["p_value": .string(value)]) }
     }
 
     func saveEmergency() async {
@@ -162,22 +162,12 @@ final class MobileModuleViewModel: ObservableObject {
             "p_expected_version": page?.emergency.map { .number($0.row_version) } ?? .null,
             "p_request_key": .string(emergencyKey.uuidString)]
         if await mutate("Contacto de emergencia actualizado.", operation: {
-            try await self.repository.perform("set_my_emergency_contact", parameters)
+            try await self.repository.perform("emergencyContact", parameters)
         }) { emergencyKey = UUID() }
     }
 
     func setPreference(_ item: MobilePreference, enabled: Bool) async {
-        guard let profileID else { return }
-        await mutate("Preferencia guardada.") {
-            if let id = item.preference_id, let version = item.row_version {
-                try await self.repository.perform("update_record", ["p_resource": .string("notification_preferences"),
-                    "p_id": .string(id.uuidString), "p_values": .object(["enabled": .bool(enabled)]), "p_expected_version": .number(version)])
-            } else {
-                try await self.repository.perform("create_record", ["p_resource": .string("notification_preferences"),
-                    "p_values": .object(["profile_id": .string(profileID.uuidString), "topic_id": .string(item.id.uuidString),
-                        "channel": .string("in_app"), "enabled": .bool(enabled)]), "p_request_key": .string(UUID().uuidString)])
-            }
-        }
+        error = "Las preferencias todavía no están habilitadas en Hospital Móviles."
     }
 
     func issuePrescription(encounter: UUID) async {
@@ -186,7 +176,7 @@ final class MobileModuleViewModel: ObservableObject {
             let encoded = try JSONEncoder().encode(prescriptionLines)
             let values = try JSONDecoder().decode(DoctorJSON.self, from: encoded)
             if await mutate("Receta emitida.", operation: {
-                try await self.repository.perform("mobile_issue_prescription", ["p_encounter": .string(encounter.uuidString),
+                try await self.repository.perform("issuePrescription", ["p_encounter": .string(encounter.uuidString),
                     "p_items": values, "p_request_key": .string(self.prescriptionKey.uuidString)])
             }) { prescriptionLines = []; prescriptionKey = UUID() }
         } catch { self.error = "No se pudo preparar la receta." }
@@ -210,7 +200,7 @@ final class MobileModuleViewModel: ObservableObject {
 
     func confirmShift(id: UUID, version: Int) async -> Bool {
         await mutate("Jornada confirmada.", reload: false) {
-            try await self.repository.perform("confirm_shift", ["p_id": .string(id.uuidString), "p_expected_version": .number(version)])
+            try await self.repository.perform("confirmShift", ["p_id": .string(id.uuidString), "p_expected_version": .number(version)])
         }
     }
 }

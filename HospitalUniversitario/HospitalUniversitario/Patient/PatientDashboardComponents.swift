@@ -8,7 +8,7 @@ struct PatientGreetingCard: View {
     var body: some View {
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Hola, \(nombre) 👋").font(.system(size: 22, weight: .bold)).foregroundStyle(HospitalTheme.ink)
+                Text(nombre.isEmpty ? "¡Hola!" : "¡Hola, \(nombre)!").font(.title2.bold()).foregroundStyle(HospitalTheme.ink)
                 Text("Aquí está el resumen de tu día.").font(.system(size: 12)).foregroundStyle(HospitalTheme.secondary)
             }
             Spacer(minLength: 8)
@@ -18,7 +18,7 @@ struct PatientGreetingCard: View {
                 .frame(width: 58, height: 58)
                 .background(HospitalTheme.rose, in: Circle())
                 .overlay(Circle().stroke(Color.rojoAcento.opacity(0.25), lineWidth: 2))
-                .accessibilityLabel("Foto de perfil de \(nombre)")
+                .accessibilityLabel("Iniciales de \(nombre)")
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -30,6 +30,8 @@ struct PatientGreetingCard: View {
 /// Card destacada con la fecha de hoy y, si existe, la próxima cita del paciente.
 struct PatientDateAppointmentCard: View {
     let proximaCita: ProximaCita?
+    var cargando = false
+    var error: String? = nil
 
     /// Fecha de hoy en español: día de la semana, número y mes.
     private var fechaHoy: String {
@@ -50,16 +52,23 @@ struct PatientDateAppointmentCard: View {
             }
             Rectangle().fill(.white.opacity(0.25)).frame(height: 1)
             Text("PRÓXIMA CITA").font(.system(size: 10, weight: .bold)).tracking(1.4).foregroundStyle(.white.opacity(0.8))
-            if let cita = proximaCita {
+            if cargando {
+                ProgressView("Consultando tus citas…").tint(.white).foregroundStyle(.white)
+            } else if let error {
+                Text("No se pudieron cargar tus citas").font(.headline).foregroundStyle(.white)
+                Text(error).font(.footnote).foregroundStyle(.white.opacity(0.9))
+            } else if let cita = proximaCita {
                 Text(cita.dia).font(.system(size: 13, weight: .medium)).foregroundStyle(.white.opacity(0.95))
                 Text(cita.hora).font(.system(size: 34, weight: .bold)).foregroundStyle(.white)
                 HStack(spacing: 6) {
                     Image(systemName: "stethoscope").font(.system(size: 12))
                     Text(cita.medico).font(.system(size: 12))
                 }.foregroundStyle(.white.opacity(0.9))
+                Text(cita.status == "confirmed" ? "Confirmada" : "Programada")
+                    .font(.footnote.bold()).foregroundStyle(.white)
             } else {
-                Text("No tienes citas programadas.").font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
-                Text("Agenda una desde el acceso «Agendar cita».").font(.system(size: 11)).foregroundStyle(.white.opacity(0.85))
+                Text("No tienes citas programadas").font(.headline).foregroundStyle(.white)
+                Text("Cuando recepción programe tu próxima cita, la encontrarás aquí.").font(.footnote).foregroundStyle(.white.opacity(0.9))
             }
         }
         .padding(18)

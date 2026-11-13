@@ -9,6 +9,7 @@ const files = new Map([
   ['/patient-history.js', [new URL('./patient-history.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/patient-prescriptions.js', [new URL('./patient-prescriptions.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/patient-appointments.js', [new URL('./patient-appointments.js', import.meta.url), 'text/javascript; charset=utf-8']],
+  ['/applicant.js', [new URL('./applicant.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/app.js', [new URL('./app.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/api.js', [new URL('./api.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/modules.js', [new URL('./modules.js', import.meta.url), 'text/javascript; charset=utf-8']],
@@ -20,31 +21,6 @@ const files = new Map([
 ]);
 const port = Number(process.env.PORT || 4173);
 const server = http.createServer(async (req, res) => {
-  if (new URL(req.url, 'http://localhost').pathname === '/document-access') {
-    const allowed = [`http://127.0.0.1:${port}`, `http://localhost:${port}`];
-    res.setHeader('Cache-Control','no-store');
-    res.setHeader('Content-Type','application/json');
-    if (req.method !== 'POST' || !allowed.includes(req.headers.origin) || !/^Bearer [A-Za-z0-9._-]+$/.test(req.headers.authorization || '')) {
-      res.writeHead(403); res.end(JSON.stringify({error:'Acceso no autorizado'})); return;
-    }
-    try {
-      let body = '';
-      for await (const chunk of req) {
-        body += chunk.toString('utf8');
-        if (Buffer.byteLength(body)>2048) { res.writeHead(413); res.end('{}'); return; }
-      }
-      const input = JSON.parse(body);
-      if (Object.keys(input).length !== 1 || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(input.document_id)) {
-        res.writeHead(400); res.end('{}'); return;
-      }
-      const contract = JSON.parse(await readFile(new URL('contract.json',shared),'utf8'));
-      const result = await fetch(contract.url + '/functions/v1/document-access',{method:'POST',
-        headers:{Authorization:req.headers.authorization,apikey:contract.publishableKey,'Content-Type':'application/json'},
-        body:JSON.stringify(input),signal:AbortSignal.timeout(25000)});
-      res.writeHead(result.status); res.end(await result.text());
-    } catch { res.writeHead(502); res.end(JSON.stringify({error:'No se pudo autorizar el documento'})); }
-    return;
-  }
   const entry = files.get(new URL(req.url, 'http://localhost').pathname);
   if (!entry || !['GET', 'HEAD'].includes(req.method)) { res.writeHead(404); res.end('Not found'); return; }
   try {
@@ -52,7 +28,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, {
       'Content-Type': entry[1], 'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
-      'Content-Security-Policy': "default-src 'self'; connect-src 'self' https://kgulityewtcyvjnxeskd.supabase.co; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+      'Content-Security-Policy': "default-src 'self'; connect-src 'self' https://uvebpsbbwofthucghccc.supabase.co; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
     });
     res.end(req.method === 'HEAD' ? undefined : body);
   } catch { res.writeHead(500); res.end('No se pudo leer el recurso'); }

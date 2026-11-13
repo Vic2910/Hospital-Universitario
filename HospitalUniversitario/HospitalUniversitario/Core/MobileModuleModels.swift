@@ -29,7 +29,9 @@ struct MobileEmergency: Codable {
     let phones: [String]
     let row_version: Int
 }
+struct MobileSpecialty: Codable, Identifiable { let id: String; let name: String }
 struct MobileModulePage: Codable {
+    var specialties: [MobileSpecialty]? = nil
     let items: [MobileItem]
     let sections: [MobileSection]
     let options: [MobileOption]

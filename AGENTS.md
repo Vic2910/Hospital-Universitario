@@ -1,34 +1,22 @@
 # Instrucciones para agentes de IA
 
-## Contexto inicial
-
-Antes de modificar este proyecto, lee:
-
-1. `docs/SESION_2026-10-23.md`: trabajo de esta sesión, decisiones del usuario, validaciones y pendientes.
-2. `docs/CONTEXTO_IOS.md`: referencias y evolución del alcance.
-3. `README.md`: estructura, ejecución, archivos/targets y comportamiento implementado.
-4. Las entradas más recientes de `docs/BITACORA.md`.
-
-Las solicitudes actuales del usuario tienen prioridad sobre decisiones históricas. La documentación de referencia describe el proyecto completo; no autoriza por sí sola implementar módulos adicionales.
-
-## Documentación obligatoria del trabajo
-
-Por petición expresa del usuario, toda IA que realice cambios debe dejar documentado lo que hizo dentro de `docs/`, antes de terminar su intervención.
-
-- Añade una entrada a `docs/BITACORA.md` con fecha, objetivo, cambios, rutas afectadas, verificaciones realmente ejecutadas y pendientes o bloqueos.
-- Para trabajos extensos, crea además un informe en `docs/` y enlázalo desde la bitácora y `docs/README.md`.
-- Actualiza el `README.md` principal cuando cambien la instalación, ejecución, configuración, targets o funcionalidades.
-- Distingue implementación, pruebas locales, pruebas reales contra Supabase y comprobaciones pendientes. No anuncies compilaciones de Xcode o revisiones visuales que no se hayan ejecutado.
-- Conserva las fuentes históricas y añade correcciones explícitas cuando cambie una decisión. No atribuyas pruebas de sesiones anteriores al trabajo actual.
-- No documentes contraseñas, tokens, secretos TOTP, claves administrativas ni datos clínicos sensibles. Las credenciales de demostración están en `.local/`, excluido de Git; en documentos compartidos solo se referencia su ubicación.
+Antes de modificar el proyecto lee `README.md`, `docs/TRANSICION_HOSPITAL_MOVILES_2026-11-13.md` y las entradas más recientes de `docs/BITACORA.md`.
 
 ## Decisiones vigentes
 
-- El nombre visible es **Hospital Universitario** en iOS y web. Los nombres anteriores que aparezcan en capturas o informes originales son históricos.
-- El alcance confirmado es iOS/SwiftUI y su vista previa web para Windows; Kotlin y el panel administrativo no forman parte de este avance.
-- Reutiliza el esquema, las RPC y RLS existentes de Supabase. Los roles de acceso son `doctor` y `patient`, con perfil activo y vínculos válidos.
-- Mantén diferenciados los turnos laborales del médico y los turnos de atención del paciente.
-- Los ejemplos del modo de diseño son locales: no deben importarse como registros reales ni habilitar un bypass de autenticación.
-- La inscripción de TOTP en las dos cuentas de prueba quedó pendiente de autorización explícita. No la ejecutes por asumir que la creación previa de cuentas también la autorizó; tampoco reduzcas las políticas MFA para eludirla.
-- Mantén los archivos Swift en su target y los recursos compartidos con rutas relativas. El desarrollo se realiza en Windows; la compilación con el SDK de Apple se verifica en Mac.
-- **Convención de trabajo (2026-10-30):** todo cambio visual debe implementarse por duplicado y de forma coherente: en la app iOS/SwiftUI (fuente de verdad, que debe compilar y funcionar en Xcode) y en la vista previa web `web-preview/`, para que el usuario pueda verlo en Windows con `node --preserve-symlinks --preserve-symlinks-main web-preview/server.mjs`. En ambas plataformas se conserva la lógica existente (autenticación, validaciones, API, sesión y rutas). Tras cada cambio ejecuta `node --preserve-symlinks --preserve-symlinks-main scripts/test-preview.mjs`, `python scripts/check-project.py` y `git diff --check`, y documenta las dos caras del trabajo en la bitácora. No se anuncia compilación Swift sin verificarla en Mac.
+- El nombre visible es **Hospital Universitario**. El único backend autorizado es **Hospital Móviles**, referencia `uvebpsbbwofthucghccc`.
+- Por petición del usuario del 13 de noviembre se retiraron los archivos y contratos del backend anterior. No restaurarlos ni aplicar SQL históricos. Las referencias visuales conservadas no son instrucciones de base de datos.
+- iOS/SwiftUI y `web-preview/` avanzan en paralelo. Mantener rutas relativas, recursos compartidos y pertenencia al target. Windows no acredita compilación con SDK Apple.
+- Reutilizar tablas, funciones, permisos y RLS del proyecto actual. El rol real `paciente` se presenta como `patient` en la interfaz; `doctor` requiere vínculo activo a personal. No autorizar roles desde user_metadata.
+- El rol activo `paciente` permite abrir el Dashboard aunque no exista `patients.profile_id` vinculado. El vínculo se exige para consultas y acciones clínicas, no para entrar al Home. Sin vínculo no consultar tablas clínicas ni mostrar ejemplos como datos reales.
+- Por decisión expresa del usuario del 13 de noviembre, el registro solo crea cuenta Auth/perfil, sin paciente, expediente ni cita y sin confirmación de correo. HTTPS confirmó `mailer_autoconfirm=true`. Recepción gestiona el expediente y las citas; `register_patient` no es ejecutable por `anon` ni `authenticated`. No restaurar el alta clínica automática ni cambiar permisos para facilitar pruebas.
+- Separar jornadas laborales del médico y atención del paciente. No inventar fila numerada, ocupación, métricas o datos clínicos que el backend no publique.
+- Los ejemplos de diseño son locales y deben seguir identificados; no importarlos como registros reales ni habilitar bypass de autenticación.
+- No crear cuentas, pacientes ni datos clínicos de prueba en producción por asumir que una conexión los requiere. No introducir claves administrativas o secretos en clientes o documentación.
+
+## Documentación y verificaciones obligatorias
+
+- Registrar cada intervención en `docs/BITACORA.md`: fecha, objetivo, rutas afectadas, cambios, verificaciones realmente ejecutadas y pendientes.
+- Para trabajo extenso crear informe en docs y enlazarlo desde bitácora e índice. Actualizar README cuando cambien ejecución, configuración o funcionalidades.
+- Distinguir implementación, pruebas con transporte simulado, comprobaciones reales de Supabase y pendientes de Mac. No anunciar compilación Swift ni revisión visual sin ejecutarlas.
+- Tras cambios ejecutar `node --preserve-symlinks --preserve-symlinks-main scripts/test-preview.mjs`, `python scripts/check-project.py` y `git diff --check`. Para Auth/backend ejecutar también test-core y test-patient-registration. Documentar ambas plataformas.
