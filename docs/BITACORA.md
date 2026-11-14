@@ -1,5 +1,13 @@
 # Bitácora de trabajo
 
+## 2026-11-14 — Corrección de ButtonStyle para Xcode
+
+- **Objetivo:** resolver el error de compilación reportado en Mac: ButtonStyleConfiguration no tiene isEnabled.
+- **iOS:** Design/HospitalTheme.swift lee el estado con @Environment(\.isEnabled); conserva la opacidad deshabilitada, la respuesta a pulsación y todos los flujos existentes. Revisados los otros tres ButtonStyle sin encontrar el mismo acceso inválido.
+- **Web-preview:** revisado el estilo button:disabled existente; no requiere cambios porque el defecto pertenece a la API SwiftUI. Sin cambios Auth, backend ni funciones de ninguna plataforma.
+- **Verificaciones ejecutadas:** test-preview aprobado (21 pantallas, DOM/transporte simulado), python scripts/check-project.py y git diff --check aprobados. Referencias/esquema/configuración iOS revisados; no hay swift ni xcodebuild disponibles en este Windows.
+- **Pendiente:** compilar y ejecutar con Xcode 16.2 o posterior en simulador iOS 18.2 o posterior y ejecutar pruebas nativas. La corrección del error reportado no acredita una compilación completa ni un recorrido funcional real en Mac.
+
 ## 2026-11-14 — Publicación del estado actual en main
 
 - **Objetivo:** publicar para el equipo todos los commits del estado actual, anteriormente en HEAD separado (31406b4).

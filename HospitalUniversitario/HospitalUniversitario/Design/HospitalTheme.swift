@@ -118,6 +118,8 @@ struct HospitalSecureField: View {
 
 /// Botón principal vino de ancho completo, como el de las referencias.
 struct HospitalPrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 15, weight: .semibold))
@@ -125,7 +127,7 @@ struct HospitalPrimaryButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 15)
             .background(HospitalTheme.wine, in: RoundedRectangle(cornerRadius: 14))
-            .opacity(configuration.isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.45)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.45)
     }
 }
 
