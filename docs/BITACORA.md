@@ -1,5 +1,12 @@
 # Bitácora de trabajo
 
+## 2026-11-14 — Publicación del estado actual en main
+
+- **Objetivo:** publicar para el equipo todos los commits del estado actual, anteriormente en HEAD separado (31406b4).
+- **Git:** unir el historial de origin/main conservando el árbol actual del proyecto, sin restaurar archivos de la integración anterior ni reescribir commits remotos. Actualizar main y publicar mediante push normal.
+- **Rutas:** docs/BITACORA.md; sin cambios funcionales en iOS ni web-preview.
+- **Verificaciones ejecutadas:** test-preview (21 pantallas), test-core y test-patient-registration aprobados con transporte simulado; python scripts/check-project.py y git diff --check aprobados. No se ejecutaron pruebas reales de Supabase ni compilación/revisión visual Swift; Xcode pendiente de Mac.
+
 ## 2026-11-14 — Registro compatible con expediente presencial
 
 - **Inspección puntual:** auth_new_user crea perfil/rol paciente sin paciente ni expediente; DUI único en patients, no en profiles. create_walkin_patient conserva expediente presencial; link_attention_patient exige solicitud, verificación y coincidencia de DUI/nacimiento, e impide reasignación entre cuentas. No hizo falta migración ni cambiar RLS/RPC.
