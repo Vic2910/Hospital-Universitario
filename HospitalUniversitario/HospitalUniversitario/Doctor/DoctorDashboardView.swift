@@ -11,6 +11,10 @@ struct DoctorDashboardView: View {
     let name: String
     let facility: String
     let consultationCount: Int
+    var pendingCount = 0
+    var completedCount = 0
+    var nextAppointment: DoctorAppointment? = nil
+    var period: (String) -> String = { $0 }
     var demonstration = false
     let navigate: (String) -> Void
     private var initials: String {
@@ -37,6 +41,14 @@ struct DoctorDashboardView: View {
                 Divider().overlay(.white.opacity(0.25))
                 Text("\(consultationCount)").font(.system(size: 36, weight: .bold))
                 Text("Consultas programadas para hoy").font(.system(size: 13, weight: .semibold))
+                Text("\(pendingCount) pendientes · \(completedCount) atendidas").font(.subheadline)
+                Divider().overlay(.white.opacity(0.25))
+                Text("PRÓXIMA CITA").font(.caption.bold())
+                if let nextAppointment {
+                    Text(nextAppointment.patient_name).font(.headline)
+                    Text(period(nextAppointment.period)).font(.subheadline)
+                    Text(nextAppointment.room_code.map { "Consultorio \($0)" } ?? "Consultorio no publicado").font(.footnote)
+                } else { Text("No tienes próximas citas programadas para hoy.").font(.subheadline) }
                 Text(facility).font(.system(size: 12))
             }
             .foregroundStyle(.white).padding(18).frame(maxWidth: .infinity, alignment: .leading)
@@ -46,10 +58,12 @@ struct DoctorDashboardView: View {
             }
             Text("Accesos rápidos").font(.system(size: 16, weight: .semibold))
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                PatientQuickAccessCard(icono: "calendar", titulo: "Agenda") { navigate("agenda") }
                 PatientQuickAccessCard(icono: "person.2", titulo: "Pacientes") { navigate("patients") }
                 PatientQuickAccessCard(icono: "cross.case", titulo: "Consultas") { navigate("consultation") }
                 PatientQuickAccessCard(icono: "testtube.2", titulo: "Laboratorios") { navigate("laboratory") }
-                PatientQuickAccessCard(icono: "doc.text", titulo: "Expedientes") { navigate("chart") }
+                PatientQuickAccessCard(icono: "pills", titulo: "Recetas") { navigate("prescriptions") }
+                PatientQuickAccessCard(icono: "bed.double", titulo: "Ingresos hospitalarios") { navigate("admissions") }
             }
         }.foregroundStyle(HospitalTheme.ink)
     }

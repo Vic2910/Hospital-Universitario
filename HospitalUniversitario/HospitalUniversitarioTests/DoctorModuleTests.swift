@@ -13,6 +13,26 @@ private final class DoctorRepositoryStub: DoctorRepositoryProtocol {
     var requestedTo: Date?
     var requestedQuery = ""
     private let encounterID = UUID()
+    var labInputs: [DoctorLabSelection] = []
+    var failLabs = false
+    func labCatalog() async throws -> [DoctorLabTest] { [DoctorLabTest(id:1,code:"LOCAL",name:"Examen local",category:"Sangre"),DoctorLabTest(id:2,code:"LOCAL-2",name:"Segundo examen local",category:"Orina")] }
+    func labOrders(offset: Int) async throws -> DoctorPatientLabPage { DoctorPatientLabPage(items:[],total:0,has_more:false,next_offset:nil) }
+    func issueLabs(_ input:DoctorLabSelection) async throws { labInputs.append(input); if failLabs { throw URLError(.networkConnectionLost) } }
+    var admissionInputs: [DoctorAdmissionInput] = []
+    var failAdmission = false
+    func admissions(offset: Int) async throws -> DoctorAdmissionsPage {
+        DoctorAdmissionsPage(items:[],total:0,has_more:false,next_offset:nil,doctor_name:"Doctor de prueba",categories:["vip","semiprivada"],priorities:["normal","urgente"])
+    }
+    func requestAdmission(_ input: DoctorAdmissionInput) async throws {
+        admissionInputs.append(input)
+        if failAdmission { throw URLError(.networkConnectionLost) }
+    }
+    func patients(query: String, offset: Int) async throws -> DoctorPatientDirectoryPage {
+        DoctorPatientDirectoryPage(patients:[DoctorAssignedPatient(id:patientID,full_name:"Paciente ficticio",record_number:"TEST",dui:"01234567-8",email:"paciente@example.test",phone:nil,birth_date:nil,age:nil,active_encounter_id:encounterID)],total:1,has_more:false,next_offset:nil)
+    }
+    func patientLabs(patient: UUID, offset: Int) async throws -> DoctorPatientLabPage {
+        DoctorPatientLabPage(items:[],total:0,has_more:false,next_offset:nil)
+    }
 
     func workspace(facility: UUID, from: Date, to: Date) async throws -> DoctorWorkspace {
         DoctorWorkspace(doctor_name: "Doctor de prueba", facility_name: "Sede de prueba",
@@ -36,11 +56,72 @@ private final class DoctorRepositoryStub: DoctorRepositoryProtocol {
         if failSave { throw URLError(.networkConnectionLost) }
     }
     func close(encounter: UUID, note: UUID, noteVersion: Int, encounterVersion: Int) async throws { }
-    func issueOrder(encounter: UUID, test: UUID, instructions: String, requestKey: UUID) async throws { }
+    func issueOrder(encounter: UUID, test: Int64, instructions: String, requestKey: UUID) async throws { }
+    func prescribe(encounter: UUID, lines: [DoctorRxLine], requestKey: UUID) async throws { }
     func markRead(_ notification: DoctorNotification) async throws { }
 }
 
 struct DoctorModuleTests {
+    @Test @MainActor func patientDirectoryDoesNotDependOnAppointmentsDay() async {
+        let repository=DoctorRepositoryStub()
+        let model=DoctorViewModel(repository:repository)
+        model.configure(facility:UUID(),identity:UUID())
+        model.day=Date(timeIntervalSince1970:0)
+        await model.loadPatients()
+        #expect(model.patientDirectory.count == 1)
+        if let patient=model.patientDirectory.first {
+            model.openPatient(patient)
+            await model.loadChart()
+            #expect(model.chart?.patient.id == patient.id)
+            #expect(model.selectedPatient?.email == "paciente@example.test")
+        }
+        model.clear()
+        #expect(model.patientDirectory.isEmpty && model.selectedPatient == nil && model.patientLabs.isEmpty)
+    }
+    @Test @MainActor func admissionRetryKeepsPatientAndKeyWithoutClinicalWrites() async {
+        let repository=DoctorRepositoryStub()
+        let admissionModel=DoctorViewModel(repository:repository)
+        admissionModel.configure(facility:UUID(),identity:UUID())
+        await admissionModel.loadAdmissions(); await admissionModel.loadPatients()
+        if let patient=admissionModel.patientDirectory.first { admissionModel.openPatient(patient) }
+        admissionModel.admissionCategory="vip"; admissionModel.admissionPriority="urgente"
+        admissionModel.admissionReason="Motivo de ingreso local"; admissionModel.admissionForm=true
+        repository.failAdmission=true
+        await admissionModel.requestAdmission()
+        #expect(admissionModel.pendingAdmission != nil)
+        repository.failAdmission=false
+        await admissionModel.requestAdmission()
+        #expect(repository.admissionInputs.count == 2)
+        #expect(repository.admissionInputs.first?.key == repository.admissionInputs.last?.key)
+        #expect(repository.admissionInputs.first?.patient == repository.patientID)
+        #expect(admissionModel.pendingAdmission == nil && !admissionModel.admissionForm)
+        admissionModel.clear()
+        #expect(admissionModel.admissions.isEmpty && admissionModel.admissionsPage == nil)
+    }
+    @Test @MainActor func multipleLabsRetryUsesTheSameSelectionAndKey() async {
+        let repository=DoctorRepositoryStub()
+        let labs=DoctorViewModel(repository:repository)
+        labs.configure(facility:UUID(),identity:UUID()); await labs.refresh(); labs.select(repository.appointmentID)
+        await labs.loadChart(); await labs.loadLabCatalog()
+        labs.selectedLabIDs=[1,2]; labs.instructions="Indicaciones locales"
+        repository.failLabs=true; await labs.issueSelectedLabs()
+        #expect(labs.pendingLabs != nil)
+        repository.failLabs=false; await labs.issueSelectedLabs()
+        #expect(repository.labInputs.count == 2)
+        #expect(repository.labInputs[0].key == repository.labInputs[1].key)
+        #expect(repository.labInputs[0].tests == [1,2])
+        #expect(labs.pendingLabs == nil && labs.selectedLabIDs.isEmpty)
+        labs.clear(); #expect(labs.labCatalog.isEmpty && labs.ownLabOrders.isEmpty)
+    }
+    @Test func labCatalogUsesRealNumericIdentifiers() throws {
+        let data = Data(#"{"id":15,"code":"15","name":"Catálogo de prueba"}"#.utf8)
+        #expect(try JSONDecoder().decode(DoctorLabTest.self, from: data).id == 15)
+    }
+    @Test func incompleteClinicalDraftCanSaveButCannotFinalize() {
+        let draft=DoctorConsultationDraft(subjective:"Motivo en revisión")
+        #expect(draft.canSave)
+        #expect(!draft.isValid)
+    }
     @Test func timestampsAcceptPostgresPrecision() {
         #expect(DoctorDate.parse("2026-10-28T12:00:00.123456+00:00") != nil)
         #expect(DoctorDate.parse("2026-10-28T12:00:00Z") != nil)

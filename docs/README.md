@@ -4,6 +4,18 @@ Hospital Universitario utiliza exclusivamente **Hospital Móviles** (`uvebpsbbwo
 
 ## Integración vigente
 
+- [Propuesta de integridad clínica — pendiente de autorización, no desplegada](INTEGRIDAD_CLINICA_PROPUESTA_2026-11-13.md).
+
+- [Selección múltiple de laboratorios y resultados autorizados](LABORATORIOS_DOCTOR_2026-11-13.md).
+
+- [Solicitudes de ingreso del doctor y contrato de recepción](INGRESOS_DOCTOR_2026-11-13.md).
+
+- [Directorio de pacientes y laboratorios iOS/web](DIRECTORIO_DOCTOR_2026-11-13.md).
+
+- [Módulo Doctor nativo iOS y contrato reutilizable en Android](DOCTOR_IOS_2026-11-13.md).
+
+- [Solicitar atención iOS y contrato del panel separado](ATENCION_IOS_2026-11-13.md).
+
 - [Dashboard para cuentas con o sin expediente](DASHBOARD_CUENTA_2026-11-13.md).
 
 - [Registro exclusivo de cuenta, sin confirmación de correo](REGISTRO_SOLO_CUENTA_2026-11-13.md).

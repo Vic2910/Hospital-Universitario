@@ -20,7 +20,7 @@ for (const linked of [false,true]) {
     assert.ok(shortcut,label);shortcut.listeners.click();await new Promise(r=>setImmediate(r));
     assert.equal(ui.app.all().some(n=>n.className==='dash-greeting'),false,'Navega fuera del Home');
     if(!linked) {
-      assert.match(ui.app.textContent,/Acércate a recepción/);
+      assert.match(ui.app.textContent,label==='Solicitar atención'?/¿Qué síntomas presentas\?/:/Acércate a recepción/);
       assert.equal(ui.calls.some(c=>clinical.some(t=>c.url.includes('/rest/v1/'+t+'?'))),false,'Sin expediente no consulta tablas clínicas');
     }
     await ui.click('Inicio');
@@ -29,7 +29,7 @@ for (const linked of [false,true]) {
     const path=decodeURIComponent(call.url);
     assert.ok(path.includes('patient_id=eq.'+id),'Cada lectura clínica filtra al paciente propio');
   }
-  assert.equal(ui.calls.some(c=>c.url.includes('/rest/v1/')&&c.request.method!=='GET'),false);
+  assert.equal(ui.calls.some(c=>c.url.includes('/rest/v1/')&&c.request.method!=='GET'&&!/\/rpc\/my_attention_(context|requests)$/.test(c.url)),false);
   await ui.click('Más');await ui.click('Cerrar sesión');
   assert.ok(ui.get('password'));assert.equal(ui.app.textContent.includes('Doctora Real'),false);
   console.log('OK Dashboard '+(linked?'vinculado':'sin expediente')+': nombre, tarjeta, cuatro accesos, filtros y cierre');

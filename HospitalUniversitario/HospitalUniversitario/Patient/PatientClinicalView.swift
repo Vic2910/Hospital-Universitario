@@ -16,8 +16,8 @@ struct PatientClinicalView: View {
     private var name: String { field("Nombre") ?? profile?.fullName ?? "No hay datos reales" }
     private var age: String { field("Edad") ?? "No hay datos reales" }
     private var phone: String { field("Teléfono") ?? profile?.contacts.first { $0.kind == "phone" }?.value ?? "No hay datos reales" }
-    private func state(_ item: MobileItem) -> String { ["pending":"Pendiente", "in_progress":"En Proceso", "processing":"En Proceso", "released":"Completado", "completed":"Completado", "cancelled":"Cancelado"][item.status] ?? "Estado no disponible" }
-    private func released(_ item: MobileItem) -> Bool { ["released", "completed"].contains(item.status) }
+    private func state(_ item: MobileItem) -> String { ["pending":"Pendiente", "in_progress":"En Proceso", "processing":"En Proceso", "released":"Completado", "completed":"Completado", "awaiting_release":"Completado · pendiente de publicación", "cancelled":"Cancelado"][item.status] ?? "Estado no disponible" }
+    private func released(_ item: MobileItem) -> Bool { item.status == "released" }
     @ViewBuilder private func badge(_ item: MobileItem) -> some View {
         if released(item) { ClinicalLabStateBadge(state: .completed) }
         else if item.status == "pending" { ClinicalLabStateBadge(state: .pending) }

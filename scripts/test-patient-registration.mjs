@@ -19,6 +19,7 @@ const signup=ui.calls.filter(c=>c.url.endsWith('/signup'));
 assert.equal(signup.length,1);
 assert.deepEqual(signup[0].params.data,{first_name:'Ana',last_name:'Prueba',birth_date:'1995-01-02',phone:'7000-1111',city:'Santa Ana',dui:'01234567-8'});
 assert.equal('role' in signup[0].params.data,false);
+assert.match(ui.get('notice').textContent,/vinculación.*revisión de identidad en recepción/);
 accountOnly(ui);
 await ui.click('Inicio');accountOnly(ui);
 await ui.click('Más');
@@ -51,10 +52,27 @@ console.log('OK Validación antes de Auth');
 
 const linked=createApp(['patient']);await linked.login();await linked.click('Salud');
 await linked.input('Especialidad','1','change');
-await linked.input('Motivo de la consulta','Consulta de seguimiento');
+await linked.click('Fiebre');
+await linked.input('Motivo de solicitud','Consulta de seguimiento');
 await linked.input('Preferencia','manana','change');
-await linked.submit('Enviar solicitud');
-const request=linked.calls.find(c=>c.url.includes('/rest/v1/appointment_requests')&&c.request?.method==='POST');
-assert.ok(request);assert.equal(request.params.specialty_id,'1');assert.equal(request.params.preferred_period,'manana');
+await linked.submit('Solicitar atención');
+const request=linked.calls.find(c=>c.url.endsWith('/rpc/submit_my_attention_request'));
+assert.ok(request);assert.equal(request.params.p_specialty,1);assert.equal(request.params.p_period,'manana');
 assert.equal(linked.calls.some(c=>c.url.includes('/rpc/schedule_appointment')),false);
 console.log('OK Paciente vinculado conserva solicitudes; recepción programa la cita');
+
+for(const scenario of ['expediente presencial sin cuenta','DUI de expediente asociado a otra cuenta']){
+ const walkin=createApp(['patient'],{unregistered:true,transport:async url=>{
+  if(url.includes('/patients?')){
+   assert.match(decodeURIComponent(url),/profile_id=eq\./);assert.equal(decodeURIComponent(url).includes('dui=eq.'),false);
+   return {body:[]}; // Both private backend situations are indistinguishable to the registering account.
+  }
+ }});
+ await settle();await walkin.click('Regístrate');await fill(walkin);await walkin.submit('Registrarme');
+ assert.match(walkin.app.textContent,/¡Hola, Ana Prueba!/);assert.match(walkin.get('notice').textContent,/revisión de identidad en recepción/);
+ assert.equal(walkin.calls.filter(call=>call.url.endsWith('/signup')).length,1);accountOnly(walkin);
+ assert.equal(walkin.calls.some(call=>/register_patient|link_attention_patient|create_walkin_patient/.test(call.url)),false);
+ await walkin.click('Laboratorios');assert.match(walkin.app.textContent,/Acércate a recepción/);
+ assert.equal(walkin.calls.some(call=>/\/rest\/v1\/(lab_orders|medical_records|prescriptions)\?/.test(call.url)),false);
+ console.log('OK Registro seguro: '+scenario+'; sin consultas por DUI, sin alta/vínculo clínico y con mensaje genérico');
+}

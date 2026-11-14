@@ -2,6 +2,17 @@
 (function (root) {
   'use strict';
   var labels = { doctor: 'Médico', patient: 'Paciente' };
+  function registrationAccount(values) {
+    values=values||{};
+    var metadata={};
+    ['first_name','last_name','birth_date','phone','city'].forEach(function(key){metadata[key]=String(values[key]||'').trim();});
+    // Declared identity only. Never look up a clinical patient by DUI or submit a profile_id/role.
+    metadata.dui=formatDui(values.dui);
+    return metadata;
+  }
+  function registrationReviewMessage() {
+    return 'Cuenta creada. La vinculación de cualquier expediente requiere revisión de identidad en recepción. El DUI declarado no concede acceso a información clínica. Si necesitas revisar una asociación existente, acude a recepción.';
+  }
   function routes(access) {
     if (!access || !access.profile || access.profile.status !== 'active') return [];
     return ['doctor', 'patient'].filter(function (code) {
@@ -99,6 +110,7 @@
     return applicantStates[status] || { key: 'unknown', label: 'Estado no disponible' };
   }
   root.HospitalCore = { labels: labels, routes: routes, turnResource: turnResource, weekWindow: weekWindow, periodBounds: periodBounds,
+    registrationAccount: registrationAccount, registrationReviewMessage: registrationReviewMessage,
     applicantDemoSpecialties: applicantDemoSpecialties, applicantPeriods: applicantPeriods, localIsoDay: localIsoDay, isIsoDay: isIsoDay,
     formatDui: formatDui, applicantAge: applicantAge, validatePersonalData: validatePersonalData, validateApplicantProfile: validateApplicantProfile,
     validateAttentionRequest: validateAttentionRequest, applicantStateView: applicantStateView };
@@ -177,7 +189,7 @@
       return [query('patients','id,first_name,last_name,dui,phone,birth_date,city,patient_code,medical_records(record_code)',{id:'eq.'+patient},'id.asc',1)];
     }
     else if (module === 'history') { table='medical_history';select='*,medical_records!inner(patient_id)';filters['medical_records.patient_id']='eq.'+id(patient);order='created_at'; }
-    else if (module === 'laboratory') { table='lab_orders';select='*,lab_test_types(name),clinical_encounters!inner(medical_records!inner(patient_id)),lab_results(summary,published_to_patient_at)';filters['clinical_encounters.medical_records.patient_id']='eq.'+id(patient);order='ordered_at'; }
+    else if (module === 'laboratory') { table='lab_orders';select='*,lab_test_types(name),clinical_encounters!inner(medical_records!inner(patient_id)),lab_results(summary,published_to_patient_at,published_at,validated_at,validated_by,parameter_schema,result_values)';filters['clinical_encounters.medical_records.patient_id']='eq.'+id(patient);order='ordered_at'; }
     else if (module === 'prescriptions') { table='prescriptions';select='*,clinical_encounters!inner(medical_records!inner(patient_id)),prescription_items(dose,dose_unit,frequency_hours,route,quantity,observations,medications(name))';filters['clinical_encounters.medical_records.patient_id']='eq.'+id(patient);order='issued_at'; }
     else throw new Error('Módulo no disponible.');
     if (p.p_from) filters[order]='gte.'+p.p_from;
@@ -216,7 +228,20 @@
       if(module==='appointments'){item.title='Cita médica';item.subtitle=r.consulting_rooms ? 'Consultorio '+r.consulting_rooms.code : null;item.details=[field('Horario',range(r))];if(['programada','confirmada'].includes(r.status)) item.action='cancel_appointment';}
       if(module==='history'){item.title=r.history_type;item.subtitle=r.description;item.status='completed';item.details=[field('Descripción',r.description)];}
       if(module==='notifications'){item.title=r.title;item.subtitle=r.body;item.status=r.read_at?'read':'unread';item.action=r.read_at?null:'mark_read';}
-      if(module==='laboratory'){item.title=r.lab_test_types?r.lab_test_types.name:'Examen';item.subtitle=r.reason;var published=(r.lab_results||[]).filter(function(v){return !!v.published_to_patient_at;});item.status=published.length?'released':state(r.status);item.details=published.map(function(v){return field('Resultado',v.summary);});}
+      if(module==='laboratory'){
+        item.title=r.lab_test_types?r.lab_test_types.name:'Examen';item.subtitle=r.reason;
+        var published=(r.lab_results||[]).filter(function(v){return !!v.published_to_patient_at && !!v.published_at && !!v.validated_at && !!v.validated_by;});
+        item.status=published.length?'released':r.status==='completado'?'awaiting_release':state(r.status);
+        item.details=published.map(function(v){return field('Resultado',v.summary);});
+        published.forEach(function(v){(v.parameter_schema||[]).forEach(function(parameter){
+          var entry=(v.result_values||{})[parameter.key]||{},value=entry.value==null?'No informado':String(entry.value);
+          if(parameter.unit)value+=' '+parameter.unit;
+          if(parameter.reference)value+=' · Referencia del laboratorio: '+parameter.reference;
+          if(entry.observation)value+=' · Observación: '+entry.observation;
+          item.details.push(field(parameter.label,value));
+        });});
+        if(r.reason)item.details.push(field('Indicaciones',r.reason));
+      }
       if(module==='prescriptions'){item.title=r.prescription_code;item.details=(r.prescription_items||[]).map(function(v){return field(v.medications?v.medications.name:'Medicamento',v.dose+' '+v.dose_unit+' · cada '+v.frequency_hours+' horas · '+v.route+' · '+(v.observations||''));});}
       return item;
     });

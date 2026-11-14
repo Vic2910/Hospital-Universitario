@@ -7,6 +7,8 @@ const context={Date,console,AbortSignal};
 runInNewContext(read('HospitalUniversitario/HospitalUniversitario/Shared/hospital-core.js'),context);
 runInNewContext(read('web-preview/api.js'),context);
 const c=context.HospitalCore,plain=v=>JSON.parse(JSON.stringify(v)),id='00000000-0000-4000-8000-000000000001';
+const registration=plain(c.registrationAccount({first_name:' Ana ',last_name:' Prueba ',dui:'012345678',role:'doctor',profile_id:id,patient_id:id}));
+assert.equal(registration.dui,'01234567-8');assert.equal(registration.first_name,'Ana');assert.equal('role'in registration,false);assert.equal('patient_id'in registration,false);assert.equal('profile_id'in registration,false);
 for (const invalid of [
   {...contract, url:'https://otro-proyecto.example.test'},
   {...contract, url:contract.url + '/otro'},
@@ -54,8 +56,11 @@ assert.equal(new Date(bounds.start).getDay(),1);assert.equal(new Date(bounds.end
 const shifts=decodeURIComponent(c.backendPlan('shifts',{},doctor)[0].path);
 assert.match(shifts,/staff_id=eq\./);assert.match(shifts,/starts_at=lt\./);assert.match(shifts,/ends_at=gt\./);
 console.log('OK Consultas: filtros propios, semana, esquema nuevo y rechazo de operaciones inexistentes');
-const page=c.backendPresent('module',{p_module:'laboratory'},access,[[{id,reason:'Examen',status:'completado',ordered_at:'2026-11-13',lab_test_types:{name:'Estudio'},lab_results:[{summary:'NO PUBLICADO',published_to_patient_at:null},{summary:'PUBLICADO',published_to_patient_at:'2026-11-13'}]}]]);
-assert.equal(page.items[0].details.length,1);assert.equal(page.items[0].details[0].value,'PUBLICADO');
+const published={summary:'PUBLICADO',published_to_patient_at:'2026-11-13',published_at:'2026-11-13',validated_at:'2026-11-13',validated_by:id,parameter_schema:[{key:'local',label:'Parámetro local',unit:'Unidad local',reference:'Referencia local'}],result_values:{local:{value:'Valor local',observation:'Observación local'}}};
+const page=c.backendPresent('module',{p_module:'laboratory'},access,[[{id,reason:'Examen',status:'completado',ordered_at:'2026-11-13',lab_test_types:{name:'Estudio'},lab_results:[{summary:'NO PUBLICADO',published_to_patient_at:null},published]}]]);
+assert.equal(page.items[0].details[0].value,'PUBLICADO');assert.equal(page.items[0].status,'released');assert.match(page.items[0].details[1].value,/Valor local.*Unidad local.*Referencia local.*Observación local/);
+const withheld=c.backendPresent('module',{p_module:'laboratory'},access,[[{id,status:'completado',lab_results:[{...published,validated_at:null},{...published,published_to_patient_at:null}]}]]);
+assert.equal(withheld.items[0].status,'awaiting_release');assert.equal(withheld.items[0].details.length,0);
 const roomPage=c.backendPresent('rooms',{},access,[Array.from({length:26},()=>({id}))]);assert.equal(roomPage.data.length,25);assert.equal(roomPage.has_more,true);
 console.log('OK Presentación: resultados publicados y paginación sin filas perdidas');
 const stored=new Map(),storage={getItem:k=>stored.get(k)||null,setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)};

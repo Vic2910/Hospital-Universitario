@@ -65,6 +65,8 @@ struct DoctorConsultationAgendaView: View {
                     }
                     DoctorConsultationField(label: "Motivo de la consulta", value: DoctorConsultationFields.value(appointment.reason))
                     DoctorConsultationField(label: "Síntomas", value: DoctorConsultationFields.symptoms(appointment.symptoms))
+                    Text(appointment.room_code.map { "Consultorio \($0)" } ?? "Consultorio no publicado").font(.footnote)
+                    if let duration=appointment.duration_minutes { Text("Duración: \(duration) minutos").font(.footnote) }
                     Button("Ver detalle") { ticket = appointment }
                         .buttonStyle(.bordered).tint(HospitalTheme.wine)
                         .accessibilityLabel("Ver detalle de \(DoctorConsultationFields.value(appointment.patient_name))")

@@ -54,8 +54,17 @@ export function createApp(roleCodes = ['doctor'], options = {}) {
     if (url.includes('/rest/v1/profiles?')) return response([{id:uuid,...accountMetadata}]);
     if (url.includes('/rest/v1/user_roles?')) return response(roleCodes.map(code=>({user_id:uuid,role:code==='patient'?'paciente':code,active:!options.suspended})));
     if (url.includes('/rest/v1/patients?')) return response(registered && roleCodes.includes('patient') ? [{id:uuid,profile_id:uuid,first_name:accountMetadata.first_name,last_name:accountMetadata.last_name,birth_date:accountMetadata.birth_date,phone:accountMetadata.phone,dui:'01234567-8',patient_code:'PAC-TEST',medical_records:[{record_code:'EXP-TEST'}]}] : []);
-    if (url.includes('/rest/v1/staff?')) return response(roleCodes.includes('doctor')?[{id:uuid,profile_id:uuid,active:!options.suspended}]:[]);
+    if (url.includes('/rest/v1/staff?')) return response(roleCodes.includes('doctor')?[{id:uuid,profile_id:uuid,active:!options.suspended,category:'doctor'}]:[]);
+    if (url.endsWith('/rpc/doctor_native_workspace')) return response({doctor_name:[accountMetadata.first_name,accountMetadata.last_name].join(' '),facility_name:'Hospital Universitario',appointments:[],orders:[],tests:[],medications:[],notifications:[],stats:{consultations:0,completed_consultations:0,issued_orders:0,pending_orders:0}});
+    if (url.endsWith('/rpc/doctor_native_patients')) return response({patients:[],total:0,has_more:false,next_offset:null});
+    if (url.endsWith('/rpc/doctor_native_lab_catalog')) return response([]);
+    if (url.endsWith('/rpc/doctor_native_lab_orders')) return response({items:[],total:0,has_more:false,next_offset:null});
+    if (url.endsWith('/rpc/doctor_native_admissions')) return response({items:[],total:0,has_more:false,next_offset:null,doctor_name:'Doctor de prueba',categories:['vip','semiprivada'],priorities:['normal','urgente']});
+    if (url.endsWith('/rpc/doctor_native_patient_labs')) return response({items:[],total:0,has_more:false,next_offset:null});
     if (url.endsWith('/rpc/register_patient')) throw new Error('El cliente no puede crear paciente ni expediente');
+    if (url.endsWith('/rpc/my_attention_context')) return response({person:{...accountMetadata,dui:'01234567-8',email:'persona@example.test'},specialties:[{id:1,name:'Medicina general',available:true}],symptoms:[{id:1,name:'Fiebre'},{id:2,name:'Otro'}]});
+    if (url.endsWith('/rpc/my_attention_requests')) return response([]);
+    if (url.endsWith('/rpc/submit_my_attention_request')) return response(params.p_key);
     if (url.includes('/rest/v1/rooms?')) return response([{id:uuid,floor_id:1,kind:'vip',code:'VIP-301',active:true}]);
     if (url.includes('/rest/v1/staff_shifts?')) return response([{id:uuid,staff_id:uuid,starts_at:'2026-11-13T07:00:00Z',ends_at:'2026-11-13T15:00:00Z',shift_type:'ordinario',status:'programado'}]);
     if (url.includes('/rest/v1/specialties?')) return response([{id:1,name:'Medicina general'}]);
@@ -103,8 +112,8 @@ for (const role of ['patient','doctor']) {
   ui.get('live-mode').listeners.click(); await settle(); assert.ok(ui.get('password'));
   console.log(`OK Diseño ${role}: todas las pantallas navegables; cero llamadas a Supabase`);
 }
-assert.equal(catalog.patient.length + catalog.doctor.length,20);
-console.log('Recorridos actuales aprobados; 20 pantallas comprobadas.');
+assert.equal(catalog.patient.length + catalog.doctor.length,21);
+console.log('Recorridos actuales aprobados; 21 pantallas comprobadas.');
 
 // Agendamiento local: comportamiento completo sin escrituras al servidor.
 for (const mode of ['design']) {

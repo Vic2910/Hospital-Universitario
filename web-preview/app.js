@@ -5,6 +5,8 @@
   let api, modules, patientLabModules, patientClinical, doctorDashboard, doctorConsultations, labDesign, patientHistory, patientPrescriptions, appointmentFlow, catalog, fixtures, access = null, roles = [], role = null, page = 'home', search = '', busy = false, design = false;
   let profile = null, summary = null, overview = null, items = [], queue = [], cursor = null, more = false;
   let screenNote = '';
+  let attention = newAttention();
+  function newAttention() { return {context:null,rows:[],missing:{},symptoms:new Set(),specialty:'',period:'indiferente',reason:'',other:'',key:crypto.randomUUID(),error:null,confirmation:null}; }
   let nextAppointment = null, dashboardError = null;
   let registerOpen = false;
   let registrationDraft = {};
@@ -37,7 +39,7 @@
   function matches(value) { return !search || value.toLocaleLowerCase('es').includes(search.toLocaleLowerCase('es')); }
   function definition() { return catalog?.[role]?.find(screen => screen.id === page); }
   function clearData() { patientLabModules?.clear();patientClinical?.reset(); receptionPreview=false; appointmentFlow?.reset(); patientHistory?.clear(); labConnected = false; labDesign?.reset(); doctorConsultations?.clear(); doctorDashboard?.clear(); resetSchedule(); modules?.clear(); profile = summary = overview = null; items = []; queue = []; cursor = null; more = false; screenNote = ''; }
-  function reset() { nextAppointment = null; dashboardError = null; registrationDraft = {}; access = null; roles = []; role = null; page = 'home'; registerOpen = false; clearData(); }
+  function reset() { attention=newAttention(); nextAppointment = null; dashboardError = null; registrationDraft = {}; access = null; roles = []; role = null; page = 'home'; registerOpen = false; clearData(); }
   async function run(action) {
     if (busy) return;
     busy = true; message(null); render();
@@ -71,10 +73,9 @@
       nextAppointment = null; dashboardError = null;
       if (!profile) profile = await api.operation('profile');
       const facility = access.roles.find(item => item.code === role)?.context_id;
-      if (role==='patient'&&['request','schedule','health'].includes(page)) { modules.configure(access,role,facility); await modules.load('request'); return; }
+      if (role==='patient'&&['request','schedule','health'].includes(page)) { await loadAttention(); return; }
       if (page === 'profile') { profile = await api.operation('profile'); return; }
       modules.configure(access,role,facility);
-      if (role === 'doctor' && ['patients','chart','laboratory'].includes(page) && !labConnected) return;
       if (modules.supports(role,page)) { await modules.load(page,append);if(role==='patient'&&page==='chart'){patientLabModules.configure(access,role,facility);await patientLabModules.load('laboratory');}return; }
       if (page === 'home') {
         summary = null;
@@ -200,6 +201,7 @@
     }, 'primary');
     continueDemo.hidden = !!access;
     form.append(el('p', 'El registro crea únicamente tu cuenta de la app. Recepción gestiona tu expediente y programa tus citas.', 'auth-notice'), problem, done);
+    form.append(el('p','Si ya tienes expediente de atención presencial, utiliza tu mismo DUI. No se creará otro expediente: recepción debe verificar tu identidad y confirmar la vinculación. Cualquier asociación existente requiere revisión en recepción.','auth-notice'));
     const submit = el('button', 'Registrarme', 'primary'); submit.type = 'submit'; submit.disabled = busy;
     form.append(submit);
     form.addEventListener('submit', event => {
@@ -214,7 +216,7 @@
       registrationDraft = {...values};
       run(async () => {
         if (!access) {
-          const metadata={first_name:values['reg-given'],last_name:values['reg-family'],birth_date:values['reg-birth'],phone:values['reg-phone'],city:values['reg-city'],dui:HospitalCore.formatDui(values['reg-dui'])};
+          const metadata=HospitalCore.registrationAccount({first_name:values['reg-given'],last_name:values['reg-family'],birth_date:values['reg-birth'],phone:values['reg-phone'],city:values['reg-city'],dui:values['reg-dui']});
           if (!await api.signUp(values['reg-email'], password, metadata)) {
             registerOpen=false;
             message('Cuenta creada. El servidor todavía exige confirmar el correo; el hospital debe desactivar ese requisito en Auth. No vuelvas a crear la cuenta.');
@@ -224,6 +226,7 @@
         }
         registrationDraft = {}; registerOpen = false;
         await resolve();
+        if(!access?.patient_id)message(HospitalCore.registrationReviewMessage());
       });
 
     });
@@ -235,20 +238,102 @@
     app.append(view);
   }
   function renderLiveAttention(content) {
-    content.append(el('p','Esta solicitud no reserva una cita. Recepción confirmará la disponibilidad.','auth-notice'));
-    if (modules.data) {
-      const state=modules.request;
-      const {form,finish}=modules.form(content,'Enviar solicitud',async()=>{
-        if (!state.specialty || !state.reason.trim() || state.reason.length>2000 || !['manana','tarde'].includes(state.period)) throw new Error('Revisa la especialidad, motivo y preferencia.');
-        await modules.mutation('requestAttention',{p_patient:access.patient_id,p_facility:modules.facility,p_specialty:state.specialty,p_reason:state.reason.trim(),period:state.period,p_request_key:modules.keys.request},'Solicitud enviada. Recepción confirmará la disponibilidad.',()=>{modules.keys.request=crypto.randomUUID();state.reason='';});
-      });
-      modules.field(form,'Especialidad',state,'specialty','text',modules.data.specialties.map(item=>[item.id,item.name]));
-      modules.field(form,'Motivo de la consulta',state,'reason','textarea');
-      modules.field(form,'Preferencia',state,'period','text',[['manana','Mañana'],['tarde','Tarde']]);
-      finish();
+    content.append(el('p','Este formulario no es para emergencias. Ante una emergencia, acude a urgencias. Los síntomas declarados no son diagnósticos.','auth-notice'));
+    if(attention.error)content.append(row('No se pudo actualizar',attention.error));
+    if(attention.confirmation)content.append(el('p',attention.confirmation,'auth-notice'));
+    content.append(button('Actualizar',()=>run(loadAttention),'text-button'));
+    const context=attention.context;
+    if(!context){content.append(row(busy?'Cargando tus datos…':'No se pudieron cargar tus datos','Pulsa Actualizar para recuperar el formulario.'));return;}
+    const form=el('form',null,'attention-form');
+    const personal=el('article',null,'card attention-card');personal.append(el('h2','Tus datos'),el('p','Datos de tu cuenta. Completa únicamente lo que falta. Recepción verificará tu identidad.'));
+    for(const [key,label] of [['first_name','Nombres'],['last_name','Apellidos'],['dui','DUI declarado'],['birth_date','Fecha de nacimiento'],['phone','Teléfono'],['email','Correo de la cuenta']]){
+      const value=context.person[key];
+      if(value) {const item=el('div',null,'attention-personal');item.append(el('small',label),el('strong',value));personal.append(item);}
+      else if(key==='email')personal.append(el('p','Tu cuenta no publica correo. Contacta al hospital.'));
+      else {
+        const field=authField('attention-'+key,label,key==='birth_date'?'date':'text',key==='dui'?'00000000-0':key==='phone'?'0000-0000':label,'off');
+        const input=field.querySelector('input');input.value=attention.missing[key]||'';
+        input.addEventListener('input',()=>{
+          if(key==='dui')input.value=HospitalCore.formatDui(input.value);
+          if(key==='phone'){const digits=input.value.replace(/\D/g,'').slice(0,8);input.value=digits.length>4?digits.slice(0,4)+'-'+digits.slice(4):digits;}
+          attention.missing[key]=input.value;
+        });personal.append(field);
+      }
     }
-    content.append(el('h2','Mis solicitudes','section-title'));
-    modules.render(content,'request','');
+    form.append(personal);
+    const symptoms=el('article',null,'card attention-card');symptoms.append(el('h2','¿Qué síntomas presentas?'),el('p','Selecciona uno o varios síntomas declarados.'));
+    const choices=el('div',null,'attention-symptoms');
+    for(const symptom of context.symptoms){
+      const control=button((attention.symptoms.has(symptom.id)?'✓ ':'')+symptom.name,()=>{
+        attention.symptoms.has(symptom.id)?attention.symptoms.delete(symptom.id):attention.symptoms.add(symptom.id);render();
+      },'attention-symptom');control.setAttribute('aria-pressed',String(attention.symptoms.has(symptom.id)));choices.append(control);
+    }
+    symptoms.append(choices);
+    if(!context.symptoms.length)symptoms.append(el('p','No hay síntomas activos en el catálogo. Contacta a recepción.'));
+    const other=context.symptoms.some(s=>s.name==='Otro'&&attention.symptoms.has(s.id));
+    if(other) modules.field(symptoms,'Describe el otro síntoma',attention,'other','textarea');
+    form.append(symptoms);
+    const details=el('article',null,'card attention-card');details.append(el('h2','Tu solicitud'));
+    const available=context.specialties.filter(s=>s.available);
+    modules.field(details,'Especialidad',attention,'specialty','text',available.map(s=>[String(s.id),s.name]));
+    details.append(el('p',available.length?'Recepción confirmará la disponibilidad real. Seleccionar especialidad no reserva una cita.':'No hay especialidades con médico activo asignado. Contacta a recepción.'));
+    for(const s of context.specialties.filter(s=>!s.available))details.append(el('small',s.name+' · Sin médico activo asignado'));
+    modules.field(details,'Preferencia',attention,'period','text',[['manana','Mañana'],['tarde','Tarde'],['indiferente','Indiferente']]);
+    modules.field(details,'Motivo de solicitud',attention,'reason','textarea');
+    const issue=el('p',null,'auth-error');issue.hidden=true;details.append(issue);
+    const submit=el('button',busy?'Enviando…':'Solicitar atención','primary');submit.type='submit';submit.disabled=busy||!available.length||!context.symptoms.length;details.append(submit);
+    details.append(el('p','Enviar no crea un expediente ni una cita. Recepción revisará tu solicitud.'));
+    form.append(details);content.append(form);
+    form.addEventListener('submit',event=>{
+      event.preventDefault();if(busy)return;
+      const problem=attentionProblem();
+      if(problem){issue.textContent=problem;issue.hidden=false;return;}
+      run(async()=>{
+        const missing=Object.fromEntries(Object.entries(attention.missing).filter(([key])=>!context.person[key]));
+        const payload={p_key:attention.key,p_specialty:Number(attention.specialty),p_period:attention.period,p_reason:attention.reason.trim(),p_symptoms:[...attention.symptoms].sort((a,b)=>a-b),p_other:other?attention.other.trim():null,p_missing:missing};
+        try{await api.attentionRPC('submit_my_attention_request',payload);}
+        catch(error){
+          const rows=await api.attentionRPC('my_attention_requests').catch(()=>[]);
+          if(!rows.some(r=>r.id===attention.key))throw error;
+        }
+        attention.key=crypto.randomUUID();attention.reason='';attention.symptoms.clear();attention.other='';
+        attention.confirmation='Solicitud enviada a recepción. No se creó expediente ni cita.';
+        await loadAttention();
+      });
+    });
+    heading(content,'Mis solicitudes');
+    if(!attention.rows.length&&!attention.error)content.append(row('Todavía no has enviado solicitudes de atención.'));
+    for(const request of attention.rows){
+      const card=row(request.specialty_name,request.reason,({pendiente:'Pendiente',en_revision:'En revisión',agendada:'Cita programada',rechazada:'Rechazada',cancelada:'Cancelada'})[request.status]||'Estado no disponible');
+      card.append(el('p',(request.symptoms||[]).join(' · ')),el('p','Preferencia: '+({manana:'Mañana',tarde:'Tarde',indiferente:'Indiferente'})[request.preferred_period]));
+      if(request.other_symptoms)card.append(el('p',request.other_symptoms));
+      if(request.appointment_id)card.append(button('Ver mi cita',()=>go('appointments'),'text-button'));content.append(card);
+    }
+  }
+  async function loadAttention(){
+    attention.error=null;
+    try{
+      const context=await api.attentionRPC('my_attention_context');
+      if(!context?.person||!Array.isArray(context.symptoms)||!Array.isArray(context.specialties))throw new Error('No se pudo interpretar el formulario del hospital.');
+      attention.context=context;
+      const rows=await api.attentionRPC('my_attention_requests');
+      if(!Array.isArray(rows))throw new Error('No se pudo interpretar el seguimiento.');
+      attention.rows=rows;
+    }catch(error){attention.rows=[];attention.error=error.message;if(error.status===401)throw error;}
+  }
+  function attentionProblem(){
+    const person={...attention.missing,...Object.fromEntries(Object.entries(attention.context.person).filter(([,v])=>v))};
+    if(!person.first_name?.trim()||!person.last_name?.trim()||person.first_name.length>100||person.last_name.length>100)return 'Completa tus nombres y apellidos.';
+    if(!/^[0-9]{8}-[0-9]$/.test(person.dui||''))return 'Completa tu DUI con formato 00000000-0.';
+    if(!/^[0-9]{4}-[0-9]{4}$/.test(person.phone||''))return 'Completa tu teléfono con formato 0000-0000.';
+    const age=HospitalCore.applicantAge(person.birth_date);
+    if(age==null||age<0||age>120||person.birth_date>HospitalCore.localIsoDay(new Date())||!person.email)return 'Revisa tu fecha de nacimiento y el correo de tu cuenta.';
+    if(!attention.context.specialties.some(s=>s.available&&String(s.id)===String(attention.specialty)))return 'Selecciona una especialidad con médico activo asignado.';
+    if(!attention.symptoms.size)return 'Selecciona al menos un síntoma.';
+    if(attention.context.symptoms.some(s=>s.name==='Otro'&&attention.symptoms.has(s.id))&&!attention.other.trim())return 'Describe el otro síntoma.';
+    if(attention.other.length>1000||!attention.reason.trim()||attention.reason.length>2000)return 'Escribe el motivo (máximo 2000 caracteres) y revisa la descripción de síntomas.';
+    if(!['manana','tarde','indiferente'].includes(attention.period))return 'Selecciona una preferencia válida.';
+    return null;
   }
   function renderRoles() {
     const view = el('section', null, 'role-picker'); view.append(el('h2', 'Selecciona tu perfil'));
@@ -271,7 +356,7 @@
     field.addEventListener('input', () => { search = field.value; const content = $('#screen-content'); if (content) renderContent(content); });
     searchbox.append(el('span', '⌕'), field);
     const content = el('div', null, 'screen-content'); content.id = 'screen-content'; content.setAttribute('aria-busy', String(busy)); renderContent(content);
-    const clinicalFlow = ['patients','chart','laboratory'].includes(page) && (design || (role === 'doctor' && !labConnected));
+    const clinicalFlow = (['patients','chart','laboratory'].includes(page) && design)||(role==='doctor'&&['patients','laboratory','admissions'].includes(page));
     if(clinicalFlow || page === 'profile' || (role === 'patient' && ['home','chart','laboratory','appointments','request','schedule','health','information'].includes(page))) { portal.className += ' clinical-flow'; portal.append(header,content,bottomBar()); }
     else portal.append(header,searchbox,content,bottomBar());
     app.append(portal);
@@ -297,14 +382,14 @@
     if (screenNote) content.append(el('p', screenNote, 'scope-note'));
     const screen = definition();
     if(receptionPreview)return appointmentFlow.renderReception(content);
-    if (!design && role==='patient' && !access.patient_id && ['appointments','laboratory','prescriptions','chart','history','request','schedule','health'].includes(page)) {
+    if(role==='patient'&&['request','schedule','health'].includes(page))return design ? scheduleView(content) : renderLiveAttention(content);
+    if (!design && role==='patient' && !access.patient_id && ['appointments','laboratory','prescriptions','chart','history'].includes(page)) {
       const titles={appointments:'No tienes citas programadas',laboratory:'No tienes resultados de laboratorio',prescriptions:'No tienes recetas disponibles'};
       content.append(row(titles[page] || (['request','schedule','health'].includes(page) ? 'Solicita atención en recepción' : 'Tu información clínica aún no está disponible'),
         'Acércate a recepción o consulta los canales oficiales de contacto del hospital. El personal debe crear o vincular tu expediente y programar tu atención.'));
       content.append(button('Información del hospital',()=>go('information'),'text-button'),button('Actualizar estado',()=>run(()=>load()),'text-button'));
       return;
     }
-    if(role==='patient'&&['request','schedule','health'].includes(page))return design ? scheduleView(content) : renderLiveAttention(content);
     if(role==='patient'&&page==='appointments'){
       const demo=design;
       return appointmentFlow.render(content,{appointments:demo?appointmentFlow.appointments:HospitalPatientAppointments.fromItems(modules.items,profile,formatConsultationTime),demonstration:demo,loading:busy,error:!design&&!busy&&!modules.data,
@@ -322,13 +407,6 @@
         retry:()=>run(()=>load()),loadMore:()=>run(()=>modules.load('history',true))});
     }
     if(!design&&role==='patient'&&['chart','laboratory'].includes(page))return patientClinical.render(content,{page,profile,scope:access?.patient_id});
-    if (!design && role === 'doctor' && ['patients','chart','laboratory'].includes(page)) {
-      content.append(button(labConnected ? 'Ver diseño de expediente y laboratorios' : 'Ver flujo conectado', () => run(async () => { labConnected = !labConnected; await load(); }), 'text-button'));
-      if (!labConnected) {
-        labDesign.configureDoctor(modules.workspace?.doctor_name || (profile?.person ? profile.person.given_names+' '+profile.person.family_names : displayName()),access.staff_id || access.profile.id,modules.workspace?.facility_name);
-        return labDesign.render(content,{role,page});
-      }
-    }
     if (design && ['patients','chart','laboratory'].includes(page)) return labDesign.render(content,{role,page});
     if (!design && modules.supports(role,page) && page !== 'profile') {
       modules.configure(access,role,access.roles.find(item => item.code === role)?.context_id);
@@ -422,6 +500,7 @@
     const grid = el('div', null, 'dash-grid');
     for (const [id, label, icon] of [['appointments', 'Mis citas', '▦'], ['request', 'Solicitar atención', '✚'], ['laboratory', 'Laboratorios', '⚗'], ['prescriptions', 'Recetas', '▤']]) {
       const node = button(null, () => go(id), 'dash-card');
+      node.setAttribute('aria-label',label);
       node.append(el('span', icon, 'dash-icon'), el('strong', label));
       grid.append(node);
     }
@@ -721,16 +800,17 @@
     patientClinical=new HospitalPatientClinical({el,button,go,run,busy:()=>busy,model:()=>modules,laboratory:()=>patientLabModules,retry:()=>run(()=>load()),repaint:()=>{const content=$('#screen-content');if(content)renderContent(content);}});
     patientLabModules=new HospitalModules(api,{el,button,row,run,message,go,period:formatPeriod,busy:()=>busy});
     doctorDashboard = new HospitalDoctorDashboard({el,button,go,run,busy:() => busy});
-    modules = new HospitalModules(api,{el,button,row,run,message,go,period:formatPeriod,busy:() => busy,
+    modules = new HospitalModules(api,{el,button,row,run,message,go,period:formatPeriod,busy:() => busy,repaint:()=>{const content=$('#screen-content');if(content)renderContent(content);},
       doctorConsultations:(parent,module) => {
         const demo = false;
-        doctorConsultations.render(parent,{day:module.day,appointments:demo ? HospitalDoctorConsultations.samples(module.day) : module.workspace.appointments,demo,search,period:formatConsultationTime,
+        doctorConsultations.render(parent,{day:module.day,appointments:module.workspace.appointments.filter(a=>module.stateFilter==='all'||a.status===module.stateFilter),demo,search,period:formatConsultationTime,
           onDay:day => { module.day = day; module.select(''); module.workspace = null; run(() => module.load('consultation')); },
           onSelect:id => { module.select(id); run(() => module.loadChart()); }});
       },
       doctorDashboard:(parent,module) => {
         const workspace = module.workspace;
         doctorDashboard.render(parent,{name:workspace.doctor_name,facility:workspace.facility_name,
+          appointments:workspace.appointments,
           count:workspace.appointments.filter(item => !['cancelled','rejected','no_show'].includes(item.status)).length});
       },
       doctorPatientHistory:(parent,module) => {

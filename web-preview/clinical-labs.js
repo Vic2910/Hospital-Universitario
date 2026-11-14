@@ -219,7 +219,7 @@
       const value=label=>fields.find(item=>item.label.toLowerCase()===label.toLowerCase())?.value;
       const name=clean(value('Nombre')||(profile?.person?[profile.person.given_names,profile.person.family_names].join(' '):null)),age=clean(value('Edad')),phone=clean(value('Teléfono')||profile?.contacts?.find(item=>item.kind==='phone')?.value);
       const stamp=text=>Number.isFinite(Date.parse(text))?new Intl.DateTimeFormat('es-GT',{dateStyle:'long',timeStyle:'short'}).format(new Date(text)):'No hay datos reales';
-      const completed=item=>['released','completed'].includes(item.status),state=item=>({pending:'Pendiente',in_progress:'En Proceso',processing:'En Proceso',released:'Completado',completed:'Completado',cancelled:'Cancelado'})[item.status]||'Estado no disponible';
+      const completed=item=>item.status==='released',state=item=>({pending:'Pendiente',in_progress:'En Proceso',processing:'En Proceso',released:'Completado',completed:'Completado',awaiting_release:'Completado · pendiente de publicación',cancelled:'Cancelado'})[item.status]||'Estado no disponible';
       const badge=item=>el('span',state(item),'clinical-lab-state '+(completed(item)?'is-completed':item.status==='pending'?'is-pending':'is-processing'));
       const records=[...source.items].sort((a,b)=>(Date.parse(b.event_at)||0)-(Date.parse(a.event_at)||0)),selected=records.find(item=>item.id===this.selected);
       const ticket=el('section',null,'clinical-ticket patient-own-chart');ticket.setAttribute('role','region');ticket.setAttribute('aria-label',selected?'Detalle de examen':page==='chart'?'Mi expediente completo':'Mis laboratorios');

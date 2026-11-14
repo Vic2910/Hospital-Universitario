@@ -79,16 +79,37 @@
       const [profiles, roles, patients, staff] = await Promise.all([
         get('profiles','id,first_name,last_name,phone,birth_date,city','id'),
         get('user_roles','user_id,role,active','user_id'),
-        get('patients','id,profile_id','profile_id'),get('staff','id,profile_id,active','profile_id')]);
-      this.context = root.HospitalCore.backendAccess(user,profiles[0],roles,patients,staff);
+        get('patients','id,profile_id','profile_id'),get('staff','id,profile_id,active,category','profile_id')]);
+      this.context = root.HospitalCore.backendAccess(user,profiles[0],roles,patients,staff.filter(s=>s.category==='doctor'));
       return {access:this.context,roles:root.HospitalCore.routes(this.context)};
     }
     async operation(kind, parameters = {}) {
       if (!this.context) await this.access();
+      if(this.context.roles.some(r=>r.code==='doctor')){
+        const p=parameters;
+        const calls={
+          workspace:['workspace',{p_from:p.p_from,p_to:p.p_to}],
+          patientChart:['chart',{p_patient:p.p_patient,p_from:p.p_from??null,p_to:p.p_to??null,p_query:p.p_query||''}],
+          startConsultation:['start',{p_appointment:p.p_appointment,p_key:p.p_request_key}],
+          saveConsultation:['save',{p_encounter:p.p_encounter,p_version:p.p_expected_version??0,p_key:p.p_request_key,p_values:p.p_values}],
+          closeConsultation:['finish',{p_encounter:p.p_encounter,p_version:p.p_expected_version}],
+          issueLab:['lab',{p_encounter:p.p_encounter,p_test:Number(p.p_test),p_reason:p.p_instructions,p_key:p.p_request_key}],
+          nativePrescription:['prescribe',{p_encounter:p.p_encounter,p_key:p.p_key,p_lines:p.p_lines}]
+        };
+        if(calls[kind])return this.doctorRPC(...calls[kind]);
+      }
       const plan = root.HospitalCore.backendPlan(kind,parameters,this.context);
       const results = [];
       for (const step of plan) results.push(await this.request(step.path,step.body,await this.token(),step.method));
       return root.HospitalCore.backendPresent(kind,parameters,this.context,results);
+    }
+    async attentionRPC(name, parameters = {}) {
+      if (!['my_attention_context','my_attention_requests','submit_my_attention_request'].includes(name)) throw new Error('Operación de atención no permitida.');
+      return this.request('/rest/v1/rpc/'+name,parameters,await this.token());
+    }
+    async doctorRPC(name,parameters={}) {
+      if(!['workspace','chart','start','save','finish','lab','prescribe','patients','patient_labs','admissions','admission_request','lab_catalog','lab_orders','labs'].includes(name))throw new Error('Operación médica no permitida.');
+      return this.request('/rest/v1/rpc/doctor_native_'+name,parameters,await this.token());
     }
     async changePassword(password) {
       return this.request('/auth/v1/user', {password}, await this.token(), 'PUT');

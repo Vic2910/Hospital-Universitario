@@ -29,6 +29,10 @@ struct ContentView: View {
             }
             else if store.selectedRole == nil { rolePicker }
             else { portal }
+            if let notice=store.registrationNotice, store.access != nil, store.access?.patient_id == nil {
+                Text(notice).font(.footnote).foregroundStyle(HospitalTheme.wine).padding(12)
+                    .frame(maxWidth:.infinity).background(.white).accessibilityLabel(notice)
+            }
             if let message = store.message {
                 Text(message).font(.footnote).foregroundStyle(.red).padding(12)
                     .frame(maxWidth: .infinity).background(.white).accessibilityLabel("Aviso: \(message)")
@@ -42,7 +46,7 @@ struct ContentView: View {
             search = ""
             await store.refreshScreen()
         }
-        .onChange(of: store.selectedRole) { _, _ in showLabDesign = store.selectedRole == "doctor"; labDesign.reset(); appointmentFlow.reset() }
+        .onChange(of: store.selectedRole) { _, _ in showLabDesign = false; labDesign.reset(); appointmentFlow.reset() }
         .onChange(of: store.doctor?.workspace?.doctor_name) { _, name in
             if store.selectedRole == "doctor", let name { labDesign.doctorName = name }
         }
@@ -50,7 +54,7 @@ struct ContentView: View {
             if phase == .active && store.selectedRole != nil { Task { await store.refreshScreen() } }
         }
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
-            if scenePhase == .active && ((store.selectedRole == "patient" && ["turns", "notifications"].contains(store.screenID)) ||
+            if scenePhase == .active && store.attention?.saving != true && ((store.selectedRole == "patient" && ["home", "appointments", "request", "health", "schedule", "turns", "notifications"].contains(store.screenID)) ||
                 (store.selectedRole == "doctor" && ["home", "patients", "notifications"].contains(store.screenID))) {
                 Task { await store.refreshScreen() }
             }
@@ -124,6 +128,7 @@ struct ContentView: View {
     private var screen: HospitalScreen? { store.screens.first { $0.id == store.screenID } }
     private var isDoctor: Bool { store.selectedRole == "doctor" }
     private var title: String {
+        if isDoctor && store.screenID == "agenda" { return "Agenda médica" }
         if !isDoctor && store.screenID == "home" { return "Mi espacio de salud" }
         if store.screenID == "home" { return "Hola, \(store.name == "Bienvenido" ? (isDoctor ? "Doctor" : "Paciente") : store.name)" }
         if !isDoctor && ["request", "schedule", "health"].contains(store.screenID) { return "Solicitar atención" }
@@ -143,10 +148,10 @@ struct ContentView: View {
             }
             .foregroundStyle(.white).padding(.horizontal, 24).padding(.top, 18).padding(.bottom, (store.screenID == "profile" || (!isDoctor && ["chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) || (showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID))) ? 24 : 48)
             .frame(maxWidth: .infinity, alignment: .leading).background(HospitalTheme.wine.ignoresSafeArea(edges: .top))
-            if store.screenID != "profile" && !(!isDoctor && ["home", "chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) && !(showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID)) {
+            if store.screenID != "profile" && !(isDoctor && ["patients","laboratory","admissions"].contains(store.screenID)) && !(!isDoctor && ["home", "chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) && !(showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID)) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").font(.system(size: 11))
-                TextField(screen?.search ?? "Buscar servicios…", text: $search).font(.system(size: 12)).autocorrectionDisabled()
+                TextField(isDoctor && ["agenda","consultation","patients"].contains(store.screenID) ? "Buscar paciente o expediente…" : screen?.search ?? "Buscar servicios…", text: $search).font(.system(size: 12)).autocorrectionDisabled()
                     .accessibilityLabel(screen?.search ?? "Buscar servicios")
             }.foregroundStyle(HospitalTheme.secondary).padding(.horizontal, 16).frame(height: 52)
                 .background(.white, in: RoundedRectangle(cornerRadius: 13)).padding(.horizontal, 16).padding(.top, -29)
@@ -162,7 +167,8 @@ struct ContentView: View {
     }
 
     @ViewBuilder private var content: some View {
-        if !isDoctor && ["chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID) { liveContent }
+        if isDoctor { liveContent }
+        else if !isDoctor && ["chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID) { liveContent }
         else if ["patients", "chart", "laboratory"].contains(store.screenID) {
             VStack(alignment: .leading, spacing: 18) {
                 Toggle("Vista de diseño · datos locales", isOn: $showLabDesign).font(.footnote)
@@ -180,11 +186,13 @@ struct ContentView: View {
     }
 
     @ViewBuilder private var liveContent: some View {
-        if !isDoctor, store.access?.patient_id == nil, ["appointments", "laboratory", "prescriptions", "chart", "history", "request", "schedule", "health"].contains(store.screenID) {
+        if !isDoctor, ["request", "schedule", "health"].contains(store.screenID), let attention = store.attention {
+            PatientAttentionLiveView(model: attention, navigate: go)
+        } else if !isDoctor, store.access?.patient_id == nil, ["appointments", "laboratory", "prescriptions", "chart", "history"].contains(store.screenID) {
             HospitalCard {
                 VStack(alignment: .leading, spacing: 14) {
                     Image(systemName: "heart.text.clipboard").font(.largeTitle).foregroundStyle(HospitalTheme.wine)
-                    Text(["request", "schedule", "health"].contains(store.screenID) ? "Solicita atención en recepción" : store.screenID == "appointments" ? "No tienes citas programadas" : store.screenID == "laboratory" ? "No tienes resultados de laboratorio" : store.screenID == "prescriptions" ? "No tienes recetas disponibles" : "Tu información clínica aún no está disponible")
+                    Text(store.screenID == "appointments" ? "No tienes citas programadas" : store.screenID == "laboratory" ? "No tienes resultados de laboratorio" : store.screenID == "prescriptions" ? "No tienes recetas disponibles" : "Tu información clínica aún no está disponible")
                         .font(.headline)
                     Text("Acércate a recepción o consulta los canales oficiales de contacto del hospital. El personal debe crear o vincular tu expediente y programar tu atención.")
                         .font(.subheadline).foregroundStyle(HospitalTheme.secondary)
@@ -192,10 +200,8 @@ struct ContentView: View {
                     Button("Actualizar estado") { Task { await store.refreshScreen() } }
                 }
             }
-        } else if isDoctor, store.screenID == "prescriptions", let doctor = store.doctor, let modules = store.modules {
-            DoctorPrescriptionView(doctor: doctor, model: modules, search: search, period: store.period, navigate: go)
-        } else if !isDoctor, ["request", "schedule", "health"].contains(store.screenID), let modules = store.modules {
-            PatientAttentionLiveView(model: modules, navigate: go, period: store.period)
+        } else if isDoctor, store.screenID == "prescriptions", let doctor = store.doctor {
+            DoctorModuleView(model: doctor, screenID: "prescriptions", search: search, navigate: go, period: store.period)
         } else if !isDoctor, store.screenID == "appointments", let modules = store.modules {
             PatientAppointmentsView(flow: appointmentFlow, modules: modules, profile: store.profile, patientID: store.access?.patient_id, search: search, period: store.period, navigate: go)
         } else if !isDoctor, ["chart", "laboratory"].contains(store.screenID), let modules = store.modules, let laboratory = store.patientLaboratory {
@@ -214,7 +220,7 @@ struct ContentView: View {
            ((!isDoctor && ["appointments", "request", "chart", "history", "prescriptions", "laboratory"].contains(store.screenID)) || store.screenID == "notifications") {
             MobileModuleView(model: modules, module: store.screenID, role: isDoctor ? "doctor" : "patient", search: search, period: store.period, navigate: go)
         } else if isDoctor, let doctor = store.doctor,
-           ["home", "patients", "consultation", "chart", "laboratory", "notifications"].contains(store.screenID) {
+           ["home", "agenda", "patients", "consultation", "chart", "laboratory", "notifications", "admissions"].contains(store.screenID) {
             DoctorModuleView(model: doctor, screenID: store.screenID, search: search, navigate: go, period: store.period)
         } else {
             switch store.screenID {
@@ -231,7 +237,7 @@ struct ContentView: View {
     }
 
     private func heading(_ value: String) -> some View { Text(value).font(.system(size: 16, weight: .semibold)).padding(.top, 1) }
-    private func go(_ id: String) { guard !store.busy, store.doctor?.saving != true, store.modules?.saving != true else { return }; if id == "consultation", store.screenID != id, store.doctor?.selectedAppointmentID == nil { store.doctor?.day = Date() }; store.screenID = id; search = "" }
+    private func go(_ id: String) { guard !store.busy, store.doctor?.saving != true, store.modules?.saving != true, store.attention?.saving != true else { return }; if id == "consultation", store.screenID != id, store.doctor?.selectedAppointmentID == nil { store.doctor?.day = Date() }; store.screenID = id; search = "" }
     private func matches(_ value: String) -> Bool { search.isEmpty || value.localizedCaseInsensitiveContains(search) }
 
     /// Inicio del paciente: dashboard nuevo con saludo, fecha/cita y accesos rápidos.

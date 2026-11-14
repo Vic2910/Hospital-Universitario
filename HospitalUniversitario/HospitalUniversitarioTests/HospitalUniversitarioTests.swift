@@ -25,6 +25,14 @@ struct HospitalUniversitarioTests {
         #expect(path.contains("/rest/v1/appointments?"))
         #expect(path.contains("patient_id=eq."))
     }
+    @Test @MainActor func registrationOnlyDeclaresIdentityAndNeverClaimsClinicalAccess() throws {
+        let core=try SharedCore()
+        let metadata=try core.call("registrationAccount",arguments:[["first_name":" Ana ","last_name":" Prueba ","dui":"012345678","role":"doctor","patient_id":"not-authority"]]).toDictionary()
+        #expect(metadata?["first_name"] as? String == "Ana")
+        #expect(metadata?["dui"] as? String == "01234567-8")
+        #expect(metadata?["role"] == nil && metadata?["patient_id"] == nil)
+        #expect(try core.call("registrationReviewMessage",arguments:[]).toString().contains("recepción"))
+    }
     @Test @MainActor func selfRegistrationCannotCreatePatient() throws {
         let core = try SharedCore()
         let identity = "00000000-0000-4000-8000-000000000001"

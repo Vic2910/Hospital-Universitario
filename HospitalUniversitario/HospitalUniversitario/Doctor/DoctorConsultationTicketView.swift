@@ -42,7 +42,7 @@ struct DoctorConsultationTicketView: View {
     var embedded = false
     var closeLabel = "Volver a consultas"
     var context: [MobileField] = []
-    private let referenceBlue = Color(red: 33/255, green: 150/255, blue: 243/255)
+    private let referenceBlue = HospitalTheme.wine
 
     var body: some View {
         Group { if embedded { ticketContent } else { ScrollView { ticketContent } } }.background(HospitalTheme.background)
@@ -63,6 +63,9 @@ struct DoctorConsultationTicketView: View {
                     .background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 16))
                 VStack(alignment: .leading, spacing: 18) {
                     DoctorConsultationField(label: "Paciente", value: DoctorConsultationFields.value(appointment.patient_name))
+                    DoctorConsultationField(label: "Expediente", value: DoctorConsultationFields.value(appointment.record_number))
+                    DoctorConsultationField(label: "Consultorio", value: DoctorConsultationFields.value(appointment.room_code))
+                    DoctorConsultationField(label: "Especialidad solicitada", value: appointment.specialty ?? "Cita directa de recepción; sin solicitud vinculada")
                     HStack(alignment: .top, spacing: 16) {
                         DoctorConsultationField(label: "Edad", value: DoctorConsultationFields.age(appointment.age))
                         DoctorConsultationField(label: "Teléfono", value: DoctorConsultationFields.value(appointment.phone))
@@ -70,6 +73,7 @@ struct DoctorConsultationTicketView: View {
                     Divider()
                     DoctorConsultationField(label: "Motivo de la consulta", value: DoctorConsultationFields.value(appointment.reason))
                     DoctorConsultationField(label: "Síntomas", value: DoctorConsultationFields.symptoms(appointment.symptoms))
+                    if let other = appointment.other_symptoms { DoctorConsultationField(label: "Otros síntomas", value: other) }
                 }.padding(18).background(.white, in: RoundedRectangle(cornerRadius: 16))
                 ForEach(Array(context.enumerated()), id: \.offset) { _, field in DoctorConsultationField(label: field.label, value: field.value) }
                 if let openCare { Button("Abrir atención", action: openCare).font(.subheadline.weight(.semibold)).tint(HospitalTheme.wine) }

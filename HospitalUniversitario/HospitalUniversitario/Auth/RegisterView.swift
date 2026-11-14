@@ -51,6 +51,7 @@ struct RegisterView: View {
                         }
                     }.padding(.top, -28)
                     HospitalNotice(text: "El registro crea únicamente tu cuenta de la app. Recepción gestiona tu expediente y programa tus citas.")
+                    HospitalNotice(text: "Si ya tienes expediente de atención presencial, utiliza tu mismo DUI. No se creará otro expediente: recepción debe verificar tu identidad y confirmar la vinculación. Cualquier asociación existente requiere revisión en recepción.")
                     if submitted, let error = validationError {
                         Text(error).font(.footnote).foregroundStyle(.red)
                     }

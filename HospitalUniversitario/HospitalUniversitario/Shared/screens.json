@@ -14,6 +14,7 @@
   ],
   "doctor": [
     {"id":"home","title":"Hola","subtitle":"Resumen de tu jornada clínica","search":"Buscar servicios…","tab":"home","layout":"home","section":"Resumen del día"},
+    {"id":"admissions","title":"Ingresos hospitalarios","subtitle":"Solicitudes médicas y seguimiento con recepción","search":"Buscar solicitudes…","tab":"more","layout":"admissions","section":"Mis solicitudes"},
     {"id":"patients","title":"Mis pacientes","subtitle":"Pacientes asignados y atención reciente","search":"Buscar mis pacientes…","tab":"patients","layout":"patients","section":"Lista de pacientes"},
     {"id":"consultation","title":"Consultas","subtitle":"Tu agenda diaria y próximas consultas","search":"Buscar consultas…","tab":"consultation","layout":"consultation","section":"Agenda de consultas","fields":["Motivo de consulta","Exploración física","Diagnóstico y plan"]},
     {"id":"chart","title":"Expedientes","subtitle":"Consulta autorizada de historial clínico","search":"Buscar expedientes…","tab":"more","layout":"chart","section":"Resumen del expediente","sections":["Alergias","Diagnósticos","Antecedentes","Medicamentos activos","Evolución médica"]},

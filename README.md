@@ -23,6 +23,8 @@ El login y registro utilizan Supabase real. Los botones de diseño usan ejemplos
 
 El registro crea únicamente la cuenta y su perfil. No crea paciente, expediente ni cita. El DUI declarado permanece en los metadatos de la cuenta; no acredita identidad, autoriza roles ni vincula expedientes automáticamente. Se retiró la llamada a `register_patient` de ambos clientes y se revocó su ejecución a usuarios de la app en el servidor. La recepción conserva sus operaciones de alta y programación. Los pacientes ya vinculados conservan sus lecturas y solicitudes de atención, que no son citas.
 
+Un expediente presencial con el mismo DUI no impide crear la cuenta. iOS/web-preview normalizan únicamente los datos declarados de Auth y muestran revisión pendiente; no buscan expedientes por DUI. Recepción verifica y asocia el expediente existente con `link_attention_patient`, que requiere una solicitud de atención y confirmación de identidad. Si el expediente pertenece a otra cuenta, la RPC rechaza la reasignación; el registro muestra la misma orientación genérica sin revelar datos. No se genera una solicitud clínica automáticamente. Al actualizar el Home después del vínculo se obtiene el paciente propio por `profile_id`.
+
 Si Auth vuelve a exigir correo, la app informa de la discrepancia sin simular una sesión ni crear datos clínicos. Si falla la lectura tras crear la cuenta, se recupera mediante login sin repetir signup. [Detalle del flujo vigente](docs/REGISTRO_SOLO_CUENTA_2026-11-13.md).
 
 ## Integración actual
@@ -33,9 +35,16 @@ Si Auth vuelve a exigir correo, la app informa de la discrepancia sin simular un
 - `Shared/hospital-core.js`: validaciones, resolución de acceso, planes de consultas y adaptación de filas a la presentación, compartidos por SwiftUI y web.
 - `Core/HospitalAPI.swift` y `web-preview/api.js`: Auth, sesión y ejecución de esos planes con el JWT del usuario y RLS existente. Las sesiones usan una clave específica del proyecto.
 - Solicitudes de atención: `appointment_requests`, especialidad numérica y preferencia Mañana/Tarde. La base no guarda una fecha/horario propuesto en esta solicitud. Recepción programa las citas por separado.
+- **Solicitar atención en iOS:** formulario real con datos de la cuenta, síntomas del catálogo, especialidad con médico activo asignado, preferencia Mañana/Tarde/Indiferente y seguimiento propio. Funciona sin expediente mediante RPC que resuelven la identidad desde `auth.uid()`; no crea pacientes, expedientes ni citas. Solo se completan los datos de cuenta faltantes. [Contrato breve para el panel de recepción separado](docs/ATENCION_IOS_2026-11-13.md).
 - Lecturas adaptadas: perfil propio, habitaciones, jornadas del médico, citas, solicitudes, expediente e historial del paciente, recetas, laboratorios y notificaciones. Resultados de laboratorio únicamente publicados para el paciente. Filtros de identidad más RLS en el servidor.
 
-**Límites actuales:** las lecturas clínicas y sus relaciones están implementadas y probadas con transporte simulado, pendientes de recorrido autenticado real. Las operaciones de consulta médica (iniciar/guardar/cerrar), emisión de recetas/órdenes, contacto de emergencia, preferencias, confirmación de jornada y descarga de documentos todavía requieren adaptación al nuevo backend: se rechazan localmente, sin llamar a servicios inexistentes. No se presenta una fila numerada ni ocupación/cifras que la base no haya publicado. Los diseños locales permanecen disponibles y no equivalen a persistencia clínica real.
+**Doctor en iOS y vista previa Windows:** Dashboard real, agenda propia por fecha/estado, directorio de todos sus pacientes autorizados independiente del día con búsqueda por nombre/DUI/correo, expediente y laboratorios por paciente, solicitud/síntomas, borrador de evaluación y signos vitales, diagnóstico de texto con código opcional, recetas y cierre atómico. Exige rol doctor activo y staff propio activo con categoría doctor. Las pantallas de sesión médica ya no se sustituyen por ejemplos. [Directorio y verificación](docs/DIRECTORIO_DOCTOR_2026-11-13.md). [Contrato independiente de plataforma](contracts/doctor-native-v1.json) para reutilizar las mismas RPC en Android; Android no se implementó. La réplica web-preview acompaña a iOS; el panel administrativo/recepción sigue siendo otro proyecto.
+
+**Límites actuales:** el recorrido del doctor se verificó en la base real con identidades temporales y reversión, pero falta ejecutar el cliente nativo en Xcode. No existe catálogo de diagnósticos publicado; no se inventa uno. Las vías de receta disponibles son las que permite la restricción actual (oral/inyectable). Contacto de emergencia, preferencias, confirmación de jornada y documentos siguen pendientes. Los diseños locales no equivalen a persistencia clínica real.
+
+**Ingresos hospitalarios:** doctor → acceso del Dashboard, Más o paciente/consulta → Nueva solicitud. iOS y web-preview envían solicitudes reales y muestran su seguimiento, habitación/cama cuando recepción confirma. Categorías reales VIP/Semiprivada, prioridad Normal/Urgente; el médico no ocupa camas. [Contrato breve para integrar recepción en su proyecto separado](docs/INGRESOS_DOCTOR_2026-11-13.md).
+
+**Laboratorios:** desde una consulta propia abierta, buscar/filtrar y seleccionar varios exámenes, revisar y confirmar el envío real. Once pruebas activas; Mis órdenes sin límite de agenda y resultados validados/publicados para doctor y paciente según autorización. iOS y web-preview comparten el contrato. Los rangos y parámetros estandarizados siguen pendientes de validación por el laboratorio; no se inventaron. [Detalle breve](docs/LABORATORIOS_DOCTOR_2026-11-13.md).
 
 ## Abrir en Mac
 
@@ -54,6 +63,11 @@ node --preserve-symlinks --preserve-symlinks-main scripts/test-core.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-preview.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-patient-registration.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-patient-dashboard.mjs
+node --preserve-symlinks --preserve-symlinks-main scripts/test-attention-navigation.mjs
+node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-preview-live.mjs
+node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-directory.mjs
+node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-admissions.mjs
+node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-laboratory.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-applicant.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-clinical-labs.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/generate-models.mjs --check
@@ -62,6 +76,10 @@ git diff --check
 ```
 
 `scripts/check-backend.mjs` comprueba HTTPS y rechazo anónimo sin crear cuentas ni pacientes. Las demás pruebas anteriores usan datos/transporte locales. Las pruebas nativas requieren Mac.
+
+Solicitar atención también está replicado en `web-preview/` para verlo en Windows: en conexión real, inicia sesión y pulsa el acceso del Home o la pestaña Salud. Ambos abren el formulario incluso sin expediente, usando las RPC existentes. Recarga con Ctrl+F5 para recibir los cambios; el servidor lee los archivos actuales sin generar un build. El panel web externo de recepción sigue fuera de este proyecto. `PatientAttentionTests` requiere Xcode. `supabase/test-attention-rollback.sql` acredita el flujo de base de datos con cuentas/personas temporales revertidas; no acredita ejecución visual de iOS.
+
+En un Mac, abre `HospitalUniversitario/HospitalUniversitario.xcodeproj` y ejecuta de nuevo con ⌘R para recompilar e instalar la versión actual en el simulador. Normalmente no hace falta borrar la app ni sus datos. Recargar la vista web no actualiza el binario iOS.
 
 [Documentación actual](docs/README.md) · [Transición y límites verificados](docs/TRANSICION_HOSPITAL_MOVILES_2026-11-13.md) · [Bitácora](docs/BITACORA.md).
 

@@ -1,5 +1,52 @@
 import Foundation
 
+enum DoctorAdmissionLabels {
+    static func category(_ value: String) -> String { value == "vip" ? "VIP" : value == "semiprivada" ? "Semiprivada" : value }
+    static func status(_ value: String) -> String {
+        ["solicitado":"Pendiente de recepción", "asignado":"Asignado", "hospitalizado":"Ingresado", "alta_medica":"Alta médica", "cerrado":"Cerrado", "cancelado":"Cancelado", "rechazada":"Rechazada", "cancelada":"Cancelada"][value] ?? value
+    }
+}
+struct DoctorAdmission: Decodable, Identifiable, Sendable {
+    struct Assignment: Decodable, Sendable { let room: String; let bed: String; let floor: String; let assigned_at: String; let released_at: String? }
+    struct Event: Decodable, Sendable { let status: String; let decision: String?; let reason: String?; let at: String }
+    let id: UUID
+    let patient_id: UUID
+    let patient_name: String
+    let record_number: String?
+    let doctor_name: String
+    let category: String
+    let reason: String
+    let observations: String?
+    let priority: String
+    let status: String
+    let ordered_at: String
+    let encounter_id: UUID?
+    let decision: String?
+    let decision_reason: String?
+    let assignment: Assignment?
+    let history: [Event]
+}
+struct DoctorAdmissionsPage: Decodable, Sendable {
+    let items: [DoctorAdmission]
+    let total: Int
+    let has_more: Bool
+    let next_offset: Int?
+    let doctor_name: String
+    let categories: [String]
+    let priorities: [String]
+}
+struct DoctorAdmissionInput: Sendable {
+    let patient: UUID
+    let patientName: String
+    let recordNumber: String?
+    let encounter: UUID?
+    let category: String
+    let priority: String
+    let reason: String
+    let observations: String
+    let key: UUID
+}
+
 enum DoctorJSON: Codable, Sendable, Equatable {
     case string(String), number(Int), decimal(Decimal), bool(Bool), object([String: DoctorJSON]), array([DoctorJSON]), null
 
@@ -55,6 +102,7 @@ struct DoctorWorkspace: Codable, Sendable {
     let tests: [DoctorLabTest]
     let notifications: [DoctorNotification]
     let stats: Statistics
+    var medications: [DoctorMedication]? = nil
 }
 
 struct DoctorAppointment: Codable, Identifiable, Sendable {
@@ -70,18 +118,83 @@ struct DoctorAppointment: Codable, Identifiable, Sendable {
     var age: Int? = nil
     var reason: String? = nil
     var symptoms: [String]? = nil
+    var other_symptoms: String? = nil
+    var specialty: String? = nil
+    var room_code: String? = nil
+    var duration_minutes: Int? = nil
+    var startDate: Date? {
+        guard let first = period.dropFirst().split(separator: ",", maxSplits: 1).first else { return nil }
+        let clean=String(first).trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+            .replacingOccurrences(of: " ", with: "T")
+            .replacingOccurrences(of: "([+-]\\d{2})$", with: "$1:00", options: .regularExpression)
+        return DoctorDate.parse(clean)
+    }
 }
 
 struct DoctorLabTest: Codable, Identifiable, Sendable {
-    let id: UUID
+    let id: Int64
     let code: String
     let name: String
+    var category: String? = nil
+}
+struct DoctorLabSelection: Sendable {
+    let encounter: UUID
+    let patientName: String
+    let recordNumber: String?
+    let tests: [Int64]
+    let reason: String
+    let key: UUID
+}
+struct DoctorLabParameter: Decodable {
+    let label: String
+    let value: String?
+    let unit: String?
+    let reference: String?
+    let observation: String?
 }
 
 struct DoctorDiagnosis: Codable, Identifiable, Sendable {
     let id: UUID
     let code: String
     let description: String
+}
+
+struct DoctorAssignedPatient: Codable, Identifiable, Sendable {
+    let id: UUID
+    let full_name: String
+    let record_number: String?
+    let dui: String?
+    let email: String?
+    let phone: String?
+    let birth_date: String?
+    let age: Int?
+    let active_encounter_id: UUID?
+    var initials: String { full_name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased() }
+}
+struct DoctorPatientDirectoryPage: Decodable {
+    let patients: [DoctorAssignedPatient]
+    let total: Int
+    let has_more: Bool
+    let next_offset: Int?
+}
+struct DoctorPatientLab: Decodable, Identifiable {
+    let id: UUID
+    let test_name: String
+    let reason: String
+    let status: String
+    let ordered_at: String
+    let result_summary: String?
+    let completed_at: String?
+    var patient_name: String? = nil
+    var record_number: String? = nil
+    var parameters: [DoctorLabParameter]? = nil
+    var published_at: String? = nil
+}
+struct DoctorPatientLabPage: Decodable {
+    let items: [DoctorPatientLab]
+    let total: Int
+    let has_more: Bool
+    let next_offset: Int?
 }
 
 struct DoctorLabOrder: Codable, Identifiable, Sendable {
@@ -97,6 +210,7 @@ struct DoctorLabOrder: Codable, Identifiable, Sendable {
     let instructions: String?
     let status: String
     let row_version: Int
+    var result_summary: String? = nil
 }
 
 struct DoctorNotification: Codable, Identifiable, Sendable {
@@ -128,6 +242,7 @@ struct DoctorPatientChart: Codable, Sendable {
     var medical_history: [String]? = nil
     var medications: [String]? = nil
     var vitals: [Vital]? = nil
+    var prescriptions: [DoctorIssuedPrescription]? = nil
 
     struct Vital: Codable, Sendable {
         let label: String
@@ -146,6 +261,8 @@ struct DoctorConsultation: Codable, Identifiable, Sendable {
     let note_id: UUID?
     let note_version: Int?
     let row_version: Int
+    var diagnosis_code: String? = nil
+    var vitals: [String: String]? = nil
 }
 
 struct DoctorConsultationDraft: Equatable, Sendable {
@@ -153,6 +270,9 @@ struct DoctorConsultationDraft: Equatable, Sendable {
     var objective = ""
     var assessment = ""
     var plan = ""
+    var diagnosis_code = ""
+    var vitals: [String: String] = [:]
+    var canSave: Bool { [subjective,objective,assessment,plan].allSatisfy { $0.count <= 10000 } && diagnosis_code.count <= 50 }
     var isValid: Bool {
         [subjective, objective, assessment, plan].allSatisfy {
             !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.count <= 10000
@@ -160,6 +280,36 @@ struct DoctorConsultationDraft: Equatable, Sendable {
     }
     var values: [String: DoctorJSON] {
         ["subjective": .string(subjective), "objective": .string(objective),
-         "assessment": .string(assessment), "plan": .string(plan)]
+         "assessment": .string(assessment), "plan": .string(plan), "diagnosis_code": .string(diagnosis_code),
+         "vitals": .object(vitals.mapValues { .string($0.replacingOccurrences(of: ",", with: ".")) })]
     }
+}
+
+struct DoctorMedication: Codable, Identifiable, Sendable {
+    let id: UUID
+    let name: String
+    let strength: String?
+    let presentation: String?
+    var label: String { [name,strength,presentation].compactMap { $0 }.joined(separator: " · ") }
+}
+struct DoctorIssuedPrescription: Codable, Identifiable, Sendable {
+    let id: UUID
+    let code: String
+    let issued_at: String
+    let status: String
+    let lines: [String]
+}
+struct DoctorRxLine: Identifiable, Sendable {
+    let id = UUID()
+    let medication: DoctorMedication
+    let dose: Decimal
+    let unit: String
+    let frequency: Int
+    let route: String
+    let quantity: Int
+    let days: Int
+    let instructions: String
+    var values: DoctorJSON { .object(["medication_id":.string(medication.id.uuidString),"dose":.decimal(dose),
+        "dose_unit":.string(unit),"frequency_hours":.number(frequency),"route":.string(route),
+        "quantity":.number(quantity),"duration_days":.number(days),"observations":.string(instructions)]) }
 }

@@ -9,6 +9,7 @@ final class HospitalStore: ObservableObject {
     @Published private(set) var shifts: [StaffShift] = []
     @Published private(set) var busy = false
     @Published var message: String?
+    @Published private(set) var registrationNotice: String?
     @Published var screenID = "home"
     @Published private(set) var catalog: [String: [HospitalScreen]] = [:]
     @Published private(set) var summary: ActivitySummary?
@@ -21,6 +22,7 @@ final class HospitalStore: ObservableObject {
     @Published private(set) var doctor: DoctorViewModel?
     @Published private(set) var patientLaboratory: MobileModuleViewModel?
     @Published private(set) var modules: MobileModuleViewModel?
+    @Published private(set) var attention: PatientAttentionModel?
     private var roomsCursor: ResourceCursor?
     private var shiftsCursor: ResourceCursor?
     private var api: HospitalAPI?
@@ -30,6 +32,7 @@ final class HospitalStore: ObservableObject {
         do {
             let api = HospitalAPI(core: try SharedCore())
             self.api = api
+            attention = PatientAttentionModel(repository: AttentionRepository(api: api))
             doctor = DoctorViewModel(repository: DoctorRepository(api: api))
             modules = MobileModuleViewModel(repository: MobileModuleRepository(api: api))
             patientLaboratory = MobileModuleViewModel(repository: MobileModuleRepository(api: api))
@@ -85,19 +88,22 @@ final class HospitalStore: ObservableObject {
         defer { busy = false }
         do {
             if access == nil {
-                let metadata = ["first_name": values["first_name"] as? String ?? "", "last_name": values["last_name"] as? String ?? "",
-                    "birth_date": values["birth_date"] as? String ?? "", "phone": values["phone"] as? String ?? "", "city": values["city"] as? String ?? "",
-                    "dui": values["dui"] as? String ?? ""]
+                guard let metadata = try api.core.call("registrationAccount",arguments:[values]).toDictionary() as? [String:String] else {
+                    throw HospitalError.message("Revisa los datos de tu cuenta.")
+                }
                 guard try await api.signUp(email: email, password: password, metadata: metadata) else {
                     message = "Cuenta creada. El servidor todavía exige confirmar el correo; el hospital debe desactivar ese requisito en Auth. No vuelvas a crear la cuenta."
                     return
                 }
             }
             try await resolveAccess()
+            if access?.patient_id == nil {
+                registrationNotice = try api.core.call("registrationReviewMessage",arguments:[]).toString()
+            }
         } catch {
             // Recover the authenticated account after a partially completed signup.
             try? await resolveAccess()
-            message = "No se pudo consultar tu acceso: \(error.localizedDescription) Si ya creaste la cuenta, inicia sesión; no vuelvas a registrarte."
+            message = "No se pudo completar el registro o consultar tu acceso. Si ya creaste tu cuenta, inicia sesión sin registrarte de nuevo. Para revisar la vinculación de un expediente, acude a recepción."
         }
     }
 
@@ -126,12 +132,13 @@ final class HospitalStore: ObservableObject {
             }
             access = fresh; roles = available
             nextAppointment = nil
+            if role == "patient", let identity = fresh.profile?.id { attention?.configure(owner: identity) }
             if let facility = fresh.roles.first(where: { $0.code == role })?.context_id, let profile = fresh.profile {
                 modules?.configure(role: role, facility: facility, profile: profile.id, patient: fresh.patient_id)
                 patientLaboratory?.configure(role: role, facility: facility, profile: profile.id, patient: fresh.patient_id)
             }
             if role == "patient" && ["request", "schedule", "health"].contains(screenID) {
-                await modules?.load("request"); return
+                await attention?.load(); return
             }
             if (role == "patient" && ["appointments", "request", "chart", "history", "prescriptions", "laboratory", "notifications"].contains(screenID)) || screenID == "notifications" {
                 await modules?.load(screenID, more: more)
@@ -140,11 +147,11 @@ final class HospitalStore: ObservableObject {
             }
             if role == "doctor", let identity = fresh.staff_id,
                let facility = fresh.roles.first(where: { $0.code == "doctor" })?.context_id,
-               ["home", "patients", "consultation", "chart", "laboratory", "notifications", "prescriptions"].contains(screenID) {
+               ["home", "agenda", "patients", "consultation", "chart", "laboratory", "notifications", "prescriptions", "admissions"].contains(screenID) {
                 doctor?.configure(facility: facility, identity: identity)
                 if screenID == "home" { doctor?.day = Date() }
                 await doctor?.refresh()
-                if screenID == "prescriptions" { await modules?.load("prescriptions", more: more) }
+                if screenID == "admissions" { await doctor?.loadAdmissions() }
                 return
             }
             if profile == nil { profile = try await api.operation("profile") }
@@ -187,7 +194,7 @@ final class HospitalStore: ObservableObject {
     }
     func period(_ value: String) -> String { api?.core.period(value) ?? value }
     func signOut() async {
-        guard !busy, doctor?.saving != true, modules?.saving != true else { return }
+        guard !busy, doctor?.saving != true, modules?.saving != true, attention?.saving != true else { return }
         busy = true
         let api = self.api
         reset()
@@ -196,16 +203,19 @@ final class HospitalStore: ObservableObject {
         busy = false
     }
     func switchRole() {
-        guard doctor?.saving != true, modules?.saving != true else { return }
+        guard doctor?.saving != true, modules?.saving != true, attention?.saving != true else { return }
         doctor?.clear()
         modules?.clear(); patientLaboratory?.clear()
         selectedRole = nil
+        attention?.clear()
         nextAppointment = nil
         rooms = []; shifts = []; message = nil
         roomsCursor = nil; shiftsCursor = nil; roomsMore = false; shiftsMore = false
         screenID = "home"; summary = nil; profile = nil; overview = nil; screenMessage = nil
     }
     private func reset() {
+        registrationNotice = nil
+        attention?.clear()
         doctor?.clear()
         modules?.clear(); patientLaboratory?.clear()
         access = nil; roles = []; selectedRole = nil

@@ -30,10 +30,16 @@
       const today = el('article',null,'dash-date doctor-today');
       today.append(el('span','HOY','dash-label'),el('strong',dateLabel(new Date())),el('hr'),el('strong',String(data.count),'dash-time'),el('span','Consultas programadas para hoy'),el('p',data.facility,'dash-medico'));
       parent.append(today);
+      if(data.appointments){
+        today.append(el('p',data.appointments.filter(a=>['scheduled','confirmed','in_progress'].includes(a.status)).length+' pendientes · '+data.appointments.filter(a=>a.status==='completed').length+' atendidas'));
+        const next=data.appointments.find(a=>a.status==='in_progress'||(['scheduled','confirmed'].includes(a.status)&&new Date(root.HospitalCore.periodBounds(a.period).start)>=new Date()));
+        today.append(el('hr'),el('span','PRÓXIMA CITA','dash-label'),el('strong',next?next.patient_name:'No tienes próximas citas programadas para hoy.'));
+        if(next)today.append(el('p',dateTime(root.HospitalCore.periodBounds(next.period).start)),el('p',next.room_code?'Consultorio '+next.room_code:'Consultorio no publicado'));
+      }
       if (data.demo) parent.append(el('p','Modo diseño · Doctor y datos ficticios. Sin conexión al hospital.','scope-note'));
       parent.append(el('h2','Accesos rápidos','section-title'));
       const grid = el('div',null,'dash-grid');
-      for (const [id,label,icon] of [['patients','Pacientes','♙'],['consultation','Consultas','✚'],['laboratory','Laboratorios','⚗'],['chart','Expedientes','▤']]) {
+      for (const [id,label,icon] of [['consultation','Agenda','▦'],['patients','Pacientes','♙'],['consultation','Consultas','✚'],['laboratory','Laboratorios','⚗'],['prescriptions','Recetas','▤'],['admissions','Ingresos hospitalarios','▣']]) {
         const item = button(null,() => go(id),'dash-card'); item.setAttribute('aria-label',label);
         const symbol = el('span',icon,'dash-icon'); symbol.setAttribute('aria-hidden','true'); item.append(symbol,el('strong',label)); grid.append(item);
       }

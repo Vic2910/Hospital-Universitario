@@ -74,7 +74,15 @@ final class HospitalAPI {
         request.setValue("Bearer \(try await token())", forHTTPHeaderField: "Authorization")
         let (data, response) = try await transport.data(for: request)
         guard let response = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
-        guard (200..<300).contains(response.statusCode) else { throw BackendFailure(status: response.statusCode) }
+        guard (200..<300).contains(response.statusCode) else {
+            if path.hasPrefix("/rest/v1/rpc/"), (path.contains("attention") || path.contains("doctor_native_")),
+               let problem = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let code = problem["code"] as? String, ["22023", "42501", "40001"].contains(code),
+               let message = problem["message"] as? String {
+                throw HospitalError.message(message)
+            }
+            throw BackendFailure(status: response.statusCode)
+        }
         if data.isEmpty { return NSNull() }
         return try JSONSerialization.jsonObject(with: data, options: .fragmentsAllowed)
     }
@@ -91,13 +99,30 @@ final class HospitalAPI {
     }
 
     func token() async throws -> String { try await client.auth.session.accessToken }
+    func doctorRPC<T: Decodable>(_ name: String, parameters: [String: Any] = [:]) async throws -> T {
+        guard ["workspace", "chart", "start", "save", "lab", "prescribe", "finish", "patients", "patient_labs", "admissions", "admission_request", "lab_catalog", "lab_orders", "labs"].contains(name) else {
+            throw HospitalError.message("Operación médica no permitida.")
+        }
+        let value = try await request("/rest/v1/rpc/doctor_native_" + name, body: parameters, method: "POST")
+        let data = try JSONSerialization.data(withJSONObject: value, options: .fragmentsAllowed)
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+    func attentionRPC<T: Decodable>(_ name: String, parameters: [String: Any] = [:]) async throws -> T {
+        guard ["my_attention_context", "my_attention_requests", "submit_my_attention_request"].contains(name) else {
+            throw HospitalError.message("Operación de atención no permitida.")
+        }
+        let value = try await request("/rest/v1/rpc/" + name, body: parameters, method: "POST")
+        let data = try JSONSerialization.data(withJSONObject: value, options: .fragmentsAllowed)
+        return try JSONDecoder().decode(T.self, from: data)
+    }
     func access() async throws -> (HospitalAccess, [String]) {
         guard let user = try await request("/auth/v1/user") as? [String: Any],
               let key = user["id"] as? String, UUID(uuidString: key) != nil else { throw URLError(.badServerResponse) }
         let profiles = try await request("/rest/v1/profiles?select=id,first_name,last_name,phone,birth_date,city&id=eq.\(key)") as? [[String: Any]] ?? []
         let roles = try await request("/rest/v1/user_roles?select=user_id,role,active&user_id=eq.\(key)")
         let patients = try await request("/rest/v1/patients?select=id,profile_id&profile_id=eq.\(key)")
-        let staff = try await request("/rest/v1/staff?select=id,profile_id,active&profile_id=eq.\(key)")
+        let staffRows = try await request("/rest/v1/staff?select=id,profile_id,active,category&profile_id=eq.\(key)") as? [[String: Any]] ?? []
+        let staff = staffRows.filter { ($0["category"] as? String) == "doctor" }
         guard let profile = profiles.first,
               let value = try core.call("backendAccess", arguments: [user, profile, roles, patients, staff]).toDictionary() as? [String: Any] else { throw HospitalError.message("No se encontró tu perfil.") }
         context = value

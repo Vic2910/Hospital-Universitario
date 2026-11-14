@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "backend": "uvebpsbbwofthucghccc",
+  "transport": "Supabase REST /rest/v1/rpc with user Bearer JWT and public publishable apikey",
+  "authorization": "Active user_roles.doctor plus own active staff.category=doctor; server derives doctor from auth.uid()",
+  "identifiers": {"appointment":"uuid","patient":"uuid","encounter":"uuid","lab_test":"int64","medication":"uuid"},
+  "rpc": {
+    "doctor_native_lab_catalog": {},
+    "doctor_native_lab_orders": {"p_offset":"integer >=0; own authorized orders, pages of 25, independent of appointment day"},
+    "doctor_native_labs": {"p_encounter":"own open encounter uuid","p_tests":"1..30 distinct active lab_test_types int64 identifiers","p_reason":"nonempty text <=10000","p_key":"stable uuid; identical selection retry returns same order_ids,count, atomically"},
+    "doctor_native_admissions": {"p_offset":"integer >=0; pages of 25; returns doctor_name,categories,priorities,items,total,has_more,next_offset"},
+    "doctor_native_admission_request": {"p_patient":"authorized patient uuid","p_kind":"room_kind value returned by admissions.categories","p_reason":"nonempty text <=10000","p_instructions":"text <=10000","p_priority":"value returned by admissions.priorities","p_encounter":"own patient encounter uuid|null","p_key":"stable uuid; identical retry returns same admission"},
+    "doctor_native_patients": {"p_query":"name, DUI (with or without hyphen), linked account email, or record code; string <=120","p_offset":"integer >=0; pages of 50; response patients,total,has_more,next_offset"},
+    "doctor_native_patient_labs": {"p_patient":"authorized patient uuid","p_offset":"integer >=0; pages of 25; response items,total,has_more,next_offset"},
+    "doctor_native_workspace": {"p_from":"ISO8601 timestamp","p_to":"ISO8601 timestamp (exclusive, max 32 days)"},
+    "doctor_native_chart": {"p_patient":"uuid","p_from":"timestamp|null","p_to":"timestamp|null","p_query":"string <=120"},
+    "doctor_native_start": {"p_appointment":"uuid","p_key":"stable uuid; retries return existing encounter"},
+    "doctor_native_save": {"p_encounter":"uuid","p_version":"int","p_key":"stable uuid","p_values":{"subjective":"string <=10000","objective":"string <=10000","assessment":"string <=10000","plan":"string <=10000","diagnosis_code":"optional string <=50; no diagnosis catalog published","vitals":{"weight_kg":"optional decimal string","height_cm":"optional decimal string","systolic":"optional integer string","diastolic":"optional integer string","temperature_c":"optional decimal string","heart_rate":"optional integer string"}}},
+    "doctor_native_lab": {"p_encounter":"uuid","p_test":"active lab_test_types int64","p_reason":"nonempty string <=10000","p_key":"stable uuid"},
+    "doctor_native_prescribe": {"p_encounter":"uuid","p_key":"stable uuid","p_lines":[{"medication_id":"active medications uuid","dose":"positive decimal","dose_unit":"nonempty text <=40","frequency_hours":"int 1..720","route":"oral|inyectable (existing DB constraint)","quantity":"int 1..10000","duration_days":"int 1..365","observations":"nonempty text <=2000"}]},
+    "doctor_native_finish": {"p_encounter":"uuid","p_version":"last saved version; all SOAP sections required"}
+  },
+  "rules": ["Never submit doctor/user identity as authorization", "Drafts use optimistic version checking", "No duplicate encounter per appointment", "Lab and prescription keys are stable across retries", "Finishing closes encounter and completes appointment atomically", "Closed encounter cannot be edited", "Patients and unrelated doctors are rejected", "No lab-result write endpoint for doctors", "Web project remains independent"]
+}
