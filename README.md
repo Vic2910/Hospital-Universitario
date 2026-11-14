@@ -23,8 +23,6 @@ El login y registro utilizan Supabase real. Los botones de diseño usan ejemplos
 
 El registro crea únicamente la cuenta y su perfil. No crea paciente, expediente ni cita. El DUI declarado permanece en los metadatos de la cuenta; no acredita identidad, autoriza roles ni vincula expedientes automáticamente. Se retiró la llamada a `register_patient` de ambos clientes y se revocó su ejecución a usuarios de la app en el servidor. La recepción conserva sus operaciones de alta y programación. Los pacientes ya vinculados conservan sus lecturas y solicitudes de atención, que no son citas.
 
-Un expediente presencial con el mismo DUI no impide crear la cuenta. iOS/web-preview normalizan únicamente los datos declarados de Auth y muestran revisión pendiente; no buscan expedientes por DUI. Recepción verifica y asocia el expediente existente con `link_attention_patient`, que requiere una solicitud de atención y confirmación de identidad. Si el expediente pertenece a otra cuenta, la RPC rechaza la reasignación; el registro muestra la misma orientación genérica sin revelar datos. No se genera una solicitud clínica automáticamente. Al actualizar el Home después del vínculo se obtiene el paciente propio por `profile_id`.
-
 Si Auth vuelve a exigir correo, la app informa de la discrepancia sin simular una sesión ni crear datos clínicos. Si falla la lectura tras crear la cuenta, se recupera mediante login sin repetir signup. [Detalle del flujo vigente](docs/REGISTRO_SOLO_CUENTA_2026-11-13.md).
 
 ## Integración actual
@@ -43,8 +41,6 @@ Si Auth vuelve a exigir correo, la app informa de la discrepancia sin simular un
 **Límites actuales:** el recorrido del doctor se verificó en la base real con identidades temporales y reversión, pero falta ejecutar el cliente nativo en Xcode. No existe catálogo de diagnósticos publicado; no se inventa uno. Las vías de receta disponibles son las que permite la restricción actual (oral/inyectable). Contacto de emergencia, preferencias, confirmación de jornada y documentos siguen pendientes. Los diseños locales no equivalen a persistencia clínica real.
 
 **Ingresos hospitalarios:** doctor → acceso del Dashboard, Más o paciente/consulta → Nueva solicitud. iOS y web-preview envían solicitudes reales y muestran su seguimiento, habitación/cama cuando recepción confirma. Categorías reales VIP/Semiprivada, prioridad Normal/Urgente; el médico no ocupa camas. [Contrato breve para integrar recepción en su proyecto separado](docs/INGRESOS_DOCTOR_2026-11-13.md).
-
-**Laboratorios:** desde una consulta propia abierta, buscar/filtrar y seleccionar varios exámenes, revisar y confirmar el envío real. Once pruebas activas; Mis órdenes sin límite de agenda y resultados validados/publicados para doctor y paciente según autorización. iOS y web-preview comparten el contrato. Los rangos y parámetros estandarizados siguen pendientes de validación por el laboratorio; no se inventaron. [Detalle breve](docs/LABORATORIOS_DOCTOR_2026-11-13.md).
 
 ## Abrir en Mac
 
@@ -67,7 +63,6 @@ node --preserve-symlinks --preserve-symlinks-main scripts/test-attention-navigat
 node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-preview-live.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-directory.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-admissions.mjs
-node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-laboratory.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-applicant.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-clinical-labs.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/generate-models.mjs --check
