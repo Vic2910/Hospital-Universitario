@@ -1,5 +1,6 @@
 """Portable checks for the Xcode references, assets and shared screen inventory."""
 import json
+import plistlib
 import re
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -13,6 +14,12 @@ config = (project_dir / "Configuration/Supabase.xcconfig").read_text(encoding="u
 assert f'SUPABASE_URL = {contract["url"].replace("https://", "https:/$()/")}' in config, "URL iOS/web distinta"
 assert f'SUPABASE_PUBLISHABLE_KEY = {contract["publishableKey"]}' in config, "Clave iOS/web distinta"
 assert '#include "Supabase.xcconfig"' in (project_dir / "Configuration/App.xcconfig").read_text(encoding="utf-8")
+app_config = (project_dir / "Configuration/App.xcconfig").read_text(encoding="utf-8")
+assert "INFOPLIST_FILE = Configuration/Info.plist" in app_config, "Info.plist de configuración no enlazado"
+with (project_dir / "Configuration/Info.plist").open("rb") as info_file:
+    info = plistlib.load(info_file)
+for key in ("SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY"):
+    assert info.get(key) == f"$({key})", f"Falta expansión de {key} en Info.plist"
 project = (project_dir / "HospitalUniversitario.xcodeproj/project.pbxproj").read_text(encoding="utf-8")
 definitions = re.findall(r"^\t\t([A-F0-9]{24})\s+(?:/\*.*?\*/\s*)?=\s*\{", project, re.M)
 assert len(definitions) == len(set(definitions)), "Duplicate Xcode object IDs"

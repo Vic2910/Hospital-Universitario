@@ -1,1 +1,2 @@
 #include "Supabase.xcconfig"
+INFOPLIST_FILE = Configuration/Info.plist

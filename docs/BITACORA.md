@@ -1,5 +1,13 @@
 # Bitácora de trabajo
 
+## 2026-11-14 — Enlace de configuración pública al bundle iOS
+
+- **Objetivo:** corregir el aviso de configuración pública al ejecutar en Mac aunque Supabase.xcconfig ya contiene los valores.
+- **Causa y cambio:** Configuration/App.xcconfig no enlazaba Configuration/Info.plist. Se añade INFOPLIST_FILE para expandir SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY en el bundle, manteniendo GENERATE_INFOPLIST_FILE para las propiedades generadas por Xcode. No se cambian claves ni permisos.
+- **Rutas:** HospitalUniversitario/Configuration/App.xcconfig, scripts/check-project.py, README.md y docs/BITACORA.md. El comprobador verifica enlace y placeholders del plist. Web-preview conserva su contrato público ya conectado; sin cambios de funciones en ninguna plataforma.
+- **Verificaciones:** test-preview, test-core y test-patient-registration aprobados con transporte simulado; check-project.py y git diff --check aprobados. Sin consultas ni cambios reales a Supabase.
+- **Pendiente Mac:** limpiar build, recompilar y confirmar lectura del bundle/inicio de sesión en Xcode. Windows no acredita compilación Apple ni ejecución nativa.
+
 ## 2026-11-14 — Corrección de ButtonStyle para Xcode
 
 - **Objetivo:** resolver el error de compilación reportado en Mac: ButtonStyleConfiguration no tiene isEnabled.

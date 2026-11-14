@@ -29,6 +29,7 @@ Si Auth vuelve a exigir correo, la app informa de la discrepancia sin simular un
 
 - Configuración web y tipos Postgres: `HospitalUniversitario/HospitalUniversitario/Shared/contract.json`.
 - Configuración Xcode: `HospitalUniversitario/Configuration/Supabase.xcconfig`, incluida por `App.xcconfig`. Contiene únicamente URL y clave pública publicable. No hacen falta archivos privados de configuración ni claves administrativas.
+- `App.xcconfig` enlaza `Configuration/Info.plist` para incorporar URL y clave pública al bundle iOS. Si tenías una versión anterior que pedía la clave al iniciar, actualiza el repositorio, usa Product → Clean Build Folder en Xcode y vuelve a ejecutar con ⌘R.
 - Ambos clientes rechazan una URL distinta de Hospital Móviles o una clave que no sea publicable. El comprobador portable verifica que la configuración iOS coincida con la web.
 - `Shared/hospital-core.js`: validaciones, resolución de acceso, planes de consultas y adaptación de filas a la presentación, compartidos por SwiftUI y web.
 - `Core/HospitalAPI.swift` y `web-preview/api.js`: Auth, sesión y ejecución de esos planes con el JWT del usuario y RLS existente. Las sesiones usan una clave específica del proyecto.
