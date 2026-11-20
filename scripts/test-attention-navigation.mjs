@@ -24,13 +24,24 @@ for(const linked of [false,true]){
   assert.deepEqual(calls[0].params.p_symptoms,[1]);assert.deepEqual(calls[0].params.p_missing,{});
   assert.equal('user_id' in calls[0].params,false);assert.equal('patient_id' in calls[0].params,false);
   assert.equal(ui.calls.some(c=>c.url.includes('/register_patient')||c.url.includes('/schedule_appointment')),false);
-  await ui.click('Inicio');await ui.click('Salud');assert.match(ui.app.textContent,/Tus datos/);
+  // Una sola solicitud activa: con la pendiente no se muestra el formulario ni se puede enviar otra.
+  await ui.click('Inicio');await ui.click('Salud');assert.match(ui.app.textContent,/Tu solicitud está en revisión/);assert.match(ui.app.textContent,/recepción la está revisando/);
+  assert.equal(ui.app.textContent.includes('¿Qué síntomas presentas?'),false,'Sin formulario mientras la solicitud está pendiente');
+  assert.equal(ui.calls.filter(c=>c.url.endsWith('/rpc/submit_my_attention_request')).length,1);
+  // Recepción la rechaza: se puede enviar una nueva.
+  rows=rows.map(r=>({...r,status:'rechazada'}));await ui.click('Actualizar');assert.match(ui.app.textContent,/Tus datos/);
   await ui.click('Otro');await ui.input('Especialidad','1','change');await ui.input('Motivo de solicitud','Otro motivo');
   await ui.submit('Solicitar atención');assert.match(ui.app.textContent,/Describe el otro síntoma/);
   await ui.input('Describe el otro síntoma','Descripción declarada');await ui.submit('Solicitar atención');
   assert.equal(ui.calls.filter(c=>c.url.endsWith('/rpc/submit_my_attention_request')).length,2);
-  console.log('OK Rutas Home/Salud '+(linked?'con':'sin')+' expediente: formulario, datos, síntomas, envío único y seguimiento');
+  console.log('OK Rutas Home/Salud '+(linked?'con':'sin')+' expediente: formulario, datos, síntomas, envío único, bloqueo con solicitud pendiente y nueva solicitud tras rechazo');
 }
+// Cita programada vigente: aviso y sin formulario.
+const future=new Date(Date.now()+86400000).toISOString(),futureEnd=new Date(Date.now()+86400000+1800000).toISOString();
+const booked=createApp(['patient'],{transport:async url=>url.includes('/rest/v1/appointments?')&&url.includes('employee_code')?{body:[{id:'00000000-0000-4000-8000-000000000071',patient_id:decodeURIComponent(/patient_id=eq\.([^&]+)/.exec(url)?.[1]||''),starts_at:future,ends_at:futureEnd,status:'programada',staff:{employee_code:'MED-1',profiles:null}}]}:undefined});
+await booked.login();await booked.click('Salud');assert.match(booked.app.textContent,/Ya tienes una cita programada/);
+assert.equal(booked.app.textContent.includes('¿Qué síntomas presentas?'),false);
+console.log('OK Con una cita programada no se puede enviar otra solicitud');
 const empty=createApp(['patient'],{unregistered:true,transport:async url=>url.endsWith('/rpc/my_attention_context')?{body:{person:{first_name:'Ana',last_name:'Prueba',dui:'01234567-8',phone:'7999-0000',birth_date:'1990-01-01',email:'ana@example.test'},symptoms:[],specialties:[]}}:undefined});
 await empty.login();await empty.click('Salud');
 assert.match(empty.app.textContent,/Tus datos/);assert.match(empty.app.textContent,/Motivo de solicitud/);

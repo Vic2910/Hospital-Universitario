@@ -19,12 +19,21 @@ protocol DoctorRepositoryProtocol {
     func issueOrder(encounter: UUID, test: Int64, instructions: String, requestKey: UUID) async throws
     func prescribe(encounter: UUID, lines: [DoctorRxLine], requestKey: UUID) async throws
     func markRead(_ notification: DoctorNotification) async throws
+    func alerts(offset: Int) async throws -> DoctorAlerts
+    /// public.planning_revision (contador de cambios de appointments, legible por médicos). nil si no está disponible.
+    func planningRevision() async throws -> Int64?
+}
+
+extension DoctorRepositoryProtocol {
+    func planningRevision() async throws -> Int64? { nil }
 }
 
 @MainActor
 final class DoctorRepository: DoctorRepositoryProtocol {
     private let api: HospitalAPI
     init(api: HospitalAPI) { self.api = api }
+    func alerts(offset: Int) async throws -> DoctorAlerts { try await call("alerts", ["p_offset": .number(offset)]) }
+    func planningRevision() async throws -> Int64? { try await api.planningRevision() }
     func labCatalog() async throws -> [DoctorLabTest] { try await call("lab_catalog",[:]) }
     func labOrders(offset: Int) async throws -> DoctorPatientLabPage { try await call("lab_orders",["p_offset":.number(offset)]) }
     func issueLabs(_ input: DoctorLabSelection) async throws {

@@ -32,8 +32,8 @@ assert.equal(multi.profile.greeting_name,'María López');
 const access=c.backendAccess(user,profile,[{user_id:id,role:'paciente',active:true}],[{id,profile_id:id}],[]);
 assert.deepEqual(plain(c.routes(access)),['patient']);
 const dashboardPath=decodeURIComponent(c.backendPlan('patientDashboard',{now:'2026-11-13T10:00:00Z'},access)[0].path);
-assert.match(dashboardPath,/patient_id=eq\./);assert.match(dashboardPath,/status=in\.\(programada,confirmada\)/);
-assert.match(dashboardPath,/starts_at=gte\./);assert.match(dashboardPath,/order=starts_at.asc,id.asc/);assert.match(dashboardPath,/limit=1$/);
+assert.match(dashboardPath,/patient_id=eq\./);assert.match(dashboardPath,/status=in\.\(programada,confirmada,en_atencion\)/);
+assert.match(dashboardPath,/or=\(status.eq.en_atencion,starts_at.gte\./);assert.match(dashboardPath,/order=starts_at.asc,id.asc/);assert.match(dashboardPath,/limit=1$/);
 const other={id,patient_id:'00000000-0000-4000-8000-000000000002',starts_at:'2026-11-14T10:00:00Z',status:'confirmada'};
 assert.equal(c.backendPresent('patientDashboard',{now:'2026-11-13T10:00:00Z'},access,[[other]]).next_appointment,null);
 assert.deepEqual(plain(c.routes(c.backendAccess(user,profile,[],[{id,profile_id:id}],[]))),[],'User metadata never grants a role');
@@ -46,8 +46,8 @@ assert.throws(()=>c.backendPlan('registerPatient',{dui:'01234567-8'},pending), /
 assert.throws(()=>c.backendPlan('registerPatient',{},access), /personal autorizado/);
 for(const module of ['appointments','request','chart','history','laboratory','prescriptions']){
   const plan=plain(c.backendPlan('module',{p_module:module},access));
-  assert.ok(decodeURIComponent(plan[0].path).includes(id));
-  assert.equal(plan[0].method,'GET');
+  if(module==='history'){assert.equal(plan[0].path,'/rest/v1/rpc/my_consultation_history');assert.equal('patient_id' in plan[0].body,false);}else assert.ok(decodeURIComponent(plan[0].path).includes(id));
+  assert.equal(plan[0].method,module==='history'?'POST':'GET');
 }
 assert.throws(()=>c.backendPlan('module',{p_module:'chart'},doctor));
 assert.throws(()=>c.backendPlan('unavailable',{},access));

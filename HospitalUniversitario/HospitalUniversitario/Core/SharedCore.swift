@@ -3,8 +3,10 @@ import JavaScriptCore
 
 enum HospitalError: LocalizedError {
     case message(String)
+    /// SQLSTATE 40001 de doctor_native_*: otra sesión guardó una versión más reciente.
+    case conflict(String)
     var errorDescription: String? {
-        switch self { case .message(let text): return text }
+        switch self { case .message(let text), .conflict(let text): return text }
     }
 }
 

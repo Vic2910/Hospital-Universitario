@@ -15,6 +15,7 @@ struct DoctorDashboardView: View {
     var completedCount = 0
     var nextAppointment: DoctorAppointment? = nil
     var period: (String) -> String = { $0 }
+    var unreadCount = 0
     var demonstration = false
     let navigate: (String) -> Void
     private var initials: String {
@@ -35,24 +36,28 @@ struct DoctorDashboardView: View {
                         .accessibilityLabel("Iniciales de \(name)")
                 }
             }
-            VStack(alignment: .leading, spacing: 10) {
-                Label("HOY", systemImage: "calendar").font(.system(size: 10, weight: .bold)).tracking(1)
-                Text(Date().formatted(.dateTime.locale(Locale(identifier: "es_GT")).weekday(.wide).day().month(.wide))).font(.system(size: 14, weight: .semibold))
-                Divider().overlay(.white.opacity(0.25))
-                Text("\(consultationCount)").font(.system(size: 36, weight: .bold))
-                Text("Consultas programadas para hoy").font(.system(size: 13, weight: .semibold))
-                Text("\(pendingCount) pendientes · \(completedCount) atendidas").font(.subheadline)
-                Divider().overlay(.white.opacity(0.25))
-                Text("PRÓXIMA CITA").font(.caption.bold())
+            VStack(alignment: .leading, spacing: 16) {
+                Label("TU JORNADA · HOY", systemImage: "calendar").font(.caption.bold()).tracking(1)
+                Text(Date().formatted(.dateTime.locale(Locale(identifier: "es_GT")).weekday(.wide).day().month(.wide))).font(.headline)
+                HStack(alignment: .top, spacing: 8) {
+                    metric(consultationCount, "Programadas")
+                    metric(pendingCount, "Pendientes")
+                    metric(completedCount, "Finalizadas")
+                }
+            }.foregroundStyle(.white).padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                .background(LinearGradient.vinoDestacado, in: RoundedRectangle(cornerRadius: 20))
+            HospitalCard {
+                Label("PRÓXIMA CITA", systemImage: "clock").font(.caption.bold()).foregroundStyle(HospitalTheme.wine)
                 if let nextAppointment {
-                    Text(nextAppointment.patient_name).font(.headline)
+                    Text(nextAppointment.patient_name).font(.title3.bold())
                     Text(period(nextAppointment.period)).font(.subheadline)
-                    Text(nextAppointment.room_code.map { "Consultorio \($0)" } ?? "Consultorio no publicado").font(.footnote)
-                } else { Text("No tienes próximas citas programadas para hoy.").font(.subheadline) }
-                Text(facility).font(.system(size: 12))
+                    Text(nextAppointment.room_code.map { "Consultorio \($0)" } ?? "Consultorio no publicado").font(.footnote).foregroundStyle(HospitalTheme.secondary)
+                } else {
+                    Text("Tu agenda está al día").font(.title3.bold())
+                    Text("No tienes próximas citas programadas para hoy. Aquí verás la siguiente atención asignada.").font(.subheadline).foregroundStyle(HospitalTheme.secondary)
+                }
+                Button("Ver agenda", systemImage: "arrow.right") { navigate("agenda") }.font(.subheadline.bold())
             }
-            .foregroundStyle(.white).padding(18).frame(maxWidth: .infinity, alignment: .leading)
-            .background(LinearGradient.vinoDestacado, in: RoundedRectangle(cornerRadius: 18))
             if demonstration {
                 Text("Modo diseño · Doctor y datos ficticios. Sin conexión al hospital.").font(.footnote).foregroundStyle(HospitalTheme.secondary)
             }
@@ -60,12 +65,16 @@ struct DoctorDashboardView: View {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 PatientQuickAccessCard(icono: "calendar", titulo: "Agenda") { navigate("agenda") }
                 PatientQuickAccessCard(icono: "person.2", titulo: "Pacientes") { navigate("patients") }
-                PatientQuickAccessCard(icono: "cross.case", titulo: "Consultas") { navigate("consultation") }
                 PatientQuickAccessCard(icono: "testtube.2", titulo: "Laboratorios") { navigate("laboratory") }
-                PatientQuickAccessCard(icono: "pills", titulo: "Recetas") { navigate("prescriptions") }
                 PatientQuickAccessCard(icono: "bed.double", titulo: "Ingresos hospitalarios") { navigate("admissions") }
             }
         }.foregroundStyle(HospitalTheme.ink)
+    }
+    private func metric(_ count: Int, _ label: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("\(count)").font(.system(size: 28, weight: .bold, design: .rounded))
+            Text(label).font(.caption).lineLimit(1).minimumScaleFactor(0.7)
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(10).background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
     }
 }
 

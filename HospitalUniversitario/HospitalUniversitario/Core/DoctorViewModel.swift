@@ -1,9 +1,17 @@
 import Foundation
 import Combine
 import PostgREST
+import UserNotifications
 
 @MainActor
 final class DoctorViewModel: ObservableObject {
+    @Published private(set) var alerts: [DoctorNotification] = []
+    @Published private(set) var unreadAlerts = 0
+    @Published private(set) var alertsHaveMore = false
+    @Published private(set) var alertsError: String?
+    @Published private(set) var notificationMessage: String?
+    private var loadingAlerts = false
+    private let notificationPrefix = "hospital.doctor."
     @Published private(set) var workspace: DoctorWorkspace?
     @Published private(set) var labCatalog: [DoctorLabTest] = []
     @Published private(set) var labCatalogLoading = false
@@ -48,7 +56,10 @@ final class DoctorViewModel: ObservableObject {
     @Published private(set) var confirmation: String?
     @Published var selectedAppointmentID: UUID?
     @Published var selectedTestID: Int64?
-    @Published var statusFilter = "all"
+    /// Agenda: "pending" (PENDIENTES) o "finished" (FINALIZADAS). Solo cambia la presentación, nunca los estados.
+    @Published var statusFilter = "pending"
+    /// Último valor de public.planning_revision visto: sube con cada cambio en appointments.
+    private var planningRevision: Int64?
     @Published var rxMedication: UUID?
     @Published var rxDose = ""
     @Published var rxUnit = ""
@@ -82,8 +93,29 @@ final class DoctorViewModel: ObservableObject {
     private var draftInitialized = false
     private var draftNoteID: UUID?
     private var draftNoteVersion: Int?
+    private var lastFailure: Error?
+    /// Última versión guardada en el servidor para la consulta abierta (base de "Cambios pendientes").
+    @Published private(set) var savedDraft: DoctorConsultationDraft?
+    @Published private(set) var saveState: SaveState = .idle
+    /// Versión real del servidor cuando otra sesión guardó antes; se muestra antes de permitir sobrescribir.
+    @Published private(set) var conflictNote: DoctorConsultation?
+    enum SaveState: Equatable { case idle, saving, saved, failed(String) }
+    /// Días de agenda solicitados a doctor_native_workspace (máximo del servidor: 32).
+    static let agendaDays = 14
 
     init(repository: any DoctorRepositoryProtocol) { self.repository = repository }
+
+    var hasUnsavedChanges: Bool { savedDraft != nil && savedDraft != draft }
+    var vitalIssues: [String: String] { DoctorClinicalRules.vitalIssues(draft.vitals) }
+    /// Citas del día elegido; los contadores del panel no mezclan días posteriores.
+    var dayAppointments: [DoctorAppointment] {
+        let calendar = DoctorClinicalRules.calendar
+        return (workspace?.appointments ?? []).filter { $0.startDate.map { calendar.isDate($0, inSameDayAs: day) } ?? false }
+            .sorted { ($0.startDate ?? .distantFuture) < ($1.startDate ?? .distantFuture) }
+    }
+    var agenda: DoctorClinicalRules.Agenda { DoctorClinicalRules.agenda(workspace?.appointments ?? [], day: day) }
+    var pendingAppointments: [DoctorAppointment] { DoctorClinicalRules.pending(workspace?.appointments ?? [], day: day) }
+    var finishedAppointments: [DoctorAppointment] { DoctorClinicalRules.finished(workspace?.appointments ?? [], day: day) }
 
     var selectedAppointment: DoctorAppointment? {
         workspace?.appointments.first { $0.id == selectedAppointmentID }
@@ -104,13 +136,16 @@ final class DoctorViewModel: ObservableObject {
     }
 
     func clear() {
+        alerts = []; unreadAlerts = 0; alertsHaveMore = false; alertsError = nil; notificationMessage = nil
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
         labGeneration = UUID(); labCatalog = []; labCatalogLoading = false; labCatalogError = nil
         ownLabOrders = []; ownLabPage = nil; ownLabsLoading = false; ownLabsError = nil
         pendingLabs = nil; selectedLabIDs = []; labQuery = ""; labCategory = "all"
         admissionsGeneration = UUID(); admissions = []; admissionsPage = nil; admissionsLoading = false; admissionsError = nil
         admissionForm = false; admissionCategory = ""; admissionPriority = "normal"; admissionReason = ""; admissionObservations = ""; pendingAdmission = nil
         directoryGeneration = UUID(); patientDirectory = []; directoryPage = nil; directoryLoading = false
-        directoryError = nil; patientQuery = ""; selectedPatient = nil; patientLabs = []; patientLabPage = nil
+        directoryError = nil; patientQuery = ""; lastDirectoryQuery = nil; selectedPatient = nil; patientLabs = []; patientLabPage = nil
         patientLabsLoading = false; patientLabsError = nil
         generation = UUID(); selectionGeneration = UUID()
         facility = nil; identity = nil
@@ -121,27 +156,92 @@ final class DoctorViewModel: ObservableObject {
         startKey = UUID(); saveKey = UUID(); orderKey = UUID()
         diagnosisQuery = ""; selectedDiagnosis = nil; diagnoses = []; searchingDiagnoses = false
         draftInitialized = false; draftNoteID = nil; draftNoteVersion = nil
-        clearPrescription(); statusFilter = "all"
+        savedDraft = nil; saveState = .idle; conflictNote = nil; lastFailure = nil
+        clearPrescription(); statusFilter = "pending"; planningRevision = nil
     }
 
-    func refresh() async {
+    /// silent: sincronización en segundo plano; no bloquea la pantalla ni borra la agenda si falla.
+    func refresh(silent: Bool = false) async {
         guard let facility, !loading, !saving else { return }
         let scope = generation
-        let from = Calendar.current.startOfDay(for: day)
-        guard let to = Calendar.current.date(byAdding: .day, value: 1, to: from) else { return }
-        loading = true; error = nil
-        defer { if generation == scope { loading = false } }
+        let calendar = DoctorClinicalRules.calendar
+        let start = calendar.startOfDay(for: day)
+        // Desde 2 días antes (consultas en atención o finalizadas tarde) hasta los 14 siguientes; máximo del servidor: 32.
+        guard let from = calendar.date(byAdding: .day, value: -DoctorClinicalRules.agendaLookbackDays, to: start),
+              let to = calendar.date(byAdding: .day, value: Self.agendaDays, to: start) else { return }
+        if !silent { loading = true; error = nil }
+        defer { if !silent && generation == scope { loading = false } }
         do {
             let value = try await repository.workspace(facility: facility, from: from, to: to)
             guard scope == generation, !Task.isCancelled else { return }
             workspace = value
+            if !silent { await refreshAlerts() }
             if let selectedAppointmentID, !value.appointments.contains(where: { $0.id == selectedAppointmentID }) {
                 let patient = selectedPatient; select(nil); selectedPatient = patient
             }
         } catch {
-            guard scope == generation else { return }
+            guard scope == generation, !silent else { return }
             workspace = nil; chart = nil; contextChart = nil
             self.error = Self.describe(error)
+        }
+    }
+
+    /// Sincronización segura sin Realtime en la app: lee el contador planning_revision (una fila) y solo vuelve a pedir
+    /// la agenda si cambió. No interrumpe una consulta abierta ni un guardado.
+    func syncAgendaIfChanged() async {
+        guard facility != nil, !loading, !saving, !loadingChart, selectedAppointmentID == nil else { return }
+        let scope = generation
+        guard let revision = try? await repository.planningRevision(), scope == generation else {
+            await refresh(silent: true); return
+        }
+        if planningRevision != revision { planningRevision = revision; await refresh(silent: true) }
+    }
+
+    func refreshAlerts(more: Bool = false) async {
+        guard facility != nil, !loadingAlerts, !more || alertsHaveMore else { return }
+        let scope = generation
+        loadingAlerts = true
+        defer { loadingAlerts = false }
+        do {
+            let page = try await repository.alerts(offset: more ? alerts.count : 0)
+            guard generation == scope, !Task.isCancelled else { return }
+            alerts = more ? alerts + page.items : page.items
+            unreadAlerts = page.unread; alertsHaveMore = page.has_more; alertsError = nil
+            if !more { await scheduleReminders(page.upcoming, scope: scope) }
+        } catch { if generation == scope { alertsError = "No se pudieron actualizar los avisos. Reintenta." } }
+    }
+
+    func enableReminders() async {
+        do {
+            let allowed = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+            notificationMessage = allowed ? "Recordatorios activados para las citas sincronizadas." : "Puedes permitir notificaciones desde Ajustes del iPhone."
+            await refreshAlerts()
+        } catch { notificationMessage = "No se pudo solicitar permiso para las notificaciones." }
+    }
+
+    private func scheduleReminders(_ appointments: [DoctorAlerts.Upcoming], scope: UUID) async {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        guard generation == scope, settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }
+        let pending = await center.pendingNotificationRequests()
+        guard generation == scope else { return }
+        let identifiers = Set(appointments.map { notificationPrefix + $0.id.uuidString + "." + $0.starts_at })
+        center.removePendingNotificationRequests(withIdentifiers: pending.filter { $0.identifier.hasPrefix(notificationPrefix) && !identifiers.contains($0.identifier) }.map(\.identifier))
+        let scheduled = Set(pending.map(\.identifier))
+        for appointment in appointments {
+            guard generation == scope, let start = DoctorDate.parse(appointment.starts_at) else { continue }
+            let identifier = notificationPrefix + appointment.id.uuidString + "." + appointment.starts_at
+            let delay = start.addingTimeInterval(-15 * 60).timeIntervalSinceNow
+            guard delay > 1, !scheduled.contains(identifier) else { continue }
+            let content = UNMutableNotificationContent()
+            content.title = "Tu consulta comienza en 15 minutos"
+            content.body = "Abre Hospital Universitario para revisar tu agenda."
+            content.sound = .default
+            do {
+                try await center.add(UNNotificationRequest(identifier: identifier,
+                    content: content, trigger: UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false)))
+                if generation != scope { center.removePendingNotificationRequests(withIdentifiers: [identifier]) }
+            } catch { if generation == scope { notificationMessage = "No se pudo programar algún recordatorio. Actualiza los avisos." } }
         }
     }
 
@@ -156,6 +256,7 @@ final class DoctorViewModel: ObservableObject {
         startKey = UUID(); saveKey = UUID(); orderKey = UUID()
         diagnosisQuery = ""; selectedDiagnosis = nil; diagnoses = []; searchingDiagnoses = false
         draftInitialized = false; draftNoteID = nil; draftNoteVersion = nil
+        savedDraft = nil; saveState = .idle; conflictNote = nil; lastFailure = nil
         clearPrescription()
     }
 
@@ -172,15 +273,17 @@ final class DoctorViewModel: ObservableObject {
         } catch { if scope == generation && selection == selectionGeneration { self.error = Self.describe(error) } }
     }
 
-    func loadChart(filtered: Bool = false) async {
+    /// silent: actualización periódica del expediente abierto; no bloquea la pantalla ni borra lo mostrado si falla.
+    func loadChart(filtered: Bool = false, silent: Bool = false) async {
         guard let patient = selectedPatient?.id ?? selectedAppointment?.patient_id else { return }
         let scope = generation
         let selection = selectionGeneration
         guard !filtered || !filterDates || historyFrom <= historyTo else {
             error = "La fecha inicial no puede ser posterior a la final."; return
         }
-        loadingChart = true; error = nil
-        defer { if scope == generation && selection == selectionGeneration { loadingChart = false } }
+        if silent && (loadingChart || saving) { return }
+        if !silent { loadingChart = true; error = nil }
+        defer { if !silent && scope == generation && selection == selectionGeneration { loadingChart = false } }
         do {
             let value = try await repository.chart(patient: patient,
                 from: filtered && filterDates ? historyFrom : nil,
@@ -191,13 +294,17 @@ final class DoctorViewModel: ObservableObject {
             if !filtered {
                 contextChart = value
                 if !draftInitialized, let note = activeConsultation {
-                    draft = DoctorConsultationDraft(subjective: note.subjective ?? "", objective: note.objective ?? "",
-                        assessment: note.assessment ?? "", plan: note.plan ?? "", diagnosis_code: note.diagnosis_code ?? "", vitals: note.vitals ?? [:])
+                    let stored = Self.draft(from: note)
+                    draft = stored; savedDraft = stored
+                    // Primera apertura: precarga lo que el paciente ya envió; queda como cambio pendiente hasta guardar.
+                    if (note.note_version ?? 0) == 0, stored.subjective.isEmpty, let appointment = selectedAppointment {
+                        draft.subjective = DoctorClinicalRules.seedSubjective(appointment)
+                    }
                     draftNoteID = note.note_id; draftNoteVersion = note.note_version; draftInitialized = true
                 }
             }
         } catch {
-            guard scope == generation, selection == selectionGeneration else { return }
+            guard scope == generation, selection == selectionGeneration, !silent else { return }
             chart = nil
             if !filtered { contextChart = nil }
             self.error = Self.describe(error)
@@ -212,10 +319,21 @@ final class DoctorViewModel: ObservableObject {
         guard generation == scope, !Task.isCancelled else { throw CancellationError() }
         return value.history
     }
+    /// Última búsqueda enviada al servidor: evita repetir la misma consulta en cada pulsación.
+    private(set) var lastDirectoryQuery: String?
+    /// Búsqueda con espera breve (la vista cancela la anterior al escribir); no consulta si el texto no cambió.
+    func searchPatients(debounce: Duration = .milliseconds(350)) async {
+        let query = patientQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query != lastDirectoryQuery || directoryError != nil else { return }
+        do { try await Task.sleep(for: debounce) } catch { return }
+        guard !Task.isCancelled, query == patientQuery.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+        await loadPatients()
+    }
     func loadPatients(more: Bool = false) async {
         guard facility != nil, !saving, !more || (!directoryLoading && directoryPage?.has_more == true) else { return }
         let query = patientQuery.trimmingCharacters(in:.whitespacesAndNewlines)
         guard query.count<=120 else { directoryError="La búsqueda admite hasta 120 caracteres."; return }
+        if !more { lastDirectoryQuery = query }
         let scope=generation, request=UUID(); directoryGeneration=request
         directoryLoading=true; directoryError=nil
         if !more { patientDirectory=[]; directoryPage=nil }
@@ -306,33 +424,90 @@ final class DoctorViewModel: ObservableObject {
             try await self.repository.start(appointment: appointment.id, requestKey: key)
             if self.generation == scope { self.startKey = UUID(); self.draftInitialized = false }
         }
+        if let message = error, let hint = DoctorClinicalRules.startError(message) { error = hint }
     }
 
-    func saveConsultation() async {
-        guard let encounter = activeConsultation, canEditConsultation, draft.canSave else { return }
+    static func draft(from note: DoctorConsultation) -> DoctorConsultationDraft {
+        DoctorConsultationDraft(subjective: note.subjective ?? "", objective: note.objective ?? "", assessment: note.assessment ?? "",
+            plan: note.plan ?? "", diagnosis_code: note.diagnosis_code ?? "", vitals: note.vitals ?? [:])
+    }
+
+    /// Guarda avances con doctor_native_save. Ante un error la información escrita permanece en pantalla;
+    /// ante un conflicto de versión se recupera la versión real antes de permitir sobrescribirla.
+    @discardableResult
+    func saveConsultation() async -> Bool {
+        guard let encounter = activeConsultation, canEditConsultation, conflictNote == nil else { return false }
+        guard draft.canSave else { error = "Cada sección admite hasta 10 000 caracteres y el código hasta 50."; saveState = .failed("Revisa la longitud de los campos."); return false }
+        if let issue = vitalIssues.values.first { error = "Revisa los datos físicos: \(issue)"; saveState = .failed("Revisa los datos físicos."); return false }
         let values = draft
         let key = saveKey
         let diagnosis = selectedDiagnosis
-        let noteID = draftNoteID, version = draftNoteVersion, scope = generation
-        await mutate(success: "Consulta guardada como borrador.") {
+        let noteID = draftNoteID, version = draftNoteVersion, scope = generation, selection = selectionGeneration
+        saveState = .saving
+        let saved = await mutate(success: "Consulta guardada correctamente.") {
             try await self.repository.save(encounter: encounter.id, note: noteID,
                 version: version, draft: values, diagnosis: diagnosis, requestKey: key)
             if self.generation == scope { self.saveKey = UUID(); self.draftInitialized = false }
         }
+        guard generation == scope, selectionGeneration == selection else { return false }
+        // Guardado confirmado por el servidor; si la recarga falla se informa sin presentarlo como error de guardado.
+        if saved { saveState = .saved; return error == nil }
+        if let failure = lastFailure as? HospitalError, case .conflict = failure { await loadServerVersion(scope: scope, selection: selection) }
+        saveState = .failed(error ?? "No se pudo guardar.")
+        return false
     }
 
-    func closeConsultation() async {
-        guard let encounter = activeConsultation, canEditConsultation,
-              let note = encounter.note_id, let version = encounter.note_version else { return }
-        guard draft.subjective == (encounter.subjective ?? ""), draft.objective == (encounter.objective ?? ""),
-              draft.assessment == (encounter.assessment ?? ""), draft.plan == (encounter.plan ?? ""),
-              draft.diagnosis_code == (encounter.diagnosis_code ?? ""), draft.vitals == (encounter.vitals ?? [:]), rxLines.isEmpty else {
-            error = "Guarda los cambios antes de firmar y cerrar la consulta."; return
+    private func loadServerVersion(scope: UUID, selection: UUID) async {
+        guard let patient = selectedPatient?.id ?? selectedAppointment?.patient_id else { return }
+        do {
+            let value = try await repository.chart(patient: patient, from: nil, to: nil, query: "")
+            guard generation == scope, selectionGeneration == selection else { return }
+            contextChart = value; chart = value
+            conflictNote = activeConsultation
+            error = "Otra sesión guardó esta consulta. Revisa la versión guardada antes de sobrescribirla."
+        } catch { if generation == scope { self.error = Self.describe(error) } }
+    }
+
+    /// keepMine: guarda lo escrito sobre la versión recién recuperada. En otro caso adopta la versión del servidor.
+    func resolveConflict(keepMine: Bool) async {
+        guard let server = conflictNote else { return }
+        conflictNote = nil; error = nil
+        draftNoteID = server.note_id; draftNoteVersion = server.note_version
+        savedDraft = Self.draft(from: server)
+        if keepMine { await saveConsultation() } else { draft = Self.draft(from: server); saveState = .idle }
+    }
+
+    /// Requisitos de cierre: síntomas, diagnóstico y observaciones, datos físicos válidos y ninguna receta a medio preparar.
+    var finishBlockers: [String] {
+        var values = draft.missingSections.map { "Completa: \($0)" }
+        if !vitalIssues.isEmpty { values.append("Corrige los datos físicos marcados") }
+        if !rxLines.isEmpty { values.append("Emite o retira los medicamentos de la receta en preparación") }
+        if conflictNote != nil { values.append("Resuelve la diferencia con la versión guardada") }
+        return values
+    }
+
+    /// Guarda los cambios pendientes y después ejecuta doctor_native_finish con la versión recién guardada.
+    @discardableResult
+    func closeConsultation() async -> Bool {
+        guard canEditConsultation, !saving, !loading, !loadingChart else { return false }
+        guard draft.canSave, finishBlockers.isEmpty else {
+            error = finishBlockers.joined(separator: ". ") + "."; return false
         }
-        await mutate(success: "Consulta firmada y cerrada.") {
+        let scope = generation, selection = selectionGeneration
+        guard await saveConsultation(), generation == scope, selectionGeneration == selection, error == nil,
+              let encounter = activeConsultation, let note = encounter.note_id, let version = encounter.note_version else { return false }
+        let finished = await mutate(success: "Consulta finalizada. La información quedó registrada en el expediente del paciente.") {
             try await self.repository.close(encounter: encounter.id, note: note,
                 noteVersion: version, encounterVersion: encounter.row_version)
         }
+        guard finished, generation == scope else {
+            if let message = error { error = DoctorClinicalRules.finishError(message, plan: draft.plan) }
+            return false
+        }
+        // Regreso a la agenda conservando el aviso de finalización.
+        let message = confirmation
+        select(nil); confirmation = message
+        return true
     }
 
     var filteredLabTests: [DoctorLabTest] {
@@ -404,10 +579,13 @@ final class DoctorViewModel: ObservableObject {
     }
 
     func markRead(_ notification: DoctorNotification) async {
-        guard notification.read_at == nil else { return }
-        await mutate(success: "Notificación marcada como leída.", reloadChart: false) {
-            try await self.repository.markRead(notification)
-        }
+        guard notification.read_at == nil, !saving else { return }
+        let scope = generation
+        do {
+            try await repository.markRead(notification)
+            guard generation == scope else { return }
+            await refreshAlerts()
+        } catch { if generation == scope { alertsError = "No se pudo marcar el aviso como leído. Reintenta." } }
     }
     private func clearPrescription() {
         rxKey = UUID(); rxMedication = nil; rxDose = ""; rxUnit = ""; rxFrequency = ""; rxQuantity = ""
@@ -436,21 +614,26 @@ final class DoctorViewModel: ObservableObject {
         }
     }
 
-    private func mutate(success: String, reloadChart: Bool = true, operation: () async throws -> Void) async {
-        guard !saving, !loading, !loadingChart, facility != nil else { return }
+    /// Devuelve true si la operación del servidor se confirmó (aunque falle la recarga posterior, que deja `error`).
+    @discardableResult
+    private func mutate(success: String, reloadChart: Bool = true, operation: () async throws -> Void) async -> Bool {
+        guard !saving, !loading, !loadingChart, facility != nil else { return false }
         let scope = generation
-        saving = true; error = nil; confirmation = nil
+        saving = true; error = nil; confirmation = nil; lastFailure = nil
         do {
             try await operation()
-            guard scope == generation else { return }
+            guard scope == generation else { return false }
             confirmation = success
             saving = false
             await refresh()
             if reloadChart { await loadChart() }
+            return true
         } catch {
-            guard scope == generation else { return }
+            guard scope == generation else { return false }
             saving = false
+            lastFailure = error
             self.error = Self.describe(error)
+            return false
         }
     }
 

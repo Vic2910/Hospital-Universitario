@@ -57,6 +57,8 @@ struct PatientAssignedAppointment: Identifiable {
             date: date, specialty: request.specialty, doctor: "Dra. Ana Morales", room: "Consultorio 3", dui: request.dui, email: request.email)
     }
 }
+/// Mis citas: todos los detalles a la vista, sin pantallas intermedias. Paridad con web-preview/patient-appointments.js.
+/// Datos reales del módulo "appointments" (RLS del paciente); la cancelación usa la acción existente cancel_appointment.
 struct PatientAppointmentsView: View {
     @ObservedObject var flow: PatientAppointmentFlowStore
     @ObservedObject var modules: MobileModuleViewModel
@@ -65,88 +67,147 @@ struct PatientAppointmentsView: View {
     let search: String
     let period: (String) -> String
     let navigate: (String) -> Void
-    @State private var showDetail = false
-    private var useExamples: Bool { false }
-    private var next: PatientAssignedAppointment? {
-        if useExamples { return flow.appointments.filter { $0.date >= Date() }.sorted { $0.date < $1.date }.first }
-        guard let item = modules.items.filter({ ["scheduled", "confirmed"].contains($0.status) && (DoctorDate.parse($0.event_at) ?? .distantPast) >= Date() }).sorted(by: { (DoctorDate.parse($0.event_at) ?? .distantPast) < (DoctorDate.parse($1.event_at) ?? .distantPast) }).first, let date = DoctorDate.parse(item.event_at) else { return nil }
-        func field(_ label: String) -> String? { item.details.first { $0.label.localizedCaseInsensitiveCompare(label) == .orderedSame }?.value }
-        let value = DoctorAppointment(id: item.id, patient_id: patientID ?? item.id, patient_name: profile?.fullName ?? "No hay datos reales", record_number: "No hay datos reales", phone: field("Teléfono") ?? profile?.contacts.first { $0.kind == "phone" }?.value, ticket_number: nil,
-            period: field("Horario") ?? "", status: item.status, encounter_id: nil, age: Int(field("Edad")?.components(separatedBy: " ").first ?? ""), reason: field("Motivo de la consulta") ?? item.subtitle, symptoms: field("Síntomas").map { $0.components(separatedBy: ",") })
-        return .init(appointment: value, date: date, specialty: item.title, doctor: field("Medico") ?? "No hay datos reales", room: field("Consultorio") ?? "No hay datos reales", dui: field("DUI") ?? "No hay datos reales", email: field("Correo") ?? profile?.auth_email ?? "No hay datos reales")
+    @State private var cancelling: MobileItem?
+    @State private var cancellationReason = ""
+
+    private func date(_ item: MobileItem) -> Date { DoctorDate.parse(item.event_at) ?? .distantPast }
+    private var visible: [MobileItem] {
+        modules.items.filter { search.isEmpty || ($0.title + " " + $0.details.map(\.value).joined(separator: " ")).localizedCaseInsensitiveContains(search) }
     }
+    /// En atención o programadas a futuro, de la más próxima a la más lejana.
+    private var upcoming: [MobileItem] {
+        visible.filter { $0.status == "in_progress" || (["scheduled", "confirmed"].contains($0.status) && date($0) >= Date().addingTimeInterval(-1800)) }
+            .sorted { date($0) < date($1) }
+    }
+    /// Finalizadas, canceladas o pasadas, de la más reciente a la más antigua.
+    private var past: [MobileItem] {
+        let ids = Set(upcoming.map(\.id))
+        return visible.filter { !ids.contains($0.id) }.sorted { date($0) > date($1) }
+    }
+
     var body: some View {
-        Group {
-            if showDetail { assignedTicket }
-            else if next == nil {
-                VStack(spacing: 16) {
-                    Text(modules.loading ? "Cargando tus citas…" : modules.error != nil ? "No pudimos cargar tus citas. Intenta de nuevo." : "No tienes citas registradas.")
-                    MobileModuleView(model: modules, module: "appointments", role: "patient", search: search, period: period, navigate: navigate)
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("MIS CITAS", systemImage: "calendar").font(.caption2.weight(.heavy)).tracking(1.2).opacity(0.85)
+                Text(upcoming.isEmpty ? "No tienes citas próximas" : upcoming.count == 1 ? "Tienes 1 cita próxima" : "Tienes \(upcoming.count) citas próximas").font(.title2.bold())
+                Text("Recepción programa tus citas. Aquí ves la fecha, el médico, el consultorio y el motivo.").font(.subheadline).opacity(0.9)
+            }.foregroundStyle(.white).padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                .background(LinearGradient.vinoDestacado, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            if modules.loading && modules.items.isEmpty { ProgressView("Cargando tus citas…").frame(maxWidth: .infinity) }
+            if let error = modules.error {
+                HospitalNotice(text: error)
+                Button("Reintentar", systemImage: "arrow.clockwise") { Task { await modules.load("appointments") } }.tint(HospitalTheme.wine)
+            }
+            if let confirmation = modules.confirmation { Label(confirmation, systemImage: "checkmark.circle.fill").font(.footnote.weight(.semibold)).foregroundStyle(HospitalTheme.wine) }
+            if let next = upcoming.first {
+                appointmentCard(next, featured: true)
+                if upcoming.count > 1 {
+                    sectionTitle("Siguientes citas", count: upcoming.count - 1)
+                    ForEach(upcoming.dropFirst()) { appointmentCard($0, featured: false) }
                 }
-            } else {
-                Button { showDetail = true } label: {
-                    HStack(spacing: 16) {
-                        Image(systemName: "calendar.badge.checkmark").font(.system(size: 25)).foregroundStyle(HospitalTheme.wine)
-                            .frame(width: 56, height: 56).background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 17))
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Cita asignada").font(.system(size: 18, weight: .bold)).foregroundStyle(HospitalTheme.ink)
-                            Text("Consulta los detalles de tu atención").font(.footnote).foregroundStyle(HospitalTheme.secondary)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right").font(.subheadline.weight(.semibold)).foregroundStyle(HospitalTheme.wine)
-                    }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.white, in: RoundedRectangle(cornerRadius: 22))
-                        .overlay(RoundedRectangle(cornerRadius: 22).stroke(HospitalTheme.rose, lineWidth: 1))
-                }.buttonStyle(.plain).accessibilityLabel("Cita asignada").accessibilityHint("Abre los datos de tu próxima cita")
+            } else if !modules.loading && modules.error == nil {
+                VStack(spacing: 10) {
+                    Image(systemName: "calendar.badge.plus").font(.system(size: 30, weight: .semibold)).foregroundStyle(HospitalTheme.wine)
+                        .frame(width: 64, height: 64).background(HospitalTheme.rose, in: Circle())
+                    Text("Sin citas programadas").font(.headline)
+                    Text("Cuando recepción programe tu atención, verás aquí la fecha, la hora y el consultorio.").font(.subheadline).foregroundStyle(HospitalTheme.secondary).multilineTextAlignment(.center)
+                    Button { navigate("request") } label: { Label("Solicitar atención", systemImage: "stethoscope").font(.headline).frame(maxWidth: .infinity, minHeight: 46) }
+                        .buttonStyle(.bordered).tint(HospitalTheme.wine)
+                }.padding(22).frame(maxWidth: .infinity).background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            }
+            if !past.isEmpty {
+                sectionTitle("Historial de citas", count: past.count)
+                ForEach(past) { appointmentCard($0, featured: false) }
+            }
+            if modules.page?.has_more == true {
+                Button("Cargar más citas") { Task { await modules.load("appointments", more: true) } }.frame(maxWidth: .infinity).disabled(modules.loading).tint(HospitalTheme.wine)
             }
         }
+        .alert("Cancelar cita", isPresented: Binding(get: { cancelling != nil }, set: { if !$0 { cancelling = nil } })) {
+            TextField("Motivo de cancelación", text: $cancellationReason)
+            Button("Cancelar cita", role: .destructive) {
+                if let item = cancelling { let reason = cancellationReason; Task { await modules.cancel(item, reason: reason) } }
+                cancelling = nil
+            }.disabled(cancellationReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button("Volver", role: .cancel) { cancelling = nil }
+        } message: { Text("Recepción verá el motivo. Esta acción no se puede deshacer.") }
     }
-    private var assignedTicket: some View {
-        VStack(spacing: 22) {
-            HStack {
-                Button { showDetail = false } label: { Label("Volver", systemImage: "chevron.left").font(.subheadline.weight(.semibold)) }
-                Spacer()
-                Text("MIS CITAS").font(.caption2.weight(.bold)).tracking(1).foregroundStyle(HospitalTheme.secondary)
-            }.tint(HospitalTheme.wine)
-            Image(systemName: next == nil ? "calendar" : "checkmark").font(.system(size: 44, weight: .medium)).foregroundStyle(.white)
-                .frame(width: 92, height: 92).background(HospitalTheme.wine, in: Circle())
-            Text(next == nil ? "Sin cita asignada" : "Cita médica asignada").font(.system(size: 27, weight: .bold)).multilineTextAlignment(.center)
-            if let next {
-                Text("Estos son los datos de tu próxima atención.").font(.subheadline).foregroundStyle(HospitalTheme.secondary).multilineTextAlignment(.center)
-                VStack(spacing: 8) {
-                    Text("Fecha y hora de tu cita").font(.caption).foregroundStyle(HospitalTheme.secondary)
-                    Text(next.date.formatted(date: .complete, time: .omitted)).font(.headline)
-                    Text(period(next.appointment.period)).font(.title3.weight(.bold))
-                }.frame(maxWidth: .infinity).padding(20).background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 18))
-                PatientFormCard(titulo: "Datos de la cita", icono: "stethoscope") {
-                    DoctorConsultationField(label: "Especialidad", value: next.specialty)
-                    DoctorConsultationField(label: "Médico", value: next.doctor)
-                    DoctorConsultationField(label: "Consultorio", value: next.room)
+
+    private func sectionTitle(_ title: String, count: Int) -> some View {
+        HStack {
+            Text(title).font(.headline).foregroundStyle(HospitalTheme.ink)
+            Spacer()
+            Text("\(count)").font(.caption.bold()).foregroundStyle(HospitalTheme.wine).padding(.horizontal, 10).padding(.vertical, 4).background(HospitalTheme.rose, in: Capsule())
+        }.padding(.top, 4)
+    }
+
+    private func value(_ item: MobileItem, _ label: String) -> String? {
+        guard let text = item.details.first(where: { $0.label.localizedCaseInsensitiveCompare(label) == .orderedSame })?.value.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty, text != "Sin registrar" else { return nil }
+        return text
+    }
+
+    private func appointmentCard(_ item: MobileItem, featured: Bool) -> some View {
+        let start = DoctorDate.parse(item.event_at)
+        let status = DoctorClinicalRules.statusLabel(item.status)
+        let active = ["scheduled", "confirmed", "in_progress"].contains(item.status)
+        let rows: [(String, String, String?)] = [("stethoscope", "Médico", value(item, "Médico")), ("cross.case", "Especialidad", value(item, "Especialidad")),
+            ("door.left.hand.open", "Consultorio", value(item, "Consultorio")), ("text.bubble", "Motivo", value(item, "Motivo de la consulta")),
+            ("xmark.circle", "Motivo de cancelación", value(item, "Motivo de cancelación"))]
+        let present = rows.compactMap { row in row.2.map { (row.0, row.1, $0) } }
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
+                VStack(spacing: 2) {
+                    Text(start.map { $0.formatted(Date.FormatStyle(locale: Locale(identifier: "es_SV"), calendar: DoctorClinicalRules.calendar, timeZone: DoctorClinicalRules.timeZone).day()) } ?? "--")
+                        .font(.system(size: featured ? 28 : 22, weight: .bold))
+                    Text(start.map { $0.formatted(Date.FormatStyle(locale: Locale(identifier: "es_SV"), calendar: DoctorClinicalRules.calendar, timeZone: DoctorClinicalRules.timeZone).month(.abbreviated)) }?.uppercased() ?? "")
+                        .font(.caption2.weight(.bold))
                 }
-                PatientFormCard(titulo: "Datos del paciente", icono: "person") {
-                    DoctorConsultationField(label: "Paciente", value: next.appointment.patient_name)
-                    HStack { DoctorConsultationField(label: "Edad", value: DoctorConsultationFields.age(next.appointment.age)); DoctorConsultationField(label: "DUI", value: next.dui) }
-                    DoctorConsultationField(label: "Teléfono", value: DoctorConsultationFields.value(next.appointment.phone))
-                    DoctorConsultationField(label: "Correo", value: next.email)
+                .foregroundStyle(featured ? .white : HospitalTheme.wine)
+                .frame(width: featured ? 66 : 56, height: featured ? 70 : 60)
+                .background(featured ? AnyShapeStyle(LinearGradient.vinoDestacado) : AnyShapeStyle(HospitalTheme.rose), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                VStack(alignment: .leading, spacing: 4) {
+                    if featured { Text("PRÓXIMA CITA").font(.caption2.weight(.heavy)).tracking(1).foregroundStyle(HospitalTheme.wine) }
+                    Text(item.title).font(featured ? .title3.bold() : .headline).foregroundStyle(HospitalTheme.ink)
+                    Text(start.map { $0.formatted(Date.FormatStyle(date: .complete, time: .omitted, locale: Locale(identifier: "es_SV"), calendar: DoctorClinicalRules.calendar, timeZone: DoctorClinicalRules.timeZone)) } ?? "Fecha no disponible")
+                        .font(.caption).foregroundStyle(HospitalTheme.secondary)
+                    Label(value(item, "Horario").map { period($0) } ?? "Horario no disponible", systemImage: "clock").font(.subheadline.weight(.semibold)).foregroundStyle(HospitalTheme.wine)
                 }
-                PatientFormCard(titulo: "Motivo de la atención", icono: "heart.text.square") {
-                    DoctorConsultationField(label: "Motivo de la consulta", value: DoctorConsultationFields.value(next.appointment.reason))
-                    DoctorConsultationField(label: "Síntomas", value: DoctorConsultationFields.symptoms(next.appointment.symptoms))
-                }
-                if useExamples { Text("Cita de ejemplo · Sin reserva real").font(.caption).foregroundStyle(HospitalTheme.secondary) }
-            } else {
-                Text(modules.loading ? "Estamos consultando tus citas." : "Todavía no tienes una próxima cita asignada. Recepción confirmará la fecha y hora cuando programe tu atención.").font(.subheadline).foregroundStyle(HospitalTheme.secondary).multilineTextAlignment(.center)
+                Spacer(minLength: 0)
+                Text(status).font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 4)
+                    .foregroundStyle(item.status == "in_progress" ? .white : item.status == "completed" ? Color(red: 0.13, green: 0.5, blue: 0.3) : active ? HospitalTheme.wine : HospitalTheme.secondary)
+                    .background(item.status == "in_progress" ? AnyShapeStyle(HospitalTheme.wine) : AnyShapeStyle(item.status == "completed" ? HospitalTheme.green : active ? HospitalTheme.rose : HospitalTheme.background), in: Capsule())
             }
-            if !modules.items.isEmpty || modules.error != nil {
-                DisclosureGroup("Gestionar mis citas") {
-                    MobileModuleView(model: modules, module: "appointments", role: "patient", search: search, period: period, navigate: navigate)
-                }.font(.subheadline).tint(HospitalTheme.wine)
+            if !present.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(present.enumerated()), id: \.offset) { _, row in
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: row.0).font(.footnote.weight(.semibold)).foregroundStyle(HospitalTheme.wine).frame(width: 20)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(row.1).font(.caption2).foregroundStyle(HospitalTheme.secondary)
+                                Text(row.2).font(.subheadline).foregroundStyle(HospitalTheme.ink).fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(HospitalTheme.background, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
-            Button("Volver a Mis citas") { showDetail = false }
-                .font(.headline).foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 54)
-                .background(Color(red: 33/255, green: 150/255, blue: 243/255), in: RoundedRectangle(cornerRadius: 12)).buttonStyle(.plain)
-        }.padding(22).frame(maxWidth: .infinity).background(.white, in: RoundedRectangle(cornerRadius: 24))
-            .overlay(RoundedRectangle(cornerRadius: 24).stroke(HospitalTheme.rose, lineWidth: 1))
+            if featured && item.status == "in_progress" {
+                Label("Tu médico ya inició la consulta.", systemImage: "stethoscope").font(.footnote.weight(.semibold)).foregroundStyle(HospitalTheme.wine)
+            } else if featured && active {
+                Label("Llega 15 minutos antes y presenta tu DUI en recepción.", systemImage: "info.circle").font(.footnote).foregroundStyle(HospitalTheme.secondary)
+            }
+            if item.action == "cancel_appointment" {
+                Button(role: .destructive) { cancellationReason = ""; cancelling = item } label: {
+                    Label("Cancelar cita", systemImage: "calendar.badge.minus").font(.subheadline.weight(.semibold))
+                }.disabled(modules.saving)
+            }
+        }
+        .padding(featured ? 18 : 14).frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(featured ? HospitalTheme.wine.opacity(0.35) : HospitalTheme.rose, lineWidth: featured ? 1.5 : 1))
+        .shadow(color: HospitalTheme.ink.opacity(featured ? 0.07 : 0.03), radius: 10, y: 4)
+        .accessibilityElement(children: .contain)
     }
 }
 struct ReceptionAppointmentExampleView: View {

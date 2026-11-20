@@ -17,7 +17,7 @@ const ui=createApp(['doctor'],{transport:async(url,p)=>{
   return{body:{count:2,order_ids:orders.map(o=>o.id)}};
  }
 }});
-await ui.login();await ui.click('Pacientes');await ui.click('Abrir expediente de '+patient.full_name);await ui.click('Ver laboratorios de este paciente');
+await ui.login();await ui.click('Pacientes');await ui.click('Abrir expediente de '+patient.full_name);await ui.click('Laboratorios');
 assert.match(ui.app.textContent,/Solicitar exámenes/);assert.match(ui.app.textContent,/EXP-LOCAL/);assert.equal(ui.app.textContent.includes('LOCAL-1'),false,'No presenta códigos técnicos');
 await ui.input('Buscar exámenes','orina');assert.ok(ui.button('Seleccionar Examen de orina local'));
 assert.equal(ui.app.all().some(n=>n.attributes['aria-label']==='Seleccionar Examen de sangre local'),false);

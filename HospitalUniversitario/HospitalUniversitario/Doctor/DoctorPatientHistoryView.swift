@@ -59,9 +59,10 @@ struct DoctorPatientHistoryView: View {
                 ForEach(history) { visit in
                     HospitalCard {
                         Text(DoctorDate.display(visit.started_at)).font(.subheadline.weight(.semibold))
+                        if let diagnosis = visit.assessment, !diagnosis.isEmpty { Text("Diagnóstico: \(diagnosis)").font(.footnote.weight(.semibold)) }
                         Text(visit.subjective ?? "Consulta sin nota registrada").font(.footnote)
-                        if let plan = visit.plan { Text(plan).font(.footnote).foregroundStyle(HospitalTheme.secondary) }
-                        Text(visit.status == "closed" ? "Finalizada" : "En curso").font(.caption).foregroundStyle(HospitalTheme.wine)
+                        if let observations = visit.objective, !observations.isEmpty { Text(observations).font(.footnote).foregroundStyle(HospitalTheme.secondary) }
+                        Text(visit.status == "closed" ? "Finalizada" : "En consulta").font(.caption).foregroundStyle(HospitalTheme.wine)
                     }.overlay(RoundedRectangle(cornerRadius: 14).stroke(HospitalTheme.rose, lineWidth: 1))
                 }
             }

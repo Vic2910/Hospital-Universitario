@@ -15,8 +15,16 @@ enum DoctorConsultationFields {
     static func time(_ text: String) -> String {
         text.isEmpty || text == "Horario no disponible" || text == "Horario de ejemplo" ? missing : text
     }
-    static func status(_ value: String) -> String {
-        ["confirmed": "Confirmada", "scheduled": "Programada", "checked_in": "En espera", "in_progress": "En curso", "completed": "Finalizada", "cancelled": "Cancelada"][value] ?? "Pendiente"
+    static func status(_ value: String) -> String { DoctorClinicalRules.statusLabel(value) }
+    /// Las citas canceladas o finalizadas no se abren. La anticipación máxima la define
+    /// DoctorClinicalRules.openingLeadMinutes (sin límite mientras se hacen pruebas).
+    static func openingBlocker(_ appointment: DoctorAppointment, now: Date = Date()) -> String? {
+        guard appointment.encounter_id == nil else { return nil }
+        if !["scheduled", "confirmed", "in_progress"].contains(appointment.status) { return "Esta cita está \(status(appointment.status).lowercased()); no puede abrirse una consulta." }
+        if let lead = DoctorClinicalRules.openingLeadMinutes, let start = appointment.startDate, start > now.addingTimeInterval(lead * 60) {
+            return "Podrás abrir la consulta desde \(Int(lead)) minutos antes de la hora programada."
+        }
+        return nil
     }
 }
 
@@ -54,10 +62,11 @@ struct DoctorConsultationTicketView: View {
                 Text("Detalle de consulta").font(.system(size: 27, weight: .bold)).multilineTextAlignment(.center)
                     .accessibilityAddTraits(.isHeader)
                 Text(demonstration ? "Datos de ejemplo · Sin reserva real" : DoctorConsultationFields.status(appointment.status))
-                    .font(.footnote).foregroundStyle(HospitalTheme.secondary)
+                    .font(.footnote.weight(.semibold)).foregroundStyle(HospitalTheme.wine)
+                    .padding(.horizontal, 12).padding(.vertical, 6).background(HospitalTheme.rose, in: Capsule())
                 VStack(spacing: 8) {
                     Text("Fecha y hora").font(.caption).foregroundStyle(HospitalTheme.secondary)
-                    Text(DoctorConsultationFields.time(time) == DoctorConsultationFields.missing ? DoctorConsultationFields.missing : day.formatted(.dateTime.locale(Locale(identifier: "es_GT")).weekday(.wide).day().month(.wide).year()))
+                    Text(DoctorConsultationFields.time(time) == DoctorConsultationFields.missing ? DoctorConsultationFields.missing : (appointment.startDate ?? day).formatted(.dateTime.locale(Locale(identifier: "es_SV")).weekday(.wide).day().month(.wide).year()))
                     Text(DoctorConsultationFields.time(time))
                 }.font(.headline).multilineTextAlignment(.center).padding(18).frame(maxWidth: .infinity)
                     .background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 16))
@@ -76,11 +85,22 @@ struct DoctorConsultationTicketView: View {
                     if let other = appointment.other_symptoms { DoctorConsultationField(label: "Otros síntomas", value: other) }
                 }.padding(18).background(.white, in: RoundedRectangle(cornerRadius: 16))
                 ForEach(Array(context.enumerated()), id: \.offset) { _, field in DoctorConsultationField(label: field.label, value: field.value) }
-                if let openCare { Button("Abrir atención", action: openCare).font(.subheadline.weight(.semibold)).tint(HospitalTheme.wine) }
-                Button(action: close) {
-                    Text(closeLabel).font(.headline).foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 54)
-                        .background(referenceBlue, in: RoundedRectangle(cornerRadius: 12))
-                }.buttonStyle(.plain)
+                if let openCare {
+                    let blocker = DoctorConsultationFields.openingBlocker(appointment)
+                    Button(action: openCare) {
+                        Label(appointment.encounter_id == nil ? "ABRIR CONSULTA MÉDICA" : appointment.status == "completed" ? "VER CONSULTA FINALIZADA" : "CONTINUAR CONSULTA",
+                              systemImage: appointment.encounter_id == nil ? "stethoscope" : "doc.text.magnifyingglass")
+                            .font(.headline).foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 56)
+                            .background(blocker == nil ? HospitalTheme.wine : HospitalTheme.secondary, in: RoundedRectangle(cornerRadius: 14))
+                    }.buttonStyle(.plain).disabled(blocker != nil)
+                    if let blocker { Text(blocker).font(.footnote).foregroundStyle(HospitalTheme.secondary).multilineTextAlignment(.center) }
+                    Button(closeLabel, action: close).font(.subheadline.weight(.semibold)).tint(HospitalTheme.wine).frame(minHeight: 44)
+                } else {
+                    Button(action: close) {
+                        Text(closeLabel).font(.headline).foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 54)
+                            .background(referenceBlue, in: RoundedRectangle(cornerRadius: 12))
+                    }.buttonStyle(.plain)
+                }
             }.padding(22).foregroundStyle(HospitalTheme.ink)
     }
 }

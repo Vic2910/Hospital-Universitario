@@ -88,3 +88,19 @@ struct PatientAttentionTests {
         #expect(!model.canSubmit)
     }
 }
+
+/// Una sola solicitud activa (espejo de HospitalCore.attentionBlocker).
+struct AttentionSingleRequestTests {
+    private func request(_ status: String) -> AttentionRequest {
+        AttentionRequest(id: UUID(), created_at: "2026-11-20T15:00:00Z", status: status, specialty_name: "Medicina general", reason: "Motivo",
+            preferred_period: "manana", symptoms: ["Fiebre"], other_symptoms: nil, appointment_id: nil)
+    }
+    @Test func pendingRequestOrScheduledAppointmentBlocksAnotherRequest() {
+        #expect(AttentionRules.blocker(requests: [request("pendiente")], scheduled: nil)?.contains("recepción la está revisando") == true)
+        #expect(AttentionRules.blocker(requests: [request("en_revision")], scheduled: nil) != nil)
+        #expect(AttentionRules.blocker(requests: [request("rechazada"), request("cancelada")], scheduled: nil) == nil, "Tras rechazo o cancelación puede volver a solicitar")
+        let cita = ProximaCita(id: UUID(), starts_at: "2026-11-25T15:00:00Z", ends_at: "2026-11-25T15:30:00Z", status: "scheduled", doctor_name: nil)
+        #expect(AttentionRules.blocker(requests: [request("agendada")], scheduled: cita)?.contains("Ya tienes una cita programada") == true)
+        #expect(AttentionRules.blocker(requests: [], scheduled: nil) == nil)
+    }
+}

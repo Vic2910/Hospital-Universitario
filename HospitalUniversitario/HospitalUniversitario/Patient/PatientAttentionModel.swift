@@ -39,6 +39,25 @@ struct AttentionRequest: Decodable, Identifiable {
     }
     var periodLabel: String { ["manana": "Mañana", "tarde": "Tarde", "indiferente": "Indiferente"][preferred_period] ?? "No disponible" }
 }
+/// Una sola solicitud activa por paciente (espejo de HospitalCore.attentionBlocker en web-preview).
+/// Mientras una solicitud esté pendiente o en revisión, o exista una cita programada, no se envía otra.
+enum AttentionRules {
+    static let openStates: Set<String> = ["pendiente", "en_revision"]
+    static func blocker(requests: [AttentionRequest], scheduled: ProximaCita?) -> String? {
+        if let open = requests.first(where: { openStates.contains($0.status) }) {
+            let date = DoctorDate.parse(open.created_at).map { $0.formatted(.dateTime.locale(Locale(identifier: "es_SV")).day().month(.wide).year()) } ?? "recientemente"
+            return "Ya enviaste una solicitud el \(date) y recepción la está revisando. Podrás enviar otra cuando la programe o la rechace."
+        }
+        if let scheduled, ["programada", "confirmada", "en_atencion", "scheduled", "confirmed", "in_progress"].contains(scheduled.status) {
+            let date = DoctorDate.parse(scheduled.starts_at).map {
+                $0.formatted(Date.FormatStyle(date: .long, time: .shortened, locale: Locale(identifier: "es_SV"), calendar: DoctorClinicalRules.calendar, timeZone: DoctorClinicalRules.timeZone))
+            } ?? "próximamente"
+            return "Ya tienes una cita programada para el \(date). Si necesitas cambiarla, comunícate con recepción."
+        }
+        return nil
+    }
+}
+
 struct AttentionSubmission {
     let key: UUID
     let specialty: Int64
@@ -80,6 +99,9 @@ struct AttentionSubmission {
     @Published var reason = ""
     @Published var otherSymptoms = ""
     @Published var missing: [String: String] = [:]
+    /// Próxima cita autorizada (patientDashboard); la asigna HospitalStore antes de abrir el formulario.
+    @Published var scheduledAppointment: ProximaCita?
+    var submissionBlocker: String? { AttentionRules.blocker(requests: requests, scheduled: scheduledAppointment) }
     private let repository: any AttentionServing
     private var owner: UUID?
     private var generation = UUID()
@@ -94,7 +116,7 @@ struct AttentionSubmission {
         generation = UUID(); owner = nil; requestKey = UUID()
         context = nil; requests = []; loading = false; saving = false; error = nil; confirmation = nil
         selectedSymptoms = []; specialty = nil; preferredPeriod = "indiferente"
-        reason = ""; otherSymptoms = ""; missing = [:]
+        reason = ""; otherSymptoms = ""; missing = [:]; scheduledAppointment = nil
     }
     func isMissing(_ value: String?) -> Bool { value?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false }
     var needsOtherDescription: Bool {
@@ -130,7 +152,7 @@ struct AttentionSubmission {
         if !["manana", "tarde", "indiferente"].contains(preferredPeriod) { return "Selecciona una preferencia de horario válida." }
         return nil
     }
-    var canSubmit: Bool { owner != nil && !loading && !saving && validationError == nil }
+    var canSubmit: Bool { owner != nil && !loading && !saving && submissionBlocker == nil && validationError == nil }
     func load() async {
         guard owner != nil, !loading, !saving else { return }
         let scope = generation; loading = true; error = nil

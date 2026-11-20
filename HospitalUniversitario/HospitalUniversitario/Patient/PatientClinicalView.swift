@@ -41,8 +41,14 @@ struct PatientClinicalView: View {
                         Text(module == "chart" ? "Mi expediente" : "Mis laboratorios").font(.system(size: 27, weight: .bold))
                         Text("Tu información médica · Solo lectura").font(.caption).foregroundStyle(HospitalTheme.secondary)
                         if module == "chart" {
-                            personalCard(full: true)
-                            ForEach(Array((model.page?.sections ?? []).enumerated()), id: \.offset) { _, section in
+                            // Identidad una sola vez (cabecera); la sección "Datos personales" no se repite debajo.
+                            recordHeader
+                            Button { navigate("history") } label: {
+                                Label("VER HISTORIAL MÉDICO", systemImage: "clock.arrow.circlepath").font(.headline).foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity, minHeight: 56)
+                                    .background(LinearGradient.vinoDestacado, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            }.buttonStyle(.plain).accessibilityHint("Abre tus consultas finalizadas, de la más reciente a la más antigua")
+                            ForEach(Array((model.page?.sections ?? []).filter { $0.title != "Datos personales" }.enumerated()), id: \.offset) { _, section in
                                 PatientFormCard(titulo: section.title, icono: "doc.text") {
                                     if section.fields.isEmpty { Text("Sin registros publicados.").font(.footnote).foregroundStyle(HospitalTheme.secondary) }
                                     ForEach(Array(section.fields.enumerated()), id: \.offset) { _, value in DoctorConsultationField(label: value.label, value: DoctorConsultationFields.value(value.value)) }
@@ -62,6 +68,47 @@ struct PatientClinicalView: View {
                 }.padding(20).frame(maxWidth: .infinity).background(.white, in: RoundedRectangle(cornerRadius: 24)).overlay(RoundedRectangle(cornerRadius: 24).stroke(HospitalTheme.rose, lineWidth: 1))
             }
         }.onChange(of: module) { _, _ in selectedID = nil }
+    }
+    /// Cabecera del expediente propio con los datos reales publicados por el adaptador (solo campos con valor).
+    private var recordHeader: some View {
+        let real = { (label: String) -> String? in
+            guard let value = field(label)?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty, value != "Sin registrar" else { return nil }
+            return value
+        }
+        let pills = [("number", real("Código de paciente").map { "Código \($0)" }), ("folder", real("Expediente").map { "Expediente \($0)" }), ("person", real("Edad").map { "\($0) años" })]
+            .compactMap { pill in pill.1.map { (pill.0, $0) } }
+        let rows = [("calendar", "Fecha de nacimiento", real("Fecha de nacimiento")), ("person.text.rectangle", "DUI", real("DUI")),
+                    ("phone", "Teléfono", real("Teléfono")), ("envelope", "Correo", real("Correo") ?? profile?.auth_email), ("mappin.and.ellipse", "Ciudad", real("Ciudad"))]
+            .compactMap { row in row.2.map { (row.0, row.1, $0) } }
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+                Text(DoctorAssignedPatient.initials(name)).font(.title.bold()).foregroundStyle(HospitalTheme.wine)
+                    .frame(width: 68, height: 68).background(.white, in: Circle()).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("MI EXPEDIENTE").font(.caption2.weight(.heavy)).tracking(1.2).opacity(0.8)
+                    Text(name).font(.title3.bold()).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            if !pills.isEmpty {
+                ConsultationFlowLayout(spacing: 8) {
+                    ForEach(Array(pills.enumerated()), id: \.offset) { _, pill in
+                        Label(pill.1, systemImage: pill.0).font(.caption.weight(.semibold)).padding(.horizontal, 12).padding(.vertical, 7)
+                            .background(Color.white.opacity(0.16), in: Capsule())
+                    }
+                }
+            }
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 10) {
+                    Image(systemName: row.0).frame(width: 20)
+                    Text(row.1).font(.caption).opacity(0.8)
+                    Spacer(minLength: 8)
+                    Text(row.2).font(.footnote.weight(.semibold)).multilineTextAlignment(.trailing).textSelection(.enabled)
+                }
+            }
+        }
+        .foregroundStyle(.white).padding(20).frame(maxWidth: .infinity, alignment: .leading)
+        .background(LinearGradient.vinoDestacado, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
     @ViewBuilder private func personalCard(full: Bool) -> some View {
         if full {

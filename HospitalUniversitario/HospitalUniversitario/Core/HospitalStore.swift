@@ -21,6 +21,8 @@ final class HospitalStore: ObservableObject {
     @Published private(set) var shiftsMore = false
     @Published private(set) var doctor: DoctorViewModel?
     @Published private(set) var patientLaboratory: MobileModuleViewModel?
+    /// Avisos propios del paciente (notifications con RLS recipient_id = auth.uid()) para la campana.
+    @Published private(set) var patientNotifications: MobileModuleViewModel?
     @Published private(set) var modules: MobileModuleViewModel?
     @Published private(set) var attention: PatientAttentionModel?
     private var roomsCursor: ResourceCursor?
@@ -36,6 +38,7 @@ final class HospitalStore: ObservableObject {
             doctor = DoctorViewModel(repository: DoctorRepository(api: api))
             modules = MobileModuleViewModel(repository: MobileModuleRepository(api: api))
             patientLaboratory = MobileModuleViewModel(repository: MobileModuleRepository(api: api))
+            patientNotifications = MobileModuleViewModel(repository: MobileModuleRepository(api: api))
             catalog = try ScreenCatalog.load()
         }
         catch { message = error.localizedDescription }
@@ -136,11 +139,17 @@ final class HospitalStore: ObservableObject {
             if let facility = fresh.roles.first(where: { $0.code == role })?.context_id, let profile = fresh.profile {
                 modules?.configure(role: role, facility: facility, profile: profile.id, patient: fresh.patient_id)
                 patientLaboratory?.configure(role: role, facility: facility, profile: profile.id, patient: fresh.patient_id)
+                patientNotifications?.configure(role: role, facility: facility, profile: profile.id, patient: fresh.patient_id)
             }
             if role == "patient" && ["request", "schedule", "health"].contains(screenID) {
+                // Cita programada vigente: impide enviar otra solicitud mientras exista.
+                if fresh.patient_id != nil, let dashboard: PatientDashboardData = try? await api.operation("patientDashboard") {
+                    nextAppointment = dashboard.next_appointment
+                }
+                attention?.scheduledAppointment = fresh.patient_id == nil ? nil : nextAppointment
                 await attention?.load(); return
             }
-            if (role == "patient" && ["appointments", "request", "chart", "history", "prescriptions", "laboratory", "notifications"].contains(screenID)) || screenID == "notifications" {
+            if (role == "patient" && ["appointments", "request", "chart", "history", "prescriptions", "laboratory", "notifications"].contains(screenID)) || (role != "doctor" && screenID == "notifications") {
                 await modules?.load(screenID, more: more)
                 if role == "patient" && screenID == "chart" && modules?.page != nil { await patientLaboratory?.load("laboratory") }
                 return
@@ -184,7 +193,7 @@ final class HospitalStore: ObservableObject {
             }
         } catch {
             if role == "doctor" { doctor?.clear() }
-            modules?.clear(); patientLaboratory?.clear()
+            modules?.clear(); patientLaboratory?.clear(); patientNotifications?.clear()
             rooms = []; shifts = []; summary = nil; overview = nil
             nextAppointment = nil
             roomsMore = false; shiftsMore = false
@@ -205,7 +214,7 @@ final class HospitalStore: ObservableObject {
     func switchRole() {
         guard doctor?.saving != true, modules?.saving != true, attention?.saving != true else { return }
         doctor?.clear()
-        modules?.clear(); patientLaboratory?.clear()
+        modules?.clear(); patientLaboratory?.clear(); patientNotifications?.clear()
         selectedRole = nil
         attention?.clear()
         nextAppointment = nil
@@ -217,7 +226,7 @@ final class HospitalStore: ObservableObject {
         registrationNotice = nil
         attention?.clear()
         doctor?.clear()
-        modules?.clear(); patientLaboratory?.clear()
+        modules?.clear(); patientLaboratory?.clear(); patientNotifications?.clear()
         access = nil; roles = []; selectedRole = nil
         nextAppointment = nil
         rooms = []; shifts = []; roomsCursor = nil; shiftsCursor = nil

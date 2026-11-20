@@ -1,14 +1,16 @@
 (function (root) {
   'use strict';
-  const labels = {pending:'Pendiente',scheduled:'Programada',confirmed:'Confirmada',checked_in:'Registrado en recepción',in_progress:'En curso',completed:'Finalizada',cancelled:'Cancelada',rejected:'Rechazada',open:'Abierta',closed:'Cerrada',issued:'Emitida',draft:'Borrador',ordered:'Emitida',released:'Publicado',unread:'No leída',read:'Leída',no_show:'No se presentó',active:'Vigente',expired:'Tratamiento finalizado'};
+  const labels = {pending:'Pendiente',scheduled:'Programada',confirmed:'Programada',checked_in:'Registrado en recepción',in_progress:'En consulta',completed:'Finalizada',cancelled:'Cancelada',rejected:'Rechazada',open:'Abierta',closed:'Cerrada',issued:'Emitida',draft:'Borrador',ordered:'Emitida',released:'Publicado',unread:'No leída',read:'Leída',no_show:'No se presentó',active:'Vigente',expired:'Tratamiento finalizado'};
+  const clinical = () => root.HospitalCore.doctorClinical;
   const localDay = date => new Intl.DateTimeFormat('en-CA',{year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
   const dateTime = value => value && Number.isFinite(new Date(value).getTime()) ? new Intl.DateTimeFormat('es-GT',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value)) : 'No registrado';
   class HospitalModules {
     constructor(api, ui) { this.api = api; this.ui = ui; this.clear(); }
     clear() {
+      this.alertGeneration=(this.alertGeneration||0)+1; this.alerts=[];this.unreadAlerts=0;this.alertsHaveMore=false;this.alertsError=null;this.alertLoading=false;
       this.identity = ''; this.role = ''; this.facility = null; this.access = null; this.screen = '';
       this.data = null; this.workspace = null; this.chart = null; this.context = null; this.selected = '';
-      this.patientDirectory=[];this.directoryPage=null;this.directoryQuery='';this.directoryError=null;this.selectedPatient=null;
+      this.patientDirectory=[];this.directoryPage=null;this.directoryQuery='';this.directoryError=null;this.selectedPatient=null;this.lastDirectoryQuery=null;clearTimeout(this.searchTimer);
       this.patientLabs=[];this.patientLabPage=null;this.patientLabsError=null;this.recordOpen=false;
       this.labTests=[];this.labCatalogError=null;this.labQuery='';this.labCategory='all';this.labSelected=new Set();this.labReview=false;this.pendingLabs=null;this.labPendingNames=[];this.labPendingPatient=null;
       this.ownLabOrders=[];this.ownLabPage=null;this.ownLabsError=null;
@@ -16,7 +18,8 @@
       this.admission={category:'',priority:'normal',reason:'',observations:''};this.pendingAdmission=null;this.pendingAdmissionPatient=null;
       this.items = []; this.lines = []; this.documents = new Map(); this.filters = {from:'',to:'',query:''};
       this.day = localDay(new Date()); this.request = {specialty:'',reason:'',period:'manana',day:this.day,from:'08:00',to:'12:00'};
-      this.consultation = {subjective:'',objective:'',assessment:'',plan:'',diagnosis_code:''}; this.vitals={}; this.stateFilter='all'; this.seedDraft = true;
+      this.consultation = {subjective:'',objective:'',assessment:'',plan:'',diagnosis_code:''}; this.vitals={}; this.stateFilter='pending'; this.seedDraft = true;
+      this.savedNote=null;this.saveState='idle';this.saveError='';this.conflict=null;this.panel='';this.finishConfirm=false;this.leaveConfirm=false;this.medicationQuery='';this.rxReview=false;
       this.diagnosis = {query:'',by:'description',selected:''}; this.diagnoses = [];
       this.lab = {test:'',instructions:''}; this.rx = {medication:'',unit:'',route:'',dose:'',interval:'',quantity:'',instructions:'',days:'',starts:this.day,ends:''};
       this.profile = {phone:'',given:'',family:'',emergencyPhone:'',relationship:''};
@@ -31,28 +34,43 @@
       return role === 'doctor' ? ['home','patients','consultation','chart','laboratory','prescriptions','notifications','profile','admissions'].includes(page)
         : ['appointments','request','chart','history','prescriptions','laboratory','notifications','profile'].includes(page);
     }
+    async loadAlerts(more=false) {
+      if(this.role!=='doctor'||this.alertLoading)return;
+      const generation=this.alertGeneration;this.alertLoading=true;
+      try {
+        const page=await this.api.doctorRPC('alerts',{p_offset:more?this.alerts.length:0});
+        if(generation!==this.alertGeneration)return;
+        if(!Array.isArray(page.items))throw new Error('Respuesta de avisos inválida.');
+        this.alerts=more?[...this.alerts,...page.items]:page.items;this.unreadAlerts=page.unread;this.alertsHaveMore=page.has_more;this.alertsError=null;
+      } catch { if(generation===this.alertGeneration)this.alertsError='No se pudieron actualizar los avisos. Reintenta.'; }
+      finally { if(generation===this.alertGeneration)this.alertLoading=false; }
+    }
     async load(page, more = false) {
       if (!this.facility) throw new Error('No hay una sede autorizada.');
+      if(this.role==='doctor'){await this.loadAlerts(page==='notifications'&&more);if(page==='notifications'){this.screen=page;return;}}
       if(this.role==='doctor'&&page==='admissions'){
         this.screen=page;await this.loadAdmissions(more);
         if(this.admissionForm&&!this.directoryPage)await this.loadPatients();
         return;
       }
-      if (page === 'consultation' && this.screen !== page && !this.selected) this.day = localDay(new Date());
+      if (page === 'consultation' && this.screen !== page && !this.selected) this.day = clinical().todayKey();
       if (this.screen !== page) { this.screen = page; this.data = null; this.items = []; this.filters = {from:'',to:'',query:''}; }
-      if (page === 'home' && this.role === 'doctor') this.day = localDay(new Date());
+      if (page === 'home' && this.role === 'doctor') this.day = clinical().todayKey();
       if (this.role === 'doctor' && !['profile','notifications'].includes(page)) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(this.day)) throw new Error('Selecciona una fecha de atención válida.');
-        const from = new Date(this.day + 'T00:00:00'), to = new Date(from); to.setDate(to.getDate()+1);
-        this.workspace = await this.api.operation('workspace',{p_facility:this.facility,p_from:from.toISOString(),p_to:to.toISOString()});
+        // Día elegido y los 13 siguientes en hora de El Salvador (máximo del servidor: 32 días).
+        // Desde 2 días antes (consultas en atención o finalizadas tarde) hasta los 14 siguientes; máximo del servidor: 32.
+        const window = clinical().dayWindow(clinical().addDays(this.day,-clinical().lookbackDays),clinical().agendaDays+clinical().lookbackDays);
+        this.workspace = await this.api.operation('workspace',{p_facility:this.facility,p_from:window.from,p_to:window.to});
         if (!Array.isArray(this.workspace.appointments) || !Array.isArray(this.workspace.orders)) throw new Error('Respuesta de agenda inválida.');
         if (this.selected && !this.workspace.appointments.some(item => item.id === this.selected)) {const patient=this.selectedPatient;this.select('');this.selectedPatient=patient;}
-        if(['patients','laboratory'].includes(page)){
-          await this.loadPatients();
+        if(['patients','chart','laboratory'].includes(page)){
+          if(!(['patients','chart'].includes(page)&&this.selectedPatient))await this.loadPatients();
           if(!this.selectedPatient&&this.appointment){const a=this.appointment;this.selectedPatient=this.patientDirectory.find(p=>p.id===a.patient_id)||{id:a.patient_id,full_name:a.patient_name,record_number:a.record_number,phone:a.phone,age:a.age,active_encounter_id:a.encounter_id};}
         }
         if ((this.appointment||this.selectedPatient) && ['patients','consultation','chart','laboratory','prescriptions'].includes(page)) await this.loadChart();
         if(page==='laboratory'){await this.loadLabCatalog();await this.loadOwnLabs();if(this.selectedPatient)await this.loadPatientLabs();}
+        if(['patients','chart'].includes(page)&&this.selectedPatient)await this.loadPatientLabs();
       }
       if (this.role === 'patient' || ['profile','notifications'].includes(page)) {
         const from = this.filters.from ? new Date(this.filters.from) : null, to = this.filters.to ? new Date(this.filters.to) : null;
@@ -69,7 +87,9 @@
     select(id) {
       this.selected = id; this.chart = this.context = null; this.lines = []; this.seedDraft = true;
       this.selectedPatient=null;this.patientLabs=[];this.patientLabPage=null;this.patientLabsError=null;this.recordOpen=false;
+      this.recordHistory=false;this.recordVisit='';this.recordLimit=10;this.stopRecordRefresh?.();
       this.consultation = {subjective:'',objective:'',assessment:'',plan:'',diagnosis_code:''}; this.vitals={};
+      this.savedNote=null;this.saveState='idle';this.saveError='';this.conflict=null;this.panel='';this.finishConfirm=false;this.leaveConfirm=false;this.medicationQuery='';this.rxReview=false;
       this.diagnosis = {query:'',by:'description',selected:''}; this.diagnoses = [];
       this.lab = {test:'',instructions:''};
       if(!this.pendingLabs){this.labSelected=new Set();this.labReview=false;}
@@ -84,12 +104,16 @@
         const encounter = this.encounter;
         for (const key of Object.keys(this.consultation)) this.consultation[key] = encounter?.[key] || '';
         this.vitals={...(encounter?.vitals||{})};this.noteID = encounter?.note_id || null; this.noteVersion = encounter?.note_version ?? 0; this.seedDraft = false;
+        this.savedNote=encounter?this.snapshot():null;
+        // Primera apertura: precarga lo que el paciente ya envió; queda como cambio pendiente hasta guardar.
+        if(encounter&&encounter.status==='open'&&!this.noteVersion&&!this.consultation.subjective&&this.appointment)this.consultation.subjective=clinical().seedSubjective(this.appointment);
       }
     }
     async loadPatients(more=false) {
       if(this.directoryQuery.trim().length>120)throw new Error('La búsqueda admite hasta 120 caracteres.');
       this.directoryError=null;
       try{
+        if(!more)this.lastDirectoryQuery=this.directoryQuery.trim();
         const page=await this.api.doctorRPC('patients',{p_query:this.directoryQuery.trim(),p_offset:more?this.directoryPage?.next_offset||0:0});
         if(!Array.isArray(page.patients))throw new Error('No se pudo interpretar el directorio.');
         this.patientDirectory=more?[...this.patientDirectory,...page.patients]:page.patients;this.directoryPage=page;
@@ -128,7 +152,7 @@
     async openPatient(patient) {
       const appointment=this.workspace?.appointments.find(a=>a.patient_id===patient.id&&a.encounter_id===patient.active_encounter_id&&patient.active_encounter_id);
       this.select(appointment?.id||'');this.selectedPatient=patient;
-      await this.loadChart();if(this.screen==='laboratory')await this.loadPatientLabs();
+      await this.loadChart();if(['laboratory','patients','chart'].includes(this.screen))await this.loadPatientLabs();
     }
     async loadAdmissions(more=false){
       this.admissionsError=null;
@@ -155,7 +179,9 @@
       await this.loadAdmissions();this.ui.message('Solicitud enviada a recepción. No se ha asignado habitación ni cama.');
     }
     async mutation(name, parameters, success, after) {
-      await this.api.operation(name,parameters); if (after) after();
+      try { await this.api.operation(name,parameters); }
+      catch (error) { const hint = name === 'startConsultation' ? clinical().startError(error.detail || '') : null; if (hint) throw new Error(hint); throw error; }
+      if (after) after();
       try { await this.load(this.screen); this.ui.message(success); }
       catch { throw new Error(success + ' No se pudo actualizar la lista; usa Actualizar.'); }
     }
@@ -182,6 +208,7 @@
     render(parent,page,search) {
       this.screen = page;
       this.search = search;
+      if(this.role==='doctor'&&page==='notifications'){this.renderNotifications(parent,this.alerts);return;}
       if (this.role === 'doctor' && !['profile','notifications'].includes(page)) this.renderDoctor(parent,page);
       else this.renderData(parent,page);
     }
@@ -276,7 +303,8 @@
     renderDoctor(parent,page) {
       if(page==='admissions'){this.admissionsView(parent);return;}
       if (page === 'home' && this.workspace) { this.ui.doctorDashboard(parent,this); return; }
-      if(['patients','laboratory'].includes(page)) {this.directoryView(parent,page==='laboratory');return;}
+      if(['patients','chart'].includes(page)) {this.recordsView(parent);return;}
+      if(page==='laboratory') {this.directoryView(parent,true);return;}
       if (page !== 'consultation') {
       const dayState = {day:this.day}, dayInput = this.field(parent,'Fecha de atención',dayState,'day','date');
       dayInput.addEventListener('change',() => { this.day = dayState.day; this.select(''); this.ui.run(() => this.load(page)); });
@@ -294,14 +322,13 @@
         return;
       }
       if (page === 'consultation') {
-        const filter=this.field(parent,'Estado de citas',this,'stateFilter','text',[['all','Todos'],['scheduled','Programadas'],['confirmed','Confirmadas'],['in_progress','En atención'],['completed','Atendidas'],['cancelled','Canceladas'],['no_show','No asistió']]);
-        filter.addEventListener('change',()=>this.ui.go('consultation'));
-        this.ui.doctorConsultations(parent,this);
-        if (workspace.appointments.length) { this.patientPicker(parent); this.consultationForm(parent); }
+        if(!this.appointment)this.ui.doctorConsultations(parent,this);
+        else this.consultationForm(parent);
         return;
       }
       if (page === 'notifications') { this.renderNotifications(parent,workspace.notifications); return; }
-      this.patientPicker(parent);
+      if (page === 'prescriptions') { const hero=this.node('header',null,'directory-hero'); hero.append(this.node('small','RECETAS'),this.node('h2','Receta médica'),this.node('p','Elige el paciente de tu agenda; la receta se emite dentro de su consulta abierta.')); parent.append(hero); }
+      const picker=this.node('section',null,'rx-patient-card');parent.append(picker);this.stepHead(picker,'','Paciente','Pacientes de tu agenda para la fecha elegida.','body');this.patientPicker(picker);
       if (page === 'chart') this.chartView(parent);
       if (page === 'laboratory') this.laboratoryForm(parent);
       if (page === 'prescriptions') this.prescriptionForm(parent);
@@ -312,33 +339,51 @@
       const wrap=this.node('section',null,'doctor-directory admission-module'),hero=this.node('header',null,'directory-hero');
       hero.append(this.node('small','INGRESOS HOSPITALARIOS'),this.node('h2','Solicita el cuidado que tu paciente necesita'),this.node('p','Tú indicas el motivo clínico. Recepción verifica disponibilidad y confirma la cama.'));wrap.append(hero);
       if(this.admissionsError){wrap.append(this.ui.row('No se pudieron cargar las solicitudes',this.admissionsError));this.command(wrap,'Reintentar solicitudes',()=>this.loadAdmissions());}
-      if(!this.admissionForm)this.command(wrap,'Nueva solicitud',async()=>{this.admissionForm=true;this.admissionReview=false;if(!this.directoryPage)await this.loadPatients();},true);
+      if(!this.admissionForm){const open=this.command(wrap,'Nueva solicitud',async()=>{this.admissionForm=true;this.admissionReview=false;this.directoryQuery='';},true);open.className+=' admission-new';}
       else{
-        const box=this.node('section',null,'admission-form-card');box.append(this.node('h2','Nueva solicitud de ingreso'));
+        const box=this.node('section',null,'admission-form-card admission-steps');box.append(this.node('h2','Nueva solicitud de ingreso'));
         if(this.pendingAdmission)box.append(this.node('p','Envío sin confirmar. Reintenta la misma solicitud para evitar duplicados.','auth-notice'));
         const patient=(this.pendingAdmission&&this.pendingAdmissionPatient)||this.selectedPatient||this.appointment;
         const fields=this.node('fieldset');fields.disabled=!!this.pendingAdmission||this.ui.busy()||this.admissionReview;
+        // Paso 1 (paridad con DoctorModuleView.admissionPatientStep): sin texto no se muestra ningún listado.
+        const step1=this.block(fields,'1','Paciente a hospitalizar','Busca por nombre, apellido o DUI entre tus pacientes autorizados.','body');
         if(patient){
-          this.detail(fields,'Paciente',patient.full_name||patient.patient_name);this.detail(fields,'Expediente',patient.record_number);
-          fields.append(this.ui.button('Cambiar paciente',()=>{this.select('');this.ui.repaint();},'text-button'));
+          const chosen=this.node('div',null,'admission-patient');const info=this.node('div');
+          info.append(this.node('strong',patient.full_name||patient.patient_name),this.node('small','Expediente '+(patient.record_number||'no disponible')+(patient.dui?' · DUI '+patient.dui:'')));
+          chosen.append(this.node('span',this.initials(patient.full_name||patient.patient_name),'directory-avatar'),info,this.ui.button('Cambiar paciente',()=>{this.select('');this.directoryQuery='';this.ui.repaint();},'text-button'));step1.append(chosen);
         }else{
-          fields.append(this.node('h3','1. Selecciona un paciente autorizado'));
-          const search=this.node('form',null,'directory-search');this.field(search,'Nombre, DUI o correo',this,'directoryQuery','search').maxLength=120;
-          const submit=this.node('button','Buscar pacientes','primary');submit.type='submit';search.append(submit);
-          search.addEventListener('submit',event=>{event.preventDefault();if(!this.ui.busy())this.ui.run(()=>this.loadPatients());});fields.append(search);
-          if(this.directoryError)fields.append(this.ui.row('No se pudo cargar el directorio',this.directoryError));
-          for(const p of this.patientDirectory){const button=this.ui.button(p.full_name+' · '+(p.record_number||'Sin expediente'),()=>this.ui.run(()=>this.openPatient(p)),'directory-patient');button.setAttribute('aria-label','Seleccionar paciente '+p.full_name);fields.append(button);}
-          if(!this.patientDirectory.length)fields.append(this.ui.row('Sin pacientes coincidentes','Busca entre tus pacientes autorizados.'));
-          if(this.directoryPage?.has_more)this.command(fields,'Cargar más pacientes',()=>this.loadPatients(true));
+          const search=this.node('form',null,'record-search');search.setAttribute('role','search');
+          const input=this.node('input');input.type='search';input.value=this.directoryQuery||'';input.maxLength=120;input.placeholder='Nombre, apellido o DUI';input.autocomplete='off';input.setAttribute('aria-label','Buscar paciente para hospitalizar');
+          search.append(this.node('span','⌕','record-search-icon'),input);step1.append(search);
+          const results=this.node('div',null,'record-results');step1.append(results);
+          const paint=()=>{
+            results.replaceChildren();const q=(this.directoryQuery||'').trim();
+            if(q.length<2){results.append(this.node('p','Escribe al menos 2 letras del nombre, apellido o DUI para buscar.','scope-note'));return;}
+            if(this.directoryLoading||this.lastDirectoryQuery!==q){results.append(this.node('p','Buscando pacientes…','scope-note'));return;}
+            if(this.directoryError){results.append(this.ui.row('No se pudo cargar el directorio',this.directoryError));return;}
+            if(!this.patientDirectory.length){results.append(this.node('p','Ningún paciente autorizado coincide con «'+q+'».','scope-note'));return;}
+            for(const p of this.patientDirectory){
+              const button=this.ui.button(null,()=>this.ui.run(()=>this.openPatient(p)),'record-result');button.setAttribute('aria-label','Seleccionar paciente '+p.full_name);
+              const text=this.node('div',null,'record-result-text');text.append(this.node('strong',p.full_name),this.node('small',[p.record_number?'Exp. '+p.record_number:'Sin expediente',p.dui?'DUI '+p.dui:'',p.age!=null?p.age+' años':''].filter(Boolean).join(' · ')));
+              button.append(this.node('span',this.initials(p.full_name),'directory-avatar'),text,this.node('span','+','directory-chevron'));results.append(button);
+            }
+            if(this.directoryPage?.has_more)results.append(this.ui.button('Cargar más pacientes',()=>this.ui.run(()=>this.loadPatients(true)),'module-action'));
+          };
+          const find=async()=>{const q=(this.directoryQuery||'').trim();if(q.length<2||q===this.lastDirectoryQuery){paint();return;}
+            this.directoryLoading=true;paint();try{await this.loadPatients();}catch(error){this.directoryError=error.message;}this.directoryLoading=false;if((this.directoryQuery||'').trim()===q)paint();};
+          input.addEventListener('input',()=>{this.directoryQuery=input.value;clearTimeout(this.searchTimer);paint();this.searchTimer=setTimeout(find,this.searchDelay??350);});
+          search.addEventListener('submit',event=>{event.preventDefault();clearTimeout(this.searchTimer);find();});
+          paint();
         }
-        this.detail(fields,'Médico solicitante',this.admissionsPage?.doctor_name);
-        fields.append(this.node('h3','2. Indica el cuidado requerido'));
-        this.field(fields,'Categoría de habitación',this.admission,'category','text',(this.admissionsPage?.categories||[]).map(c=>[c,category(c)]));
-        if(!this.admissionsPage?.categories.length)fields.append(this.node('p','No hay categorías disponibles en el catálogo. Actualiza o contacta a recepción.'));
-        this.field(fields,'Prioridad',this.admission,'priority','text',(this.admissionsPage?.priorities||[]).map(p=>[p,p==='urgente'?'Urgente':p==='normal'?'Normal':p]));
-        this.field(fields,'Motivo clínico del ingreso',this.admission,'reason','textarea').maxLength=10000;
-        this.field(fields,'Observaciones e indicaciones (opcional)',this.admission,'observations','textarea').maxLength=10000;
-        box.append(fields,this.node('p','La categoría solicitada no garantiza disponibilidad ni reserva habitación.','rose-note'));
+        const step2=this.block(fields,'2','Cuidado requerido','La categoría no garantiza disponibilidad ni reserva habitación.','grid');
+        this.field(step2,'Categoría de habitación',this.admission,'category','text',(this.admissionsPage?.categories||[]).map(c=>[c,category(c)]));
+        if(!this.admissionsPage?.categories.length)step2.append(this.node('p','No hay categorías disponibles en el catálogo. Actualiza o contacta a recepción.','scope-note'));
+        this.field(step2,'Prioridad',this.admission,'priority','text',(this.admissionsPage?.priorities||[]).map(p=>[p,p==='urgente'?'Urgente':p==='normal'?'Normal':p]));
+        this.detail(step2,'Médico solicitante',this.admissionsPage?.doctor_name);
+        const step3=this.block(fields,'3','Motivo clínico','Recepción lo usará para gestionar la cama.','stethoscope');
+        this.field(step3,'Motivo clínico del ingreso',this.admission,'reason','textarea').maxLength=10000;
+        this.field(step3,'Observaciones e indicaciones (opcional)',this.admission,'observations','textarea').maxLength=10000;
+        box.append(fields);
         if(this.admissionReview||this.pendingAdmission){
           const payload=this.pendingAdmission;
           box.append(this.node('h3','Confirma el envío a recepción'),this.node('p',category(payload?.p_kind||this.admission.category)+' · '+(payload?.p_priority||this.admission.priority)),this.node('p',payload?.p_reason||this.admission.reason));
@@ -353,7 +398,7 @@
       const header=this.node('div',null,'admission-list-header');header.append(this.node('h2','Mis solicitudes'));this.command(header,'Actualizar solicitudes',()=>this.loadAdmissions());wrap.append(header);
       if(!this.admissions.length&&!this.admissionsError)wrap.append(this.ui.row('Sin solicitudes','Todavía no has enviado solicitudes de ingreso.'));
       for(const item of this.admissions){
-        const card=this.ui.row(item.patient_name,category(item.category)+' · '+item.priority+' · '+dateTime(item.ordered_at),state(item.decision||item.status));
+        const card=this.ui.row(item.patient_name,category(item.category)+' · '+(item.priority==='urgente'?'Urgente':'Normal')+' · '+dateTime(item.ordered_at),state(item.decision||item.status));card.className+=' admission-card'+(item.priority==='urgente'?' is-urgent':'');
         const detail=this.node('details',null,'admission-detail');detail.append(this.node('summary','Ver detalle de la solicitud'));
         for(const[label,value]of [['Expediente',item.record_number],['Médico solicitante',item.doctor_name],['Motivo clínico',item.reason],['Observaciones',item.observations],['Respuesta de recepción',item.decision_reason]])if(value)this.detail(detail,label,value);
         if(item.assignment){this.detail(detail,'Habitación y cama',item.assignment.room+' · '+item.assignment.bed+' · '+item.assignment.floor);this.detail(detail,'Asignación confirmada',dateTime(item.assignment.assigned_at));}
@@ -363,6 +408,126 @@
       }
       if(this.admissionsPage?.has_more)this.command(wrap,'Cargar más solicitudes',()=>this.loadAdmissions(true));parent.append(wrap);
     }
+    // Expedientes del médico (paridad con DoctorRecordsView.swift): búsqueda con espera breve, expediente sin datos repetidos
+    // e historial de consultas finalizadas. La autorización la decide el servidor (treats_patient y e.doctor_id).
+    recordsView(parent) {
+      const wrap=this.node('section',null,'doctor-records');parent.append(wrap);
+      const real=value=>value!=null&&String(value).trim()!=='';
+      if(!this.selectedPatient&&this.appointment){const a=this.appointment;this.selectedPatient=this.patientDirectory.find(p=>p.id===a.patient_id)||{id:a.patient_id,full_name:a.patient_name,record_number:a.record_number,phone:a.phone,age:a.age,active_encounter_id:a.encounter_id};}
+      const patient=this.selectedPatient;
+      if(!patient){
+        const hero=this.node('header',null,'directory-hero');
+        hero.append(this.node('small','EXPEDIENTES'),this.node('h2','Encuentra un expediente al instante'),this.node('p','Busca por nombre, apellido, DUI, código de paciente o de expediente. Solo aparecen pacientes que tienes autorización para atender.'));
+        wrap.append(hero);
+        const form=this.node('form',null,'record-search');form.setAttribute('role','search');
+        const input=this.node('input');input.type='search';input.value=this.directoryQuery||'';input.maxLength=120;input.placeholder='Nombre, apellido, DUI o código';input.setAttribute('aria-label','Buscar expediente');input.autocomplete='off';
+        const status=this.node('span',null,'record-search-status');status.setAttribute('aria-live','polite');
+        form.append(this.node('span','⌕','record-search-icon'),input,status);wrap.append(form);
+        const results=this.node('div',null,'record-results');wrap.append(results);
+        const paint=()=>{
+          results.replaceChildren();
+          const query=(this.directoryQuery||'').trim();
+          status.textContent=this.directoryLoading?'Buscando…':'';
+          if(this.directoryError){results.append(this.ui.row('No se pudo cargar el directorio',this.directoryError));results.append(this.ui.button('Reintentar búsqueda',()=>search(true),'module-action'));return;}
+          if(this.directoryPage)results.append(this.node('p',query?this.directoryPage.total+' '+(this.directoryPage.total===1?'resultado':'resultados')+' para «'+query+'»':'Tus pacientes autorizados · '+this.directoryPage.total,'record-count'));
+          if(this.directoryPage&&!this.patientDirectory.length){const empty=this.node('article',null,'record-empty');empty.append(this.node('span','🔍','record-empty-icon'),this.node('strong','Sin coincidencias'),this.node('p',query?'Ningún paciente autorizado coincide con la búsqueda. Revisa el nombre, el DUI o el código.':'Todavía no tienes pacientes asignados.','sched-hint'));results.append(empty);}
+          for(const item of this.patientDirectory){
+            const card=this.ui.button(null,()=>this.ui.run(()=>this.openPatient(item)),'record-result');card.setAttribute('aria-label','Abrir expediente de '+item.full_name);
+            const text=this.node('div',null,'record-result-text');text.append(this.node('strong',item.full_name));
+            const chips=this.node('div',null,'record-chips');
+            for(const [show,label] of [[item.patient_code,'Código '+item.patient_code],[item.record_number,'Exp. '+item.record_number],[item.dui,'DUI '+item.dui],[item.age!=null?String(item.age):'',item.age+' años']])if(real(show))chips.append(this.node('span',label,'record-chip'));
+            const states=this.node('div',null,'record-chips');states.append(this.node('span',item.record_number?'✓ Expediente activo':'Sin expediente vinculado','record-state'+(item.record_number?' is-ok':' is-warn')));
+            if(item.active_encounter_id)states.append(this.node('span','En consulta','record-state is-ok'));
+            text.append(chips,states);card.append(this.node('span',this.initials(item.full_name),'directory-avatar'),text,this.node('span','›','directory-chevron'));results.append(card);
+          }
+          if(this.directoryPage?.has_more)results.append(this.ui.button('Cargar más resultados',()=>this.ui.run(()=>this.loadPatients(true)),'module-action'));
+        };
+        // Espera breve; no repite la misma consulta; actualiza solo los resultados para no perder el foco del buscador.
+        const search=async force=>{
+          const query=(this.directoryQuery||'').trim();
+          if(!force&&query===this.lastDirectoryQuery)return;
+          this.directoryLoading=true;paint();
+          try{await this.loadPatients();}catch(error){this.directoryError=error.message;}
+          this.directoryLoading=false;if((this.directoryQuery||'').trim()===query)paint();
+        };
+        input.addEventListener('input',()=>{this.directoryQuery=input.value;clearTimeout(this.searchTimer);this.searchTimer=setTimeout(()=>search(false),this.searchDelay??350);});
+        form.addEventListener('submit',event=>{event.preventDefault();clearTimeout(this.searchTimer);search(true);});
+        paint();return;
+      }
+      wrap.append(this.ui.button('← Volver a la búsqueda',()=>{this.stopRecordRefresh();this.select('');this.ui.repaint();},'text-button'));
+      const chart=this.chart?.patient?.id===patient.id?this.chart:null,p=chart?.patient||{};
+      const header=this.node('article',null,'record-header');
+      const top=this.node('div',null,'record-header-top'),name=this.node('div');
+      name.append(this.node('small','EXPEDIENTE CLÍNICO','consultation-kicker'),this.node('h2',p.full_name||patient.full_name));
+      top.append(this.node('span',this.initials(patient.full_name),'consult-avatar'),name);header.append(top);
+      const pills=this.node('div',null,'consultation-pills'),code=p.patient_code||patient.patient_code,record=p.record_number||patient.record_number;
+      if(real(code))pills.append(this.node('span','Código '+code,'consultation-pill'));
+      pills.append(this.node('span',record?'Expediente '+record:'Sin expediente','consultation-pill'));
+      if(patient.age!=null)pills.append(this.node('span',patient.age+' años','consultation-pill'));
+      if(patient.active_encounter_id)pills.append(this.node('span','En consulta','consultation-pill'));
+      header.append(pills);
+      const birth=p.birth_date||patient.birth_date,rows=[['Fecha de nacimiento',real(birth)?new Intl.DateTimeFormat('es-SV',{dateStyle:'long',timeZone:'UTC'}).format(new Date(String(birth).slice(0,10)+'T00:00:00Z')):''],['DUI',p.identification||patient.dui],['Teléfono',p.phone||patient.phone],['Correo',p.email||patient.email],['Ciudad',p.address]];
+      const grid=this.node('div',null,'record-header-grid');let cells=0;for(const [label,value] of rows)if(real(value)){const cell=this.node('div');cell.append(this.node('small',label),this.node('strong',String(value)));grid.append(cell);cells++;}
+      if(cells)header.append(grid);
+      wrap.append(header);
+      if(!chart){wrap.append(this.node('p',this.ui.busy()?'Cargando expediente…':'No se pudo cargar el expediente.','scope-note'));if(!this.ui.busy())this.command(wrap,'Reintentar',()=>this.loadChart());return;}
+      // Información clínica: alergias y condiciones no se repiten en "Otros antecedentes".
+      const summary=this.node('section',null,'consultation-section clinical-card');wrap.append(summary);
+      const head=this.node('div',null,'consultation-block-head');const icon=this.node('span','✚','consultation-block-icon');const title=this.node('div');title.append(this.node('h3','Información clínica','clinical-section-title'),this.node('p','Antecedentes registrados en el expediente','scope-note'));head.append(icon,title);summary.append(head);
+      const grouped=['alergia','alergias','condicion','enfermedad'],others=(chart.medical_history||[]).filter(entry=>!grouped.includes(String(entry).split(':')[0].trim().toLowerCase()));
+      const groups=[['Grupo sanguíneo',real(chart.blood_type)?[chart.blood_type]:[]],['Alergias',chart.allergies||[]],['Condiciones',chart.conditions||[]],['Otros antecedentes',others],['Medicamentos registrados',chart.medications||[]]].filter(([,values])=>values.length);
+      if(!groups.length)summary.append(this.node('p','Sin antecedentes clínicos registrados.','scope-note'));
+      for(const [label,values] of groups)this.detail(summary,label,values.join('\n'));
+      const actions=this.node('div',null,'record-actions');
+      if(patient.active_encounter_id)actions.append(this.ui.button('Continuar consulta',()=>this.ui.go('consultation'),'module-action'));
+      actions.append(this.ui.button('Laboratorios',()=>this.ui.go('laboratory'),'module-action'),this.ui.button('Solicitar ingreso',()=>{this.admissionForm=true;this.ui.go('admissions');},'module-action'));
+      wrap.append(actions);
+      const entries=(chart.history||[]).filter(e=>e.status==='closed').sort((a,b)=>(Date.parse(b.started_at)||0)-(Date.parse(a.started_at)||0)||String(b.id).localeCompare(String(a.id)));
+      const toggle=this.ui.button((this.recordHistory?'OCULTAR HISTORIAL MÉDICO':'VER HISTORIAL MÉDICO'),()=>{this.recordHistory=!this.recordHistory;this.recordVisit='';this.ui.repaint();},'primary record-history-toggle');
+      toggle.setAttribute('aria-expanded',String(!!this.recordHistory));wrap.append(toggle,this.node('p',entries.length?entries.length+' '+(entries.length===1?'consulta finalizada':'consultas finalizadas'):'Sin consultas finalizadas','record-count'));
+      this.startRecordRefresh(patient.id);
+      if(!this.recordHistory)return;
+      const zone=clinical().zone,day=v=>new Intl.DateTimeFormat('es-SV',{dateStyle:'full',timeZone:zone}).format(new Date(v)),hour=v=>new Intl.DateTimeFormat('es-SV',{timeStyle:'short',timeZone:zone}).format(new Date(v));
+      const doctor=e=>e.doctor_name||this.workspace?.doctor_name||'Médico responsable';
+      const visit=entries.find(e=>e.id===this.recordVisit);
+      if(visit){
+        const box=this.node('section',null,'record-visit');box.setAttribute('role','region');box.setAttribute('aria-label','Detalle de consulta');
+        box.append(this.ui.button('← Volver al historial',()=>{this.recordVisit='';this.ui.repaint();},'text-button'));
+        const vh=this.node('div',null,'record-visit-head');vh.append(this.node('strong',day(visit.started_at)+' · '+hour(visit.started_at)),this.node('span','🩺 '+doctor(visit)));if(real(visit.specialty))vh.append(this.node('span',visit.specialty));if(real(visit.reason))vh.append(this.node('span','Motivo: '+visit.reason));box.append(vh);
+        const vitals=clinical().recordedVitals.filter(v=>real(visit.vitals?.[v.key]));
+        if(vitals.length){const g=this.node('div',null,'record-visit-group');g.append(this.node('h3','Datos físicos'));for(const v of vitals)this.detail(g,v.label+' ('+v.unit+')',String(visit.vitals[v.key]));const bmi=clinical().bmi(visit.vitals||{});if(bmi)this.detail(g,'IMC (calculado)',bmi+' kg/m²');box.append(g);}
+        const ev=this.node('div',null,'record-visit-group');ev.append(this.node('h3','Evaluación médica'));
+        for(const [label,value] of [['Síntomas',visit.subjective],['Diagnóstico',visit.assessment],['Código diagnóstico',visit.diagnosis_code],['Observaciones',visit.objective],['Tratamiento',visit.plan]])if(real(value))this.detail(ev,label,value);box.append(ev);
+        const rx=(chart.prescriptions||[]).filter(r=>r.encounter_id===visit.id),unlinked=(chart.prescriptions||[]).length&&(chart.prescriptions||[]).every(r=>!r.encounter_id);
+        const rg=this.node('div',null,'record-visit-group');rg.append(this.node('h3','Recetas'));
+        if(!rx.length)rg.append(this.node('p',unlinked?'El servidor todavía no indica a qué consulta pertenece cada receta. Puedes verlas en Recetas.':'No se emitieron recetas en esta consulta.','scope-note'));
+        for(const r of rx)this.detail(rg,r.code+' · '+(r.status==='pendiente'?'Pendiente de entrega':r.status),(r.lines||[]).join('\n'));box.append(rg);
+        const labs=(this.patientLabs||[]).filter(o=>o.encounter_id===visit.id),lg=this.node('div',null,'record-visit-group');lg.append(this.node('h3','Exámenes'));
+        if(!labs.length)lg.append(this.node('p','No se solicitaron exámenes en esta consulta.','scope-note'));
+        for(const o of labs)this.detail(lg,o.test_name+' · '+(o.published_at?'Resultado publicado':o.status),o.published_at&&real(o.result_summary)?o.result_summary:'Resultado aún no publicado.');
+        box.append(lg);wrap.append(box);return;
+      }
+      const timeline=this.node('section',null,'record-timeline');timeline.setAttribute('aria-label','Historial médico');wrap.append(timeline);
+      if(!entries.length){const empty=this.node('article',null,'record-empty');empty.append(this.node('span','📋','record-empty-icon'),this.node('strong','Todavía no hay historial'),this.node('p','Este paciente aún no tiene consultas finalizadas contigo. Las consultas abiertas no aparecen aquí.','sched-hint'));timeline.append(empty);return;}
+      const limit=this.recordLimit||10;
+      for(const entry of entries.slice(0,limit)){
+        const card=this.ui.button(null,()=>{this.recordVisit=entry.id;this.ui.repaint();},'record-entry');card.setAttribute('aria-label','Consulta del '+day(entry.started_at)+' a las '+hour(entry.started_at));
+        const top=this.node('div',null,'record-entry-top');top.append(this.node('strong',day(entry.started_at)),this.node('time',hour(entry.started_at)));card.append(top);
+        card.append(this.node('small','🩺 '+doctor(entry)+(real(entry.specialty)?' · '+entry.specialty:''),'record-entry-doctor'));
+        for(const [label,value] of [['Motivo',entry.reason],['Diagnóstico',entry.assessment],['Observaciones',entry.objective],['Tratamiento',entry.plan]])if(real(value)){const line=this.node('div',null,'record-entry-line');line.append(this.node('span',label),this.node('p',value));card.append(line);}
+        timeline.append(card);
+      }
+      if(entries.length>limit)timeline.append(this.ui.button('Mostrar consultas anteriores ('+(entries.length-limit)+')',()=>{this.recordLimit=limit+10;this.ui.repaint();},'module-action'));
+    }
+    // Actualización periódica del expediente abierto; se descarta si cambió la selección o la pantalla.
+    startRecordRefresh(patient){
+      if(this.recordTimerPatient===patient)return;this.stopRecordRefresh();this.recordTimerPatient=patient;
+      this.recordTimer=setInterval(async()=>{
+        if(this.selectedPatient?.id!==patient||!['patients','chart'].includes(this.screen)||this.ui.busy())return;
+        try{const chart=await this.api.operation('patientChart',{p_patient:patient,p_from:null,p_to:null,p_query:''});if(this.selectedPatient?.id===patient){this.context=this.chart=chart;this.ui.repaint();}}catch{/* Se conserva lo mostrado. */}
+      },60000);this.recordTimer?.unref?.();
+    }
+    stopRecordRefresh(){clearInterval(this.recordTimer);this.recordTimer=null;this.recordTimerPatient=null;}
     directoryView(parent,laboratory) {
       const wrap=this.node('section',null,'doctor-directory'),hero=this.node('header',null,'directory-hero');
       hero.append(this.node('small',laboratory?'LABORATORIOS':'MIS PACIENTES'),this.node('h2',laboratory?'Un paciente, toda su información':'Tus pacientes, siempre a mano'),
@@ -410,39 +575,236 @@
     }
     initials(name) { return String(name||'').split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase(); }
     renderNotifications(parent,notifications) {
-      parent.append(this.node('h2','Notificaciones recientes','section-title'));
-      const items = notifications.filter(item => this.matches(item.title+' '+item.body,this.search));
+      const heading=this.node('article',null,'doctor-alert-heading');
+      heading.append(this.node('span','🔔','doctor-alert-symbol'),this.node('h2','Tu centro de avisos'),this.node('p',this.unreadAlerts+' sin leer · Citas y novedades del hospital'));
+      parent.append(heading,this.node('p','Recordatorio 15 minutos antes. Los avisos se actualizan mientras la vista está abierta.','scope-note'));
+      if(this.alertsError)parent.append(this.node('p',this.alertsError,'scope-note'));
+      this.command(parent,'Actualizar avisos',()=>this.loadAlerts());
+      const items = [...notifications].sort((a,b)=>b.created_at.localeCompare(a.created_at)).filter(item => this.matches(item.title+' '+item.body,this.search));
       if (!items.length) parent.append(this.ui.row('Sin notificaciones','No hay avisos recientes.'));
       for (const item of items) {
-        const card = this.ui.row(item.title,item.body,item.read_at ? 'Leída' : 'No leída'); card.append(this.node('p',dateTime(item.created_at)));
+        const card = this.ui.row(item.title,item.body,item.read_at ? 'Leída' : 'No leída');card.className+=' doctor-alert-card'+(item.read_at?'':' is-unread'); card.append(this.node('p',dateTime(item.created_at)));
         if (!item.read_at) this.command(card,'Marcar como leída',() => this.mutation('updateItem',{p_resource:'notifications',p_id:item.id,p_values:{read_at:new Date().toISOString()},p_expected_version:item.row_version},'Notificación leída.')); parent.append(card);
       }
+      if(this.alertsHaveMore)this.command(parent,'Cargar más avisos',()=>this.loadAlerts(true));
+    }
+    // Flujo de consulta (paridad con DoctorModuleView.swift): detalle → apertura → bloques A–C → guardado → finalización.
+    snapshot(){const vitals=Object.fromEntries(Object.entries(this.vitals).filter(([,v])=>String(v??'').trim()!=='').sort(([a],[b])=>a.localeCompare(b)));return JSON.stringify({...this.consultation,vitals});}
+    get pendingChanges(){return this.savedNote!==null&&this.snapshot()!==this.savedNote;}
+    finishBlockers(){
+      const values=clinical().missingSections(this.consultation).map(name=>'Completa: '+name);
+      if(Object.keys(clinical().vitalIssues(this.vitals)).length)values.push('Corrige los datos físicos marcados');
+      if(this.lines.length)values.push('Emite o retira los medicamentos de la receta en preparación');
+      if(this.conflict)values.push('Resuelve la diferencia con la versión guardada');
+      return values;
+    }
+    // doctor_native_save con control de versión. Ante un error lo escrito permanece; ante un conflicto se muestra la versión real.
+    async saveNote(){
+      const encounter=this.encounter;
+      if(!encounter||encounter.status!=='open')throw new Error('La consulta no está abierta para edición.');
+      if(this.conflict)throw new Error('Resuelve primero la diferencia con la versión guardada.');
+      if(!Object.values(this.consultation).every(v=>v.length<=10000)||this.consultation.diagnosis_code.length>50){this.saveState='failed';throw new Error('Cada sección admite hasta 10 000 caracteres y el código hasta 50.');}
+      const issue=Object.values(clinical().vitalIssues(this.vitals))[0];
+      if(issue){this.saveState='failed';throw new Error('Revisa los datos físicos: '+issue);}
+      const vitals=Object.fromEntries(Object.entries(this.vitals).filter(([,v])=>String(v??'').trim()!==''));
+      this.saveState='saving';
+      try{await this.api.operation('saveConsultation',{p_encounter:encounter.id,p_values:{...this.consultation,vitals},p_expected_version:this.noteVersion,p_request_key:this.keys.save});}
+      catch(error){
+        this.saveState='failed';
+        if(error.code==='40001'){
+          const patient=this.selectedPatient?.id||this.appointment?.patient_id;
+          this.context=this.chart=await this.api.operation('patientChart',{p_patient:patient,p_from:null,p_to:null,p_query:''});
+          this.conflict=this.encounter||null;
+          throw new Error('Otra sesión guardó esta consulta. Revisa la versión guardada antes de sobrescribirla.');
+        }
+        throw error;
+      }
+      this.keys.save=root.crypto.randomUUID();this.seedDraft=true;this.saveState='saved';
+      try{await this.load(this.screen);}catch{throw new Error('Consulta guardada. No se pudo recargar; usa Actualizar.');}
+      this.ui.message('Consulta guardada correctamente.');
+    }
+    async resolveConflict(keepMine){
+      const server=this.conflict;if(!server)return;
+      this.conflict=null;this.noteID=server.note_id||null;this.noteVersion=server.note_version??0;
+      const mine={consultation:{...this.consultation},vitals:{...this.vitals}};
+      for(const key of Object.keys(this.consultation))this.consultation[key]=server[key]||'';
+      this.vitals={...(server.vitals||{})};this.savedNote=this.snapshot();
+      if(keepMine){this.consultation=mine.consultation;this.vitals=mine.vitals;await this.saveNote();}
+      else this.saveState='idle';
+    }
+    // Guarda los cambios pendientes y después ejecuta doctor_native_finish con la versión recién guardada.
+    async finishConsultation(){
+      const blockers=this.finishBlockers();
+      if(blockers.length){this.finishConfirm=false;throw new Error(blockers.join('. ')+'.');}
+      await this.saveNote();
+      const saved=this.encounter;
+      if(!saved?.note_id||saved.status!=='open')throw new Error('Actualiza la consulta antes de finalizar.');
+      // Hasta aplicar supabase/doctor-consultation-six-fields.sql el servidor exige `plan`; se informa sin cerrar ni perder datos.
+      try{await this.api.operation('closeConsultation',{p_encounter:saved.id,p_note:saved.note_id,p_note_version:saved.note_version,p_expected_version:saved.row_version});}
+      catch(error){const message=clinical().finishError(error.detail||'',this.consultation);if(message===(error.detail||''))throw error;throw new Error(message);}
+      this.select('');
+      try{await this.load('consultation');}catch{/* La consulta ya quedó finalizada; la agenda se recarga con Actualizar. */}
+      this.ui.message('Consulta finalizada. La información quedó registrada en el expediente del paciente.');
     }
     consultationForm(parent) {
-      if (!this.appointment) return;
-      if (!this.appointment.encounter_id) {
-        const button = this.command(parent,'Iniciar consulta',() => this.mutation('startConsultation',{p_appointment:this.selected,p_request_key:this.keys.start},'Consulta iniciada.',() => { this.keys.start = root.crypto.randomUUID(); this.seedDraft = true; }),true);
-        button.disabled ||= !['scheduled','confirmed','in_progress'].includes(this.appointment.status); return;
+      const appointment=this.appointment;if(!appointment)return;
+      const open=this.encounter?.status==='open';
+      const back=this.ui.button('← Volver a la agenda',()=>{if(open&&this.pendingChanges){this.leaveConfirm=true;this.ui.repaint();}else{this.select('');this.ui.repaint();}},'text-button');
+      parent.append(back);
+      if(this.leaveConfirm){
+        const box=this.node('section',null,'consultation-leave');box.setAttribute('role','alertdialog');box.setAttribute('aria-label','Tienes cambios sin guardar');
+        box.append(this.node('h3','Tienes cambios sin guardar'),this.node('p','Lo escrito desde el último guardado se perderá si sales sin guardar.'));
+        this.command(box,'Guardar y volver a la agenda',async()=>{this.leaveConfirm=false;await this.saveNote();this.select('');},true);
+        box.append(this.ui.button('Salir sin guardar',()=>{this.leaveConfirm=false;this.select('');this.ui.repaint();},'module-action'),this.ui.button('Seguir en la consulta',()=>{this.leaveConfirm=false;this.ui.repaint();},'text-button'));
+        parent.append(box);
       }
-      const encounter = this.encounter; if (!encounter) return;
-      if (encounter.status !== 'open') { for (const [key,label] of [['subjective','Motivo'],['objective','Exploración'],['assessment','Evaluación'],['plan','Plan']]) this.detail(parent,label,encounter[key]); return; }
-      const {form,finish} = this.form(parent,'Guardar consulta',async () => {
-        if (!Object.values(this.consultation).every(value => value.length <= 10000)) throw new Error('Los campos de la consulta exceden el límite.');
-        await this.mutation('saveConsultation',{p_encounter:encounter.id,p_values:{...this.consultation,vitals:{...this.vitals}},p_expected_version:this.noteVersion,p_request_key:this.keys.save},'Borrador guardado.',() => { this.keys.save = root.crypto.randomUUID(); this.seedDraft = true; });
-      });
-      for (const [key,label] of [['subjective','Motivo y síntomas'],['objective','Exploración física'],['assessment','Diagnóstico y evaluación clínica'],['plan','Plan e indicaciones']]) this.field(form,label,this.consultation,key,'textarea');
-      this.field(form,'Código diagnóstico opcional (sin catálogo publicado)',this.consultation,'diagnosis_code');
-      for(const [key,label] of [['weight_kg','Peso (kg)'],['height_cm','Altura (cm)'],['systolic','Presión sistólica'],['diastolic','Presión diastólica'],['temperature_c','Temperatura (°C)'],['heart_rate','Frecuencia cardíaca']])this.field(form,label,this.vitals,key,'number');
-      finish();
-      for(const [target,label] of [['chart','Revisar expediente'],['laboratory','Emitir orden de laboratorio'],['prescriptions','Emitir receta'],['admissions','Solicitar ingreso hospitalario']])parent.append(this.ui.button(label,()=>{if(target==='admissions')this.admissionForm=true;this.ui.go(target);},'text-button'));
-      if (encounter.note_id) {
-        const details = this.node('details'); details.append(this.node('summary','Firmar y cerrar consulta'));
-        this.command(details,'Confirmar firma y cierre',async () => {
-          if (Object.keys(this.consultation).some(key => this.consultation[key] !== (encounter[key] || ''))) throw new Error('Guarda los cambios antes de cerrar la consulta.');
-          if(JSON.stringify(this.vitals)!==JSON.stringify(encounter.vitals||{})||this.lines.length)throw new Error('Guarda los signos vitales y emite o retira los medicamentos pendientes antes de cerrar.');
-          await this.mutation('closeConsultation',{p_encounter:encounter.id,p_note:encounter.note_id,p_note_version:encounter.note_version,p_expected_version:encounter.row_version},'Consulta firmada y cerrada.');
-        }); parent.append(details);
+      this.patientHero(parent,appointment);
+      if(!appointment.encounter_id){
+        this.consultationInfo(parent,appointment,null);
+        const reported=this.block(parent,'','Síntomas reportados','Podrás revisarlos y precisarlos al abrir la consulta.','list');
+        this.reportedSymptoms(reported,appointment);
+        const blocker=clinical().openingBlocker(appointment);
+        const start=this.command(parent,'ABRIR CONSULTA MÉDICA',()=>this.mutation('startConsultation',{p_appointment:this.selected,p_request_key:this.keys.start},'Consulta abierta. Estado: En consulta.',()=>{this.keys.start=root.crypto.randomUUID();this.seedDraft=true;}),true);
+        start.className+=' consultation-open';start.disabled||=!!blocker;
+        if(blocker)parent.append(this.node('p',blocker,'auth-notice'));
+        return;
       }
+      const encounter=this.encounter;
+      if(!encounter){parent.append(this.ui.row('Consulta no cargada','Actualiza para continuar; lo escrito no se envía hasta guardar.'));this.command(parent,'Actualizar consulta',()=>this.loadChart());return;}
+      if(encounter.status!=='open'){
+        const done=this.node('article',null,'consultation-done');done.append(this.node('h3','✓ Consulta finalizada'),this.node('p','La información quedó registrada en el expediente y en el historial del paciente. Ya no puede editarse desde la app.'));
+        parent.append(done);this.consultationRecord(parent,encounter);return;
+      }
+      if(this.panel){this.clinicalPanel(parent,appointment);return;}
+      const editor=this.node('div',null,'consultation-editor');parent.append(editor);
+      const status=this.node('div',null,'consultation-save-state');status.setAttribute('role','status');
+      const statusText=this.node('span');status.append(statusText);
+      const refreshStatus=()=>{statusText.textContent=this.saveState==='saving'?'Guardando…':this.saveState==='failed'?'Error al guardar · Lo escrito sigue en pantalla.':this.pendingChanges?'Cambios pendientes de guardar':this.saveState==='saved'?'Guardado correctamente':'Sin cambios pendientes';status.setAttribute('data-state',this.pendingChanges&&this.saveState!=='failed'?'pending':this.saveState);};
+      refreshStatus();this.command(status,'Guardar avances',()=>this.saveNote());editor.append(status);
+      editor.addEventListener('input',refreshStatus);
+      if(this.conflict){
+        const box=this.node('section',null,'consultation-conflict');box.append(this.node('h3','Otra sesión guardó esta consulta'),this.node('p','Esta es la versión guardada en el expediente. Elige cuál conservar; nada se sobrescribe sin tu confirmación.'));
+        for(const [key,label] of [['subjective','Síntomas guardados'],['assessment','Diagnóstico guardado'],['objective','Observaciones guardadas']])this.detail(box,label,this.conflict[key]||'Sin registrar');
+        this.command(box,'Usar la versión guardada',()=>this.resolveConflict(false));this.command(box,'Conservar lo que escribí y guardar',()=>this.resolveConflict(true),true);editor.append(box);
+      }
+      this.consultationInfo(editor,appointment,encounter);
+      const history=this.node('details',null,'consultation-history clinical-card');history.append(this.node('summary','Expediente e historial previo'));this.chartView(history);editor.append(history);
+      // A. Datos físicos: peso, altura y temperatura (public.vital_signs, rangos de doctor_native_save).
+      // Las medidas antiguas que ya no se capturan siguen en this.vitals y se reenvían sin cambios.
+      const measures=this.block(editor,'A','Datos físicos','Registra solo lo que midas; los campos vacíos no se guardan.','body');
+      const grid=this.node('div',null,'consultation-measures');measures.append(grid);
+      const bmi=this.node('p',null,'consultation-bmi');bmi.setAttribute('aria-live','polite');
+      const issues={};
+      const paintIssues=()=>{const found=clinical().vitalIssues(this.vitals);for(const v of clinical().vitals){issues[v.key].textContent=found[v.key]||this.range(v);issues[v.key].setAttribute('data-state',found[v.key]?'error':'hint');}const value=clinical().bmi(this.vitals);bmi.textContent=value?'IMC calculado: '+value+' kg/m² · no se guarda como medición.':'';bmi.hidden=!value;};
+      const icons={weight_kg:'⚖️',height_cm:'📏',temperature_c:'🌡️'};
+      for(const v of clinical().vitals){
+        const holder=this.node('div',null,'consultation-measure');grid.append(holder);
+        holder.append(this.node('span',icons[v.key]||'•','consultation-measure-icon'));
+        const input=this.field(holder,v.label+' ('+v.unit+')',this.vitals,v.key,'text');input.inputMode='decimal';input.autocomplete='off';input.placeholder='—';
+        holder.append(this.node('span',v.unit,'consultation-unit'));
+        const issue=this.node('small',null,'consultation-issue');issue.setAttribute('aria-live','polite');holder.append(issue);issues[v.key]=issue;
+        input.addEventListener('input',()=>{const clean=clinical().sanitize(input.value,v.integer);if(clean!==input.value)input.value=clean;if(clean)this.vitals[v.key]=clean;else delete this.vitals[v.key];paintIssues();});
+      }
+      measures.append(bmi);paintIssues();
+      // B. Síntomas → subjective, Diagnóstico → assessment (y public.diagnoses), Observaciones → objective.
+      const evaluation=this.block(editor,'B','Evaluación médica','Los tres campos son obligatorios para finalizar la consulta.','stethoscope');
+      const note=(label,key,placeholder,hint,before)=>{
+        const holder=this.node('div',null,'consultation-note');evaluation.append(holder);
+        const done=String(this.consultation[key]||'').trim()!=='';
+        const badge=this.node('small',done?'Completo':'Obligatorio','consultation-required');badge.setAttribute('data-state',done?'done':'missing');holder.append(badge);
+        if(before)before(holder);
+        const input=this.field(holder,label,this.consultation,key,'textarea');input.maxLength=10000;input.required=true;input.placeholder=placeholder;input.rows=5;
+        input.addEventListener('input',()=>{const ok=input.value.trim()!=='';badge.textContent=ok?'Completo':'Obligatorio';badge.setAttribute('data-state',ok?'done':'missing');});
+        if(hint)holder.append(this.node('small',hint,'scope-note'));
+      };
+      note('Síntomas que presentaba','subjective','Describe los síntomas, cuándo iniciaron y cómo han evolucionado','Se precargó con lo que envió el paciente; revísalo y precísalo.',holder=>this.reportedSymptoms(holder,appointment));
+      note('Diagnóstico','assessment','Diagnóstico principal y, si aplica, diagnósticos adicionales');
+      note('Observaciones','objective','Hallazgos de la exploración, indicaciones y recomendaciones');
+      // C. Formularios existentes de laboratorio y receta, abiertos sin salir de la consulta.
+      const services=this.block(editor,'C','Servicios adicionales','Opcionales. Quedan asociados a esta consulta.','grid');
+      const service=(label,caption,badge,open)=>{
+        const card=this.node('div',null,'consultation-service');services.append(card);
+        const button=this.command(card,label,open,true);button.className+=' consultation-action';
+        card.append(this.node('p',caption,'scope-note'));if(badge)card.append(this.node('small',badge,'consultation-service-badge'));
+      };
+      service('Solicitar exámenes','Elige pruebas del catálogo de laboratorio y revísalas antes de enviarlas.',this.pendingLabs?'Envío pendiente de confirmar':'',async()=>{this.panel='labs';if(!this.labTests.length)await this.loadLabCatalog();});
+      service('Recetar medicamentos','Añade uno o varios medicamentos y revisa la receta antes de emitirla.',this.lines.length?this.lines.length+' medicamento(s) sin emitir':'',async()=>{this.panel='rx';});
+      const finish=this.node('section',null,'consultation-finish clinical-card');
+      const blockers=this.finishBlockers();
+      if(blockers.length){const list=this.node('div',null,'consultation-blockers');list.append(this.node('strong','Para finalizar falta'));for(const b of blockers)list.append(this.node('p','○ '+b));finish.append(list);}
+      else finish.append(this.node('p','✓ Todo listo para finalizar','consultation-ready'));
+      this.command(finish,'Guardar consulta',()=>this.saveNote());
+      const close=this.command(finish,'FINALIZAR CONSULTA',async()=>{const blockers=this.finishBlockers();if(blockers.length)throw new Error('Para finalizar falta: '+blockers.join('. ')+'.');this.finishConfirm=true;},true);close.className+=' consultation-finish-button';
+      editor.append(finish);
+      if(this.finishConfirm){
+        // Cancelar este cuadro solo vuelve a la consulta: no cancela la cita ni modifica datos.
+        const dialog=this.node('section',null,'consultation-confirm');dialog.setAttribute('role','alertdialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-labelledby','finish-title');
+        const title=this.node('h2','¿Estás seguro de que deseas finalizar esta consulta?');title.id='finish-title';
+        dialog.append(title,this.node('p','Una vez finalizada, la información clínica quedará registrada en el expediente del paciente y la consulta pasará al historial médico.'));
+        const buttons=this.node('div',null,'consultation-confirm-actions');
+        buttons.append(this.ui.button('Volver a la consulta',()=>{this.finishConfirm=false;this.ui.repaint();},'module-action'));
+        this.command(buttons,'Confirmar y finalizar',async()=>{this.finishConfirm=false;await this.finishConsultation();},true);
+        dialog.append(buttons);parent.append(dialog);
+      }
+    }
+    stepHead(parent,letter,title,caption,icon){
+      const head=this.node('div',null,'consultation-block-head');const mark=this.node('span',{body:'🧍',stethoscope:'🩺',grid:'➕',list:'📋',calendar:'📅',lab:'🧪',rx:'💊',sign:'✍️'}[icon]||'•','consultation-block-icon');
+      if(letter)mark.append(this.node('b',letter,'consultation-block-letter'));
+      const text=this.node('div');text.append(this.node('h3',letter?letter+'. '+title:title,'clinical-section-title'));if(caption)text.append(this.node('p',caption,'scope-note'));
+      head.append(mark,text);parent.append(head);return head;
+    }
+    range(v){return (v.lowerExclusive?'Mayor que ':'Desde ')+v.min+' hasta '+v.max+' '+v.unit+' · opcional';}
+    block(parent,letter,title,caption,icon){
+      const group=this.node('section',null,'consultation-section clinical-card');const head=this.node('div',null,'consultation-block-head');
+      const mark=this.node('span',{body:'🧍',stethoscope:'🩺',grid:'➕',list:'📋',calendar:'📅'}[icon]||'•','consultation-block-icon');
+      if(letter)mark.append(this.node('b',letter,'consultation-block-letter'));
+      const text=this.node('div');text.append(this.node('h3',letter?letter+'. '+title:title,'clinical-section-title'));if(caption)text.append(this.node('p',caption,'scope-note'));
+      head.append(mark,text);group.append(head);parent.append(group);return group;
+    }
+    // Tarjeta del paciente: nombre, código (si el servidor lo publica), expediente, edad y estado.
+    patientHero(parent,appointment){
+      const hero=this.node('article',null,'consultation-patient');
+      const top=this.node('div',null,'consultation-patient-top');
+      const name=this.node('div');name.append(this.node('small','PACIENTE','consultation-kicker'),this.node('h2',appointment.patient_name));
+      top.append(this.node('span',this.initials(appointment.patient_name),'consult-avatar'),name);hero.append(top);
+      const pills=this.node('div',null,'consultation-pills');
+      const code=appointment.patient_code||(this.context?.patient?.id===appointment.patient_id?this.context?.patient?.patient_code:null);
+      if(code)pills.append(this.node('span','Código '+code,'consultation-pill'));
+      pills.append(this.node('span','Expediente '+(appointment.record_number||'no disponible'),'consultation-pill'),this.node('span',appointment.age==null?'Edad no registrada':appointment.age+' años','consultation-pill'),this.node('strong',clinical().statusLabel(appointment.status),'consultation-status'));
+      hero.append(pills);parent.append(hero);
+    }
+    reportedSymptoms(parent,appointment){
+      const box=this.node('div',null,'consultation-reported');box.append(this.node('small','Referidos por el paciente en su solicitud','consultation-kicker'));
+      const symptoms=(appointment.symptoms||[]).map(s=>String(s).trim()).filter(Boolean),other=String(appointment.other_symptoms||'').trim();
+      if(!symptoms.length&&!other)box.append(this.node('p','El paciente no indicó síntomas en la solicitud.','scope-note'));
+      const chips=this.node('div',null,'consultation-chips');for(const s of symptoms)chips.append(this.node('span',s,'consultation-chip'));if(symptoms.length)box.append(chips);
+      if(other)box.append(this.node('p','Otros: '+other));parent.append(box);
+    }
+    // Datos de la cita y de la solicitud, cargados automáticamente. Solo lectura.
+    consultationInfo(parent,appointment,encounter){
+      const info=this.block(parent,'','Datos de la cita','Información registrada por recepción y por el paciente.','calendar');const grid=this.node('div',null,'consultation-info-grid');info.append(grid);
+      const start=clinical().start(appointment),zone=clinical().zone;
+      const day=start?new Intl.DateTimeFormat('es-SV',{dateStyle:'full',timeZone:zone}).format(start):'No disponible';
+      const time=date=>new Intl.DateTimeFormat('es-SV',{timeStyle:'short',timeZone:zone}).format(date);
+      const hours=start?time(start)+(appointment.duration_minutes>0?' – '+time(new Date(start.getTime()+appointment.duration_minutes*60000)):''):'No disponible';
+      const rows=[['📅','Fecha de la consulta',day.charAt(0).toUpperCase()+day.slice(1)],['🕒','Hora de la consulta',hours],['🩺','Médico responsable',this.workspace?.doctor_name||'No disponible'],['🏥','Especialidad',appointment.specialty||'Cita directa de recepción'],['🚪','Consultorio',appointment.room_code||'No asignado']];
+      if(encounter)rows.push(['▶️','Consulta abierta a las',time(new Date(encounter.started_at))]);
+      else if(appointment.ticket_number)rows.push(['🎫','Turno',appointment.ticket_number]);
+      for(const [icon,label,value] of rows){const tile=this.node('div',null,'consultation-tile');tile.append(this.node('span',icon,'consultation-tile-icon'));this.detail(tile,label,value);grid.append(tile);}
+      const reason=this.node('div',null,'consultation-reason');reason.append(this.node('strong','Motivo de consulta enviado por el paciente'),this.node('p',appointment.reason||'La cita no tiene una solicitud de atención vinculada.'));info.append(reason);
+    }
+    clinicalPanel(parent,appointment){
+      const panel=this.node('section',null,'consultation-panel');panel.setAttribute('role','region');panel.setAttribute('aria-label',this.panel==='labs'?'Solicitar exámenes':'Recetar medicamento');
+      panel.append(this.ui.button('← Volver a la consulta',()=>{this.panel='';this.rxReview=false;this.ui.repaint();},'text-button'),this.node('h2',this.panel==='labs'?'Solicitar exámenes':'Recetar medicamento'),this.node('p',appointment.patient_name+' · Expediente '+appointment.record_number,'scope-note'));
+      if(this.panel==='labs'){panel.append(this.node('p','Las órdenes quedarán asociadas a esta consulta. El laboratorio registrará y validará los resultados.','scope-note'));this.labSelectionView(panel);}
+      else this.prescriptionForm(panel);
+      parent.append(panel);
+    }
+    consultationRecord(parent,encounter){
+      const card=this.ui.row(dateTime(encounter.started_at),'',encounter.status==='open'?'En consulta':'Finalizada');
+      for(const [key,label] of [['subjective','Síntomas que presentaba'],['assessment','Diagnóstico'],['diagnosis_code','Código diagnóstico'],['objective','Observaciones'],['plan','Plan de tratamiento (registro anterior)']])if(String(encounter[key]||'').trim())this.detail(card,label,encounter[key]);
+      for(const v of clinical().recordedVitals)if(encounter.vitals?.[v.key]!=null)this.detail(card,v.label+' ('+v.unit+')',encounter.vitals[v.key]);
+      const bmi=clinical().bmi(encounter.vitals||{});if(bmi)this.detail(card,'IMC (calculado)',bmi+' kg/m²');parent.append(card);
     }
     chartView(parent) {
       if (!this.chart) return;
@@ -456,7 +818,7 @@
         if (this.filters.from && this.filters.to && this.filters.from > this.filters.to) throw new Error('Revisa las fechas del historial.');
         this.chart = await this.api.operation('patientChart',{p_patient:this.selectedPatient?.id||this.appointment?.patient_id,p_from:this.filters.from ? new Date(this.filters.from).toISOString() : null,p_to:this.filters.to ? new Date(this.filters.to).toISOString() : null,p_query:this.search});
       }); parent.append(filters);
-      for (const encounter of this.chart.history) { const card = this.ui.row(dateTime(encounter.started_at),'',labels[encounter.status]); for (const key of ['subjective','objective','assessment','plan']) if (encounter[key]) card.append(this.node('p',encounter[key])); parent.append(card); }
+      for (const encounter of this.chart.history) this.consultationRecord(parent,encounter);
       if (!this.chart.history.length) parent.append(this.ui.row('Sin consultas','No hay consultas propias en este intervalo.'));
     }
     laboratoryForm(parent) {
@@ -472,7 +834,7 @@
       if(this.patientLabPage?.has_more)this.command(parent,'Cargar más exámenes',()=>this.loadPatientLabs(true));
     }
     labSelectionView(parent){
-      const box=this.node('section',null,'admission-form-card lab-selection');box.append(this.node('h2','Solicitar exámenes'));
+      const box=this.node('section',null,'admission-form-card lab-selection');box.append(this.node('h2','Solicitar exámenes'));this.stepHead(box,'1','Elige los exámenes','Toca para seleccionar. Hasta 30 por envío.','lab');
       if(this.labCatalogError){box.append(this.ui.row('No se pudo cargar el catálogo',this.labCatalogError));this.command(box,'Reintentar catálogo',()=>this.loadLabCatalog());}
       const fields=this.node('fieldset');fields.disabled=this.ui.busy()||this.labReview||!!this.pendingLabs;
       const search=this.field(fields,'Buscar exámenes',this,'labQuery','search');search.addEventListener('input',()=>{
@@ -485,8 +847,9 @@
         if(selected)this.labSelected.delete(Number(test.id));else if(this.labSelected.size<30)this.labSelected.add(Number(test.id));this.ui.repaint();
       },'lab-test-card'+(selected?' is-selected':''));button.setAttribute('aria-label','Seleccionar '+test.name);button.setAttribute('aria-pressed',String(selected));button.append(this.node('span',selected?'✓':'○','lab-test-check'),this.node('strong',test.name),this.node('small',test.category||'Sin categoría'));grid.append(button);}fields.append(grid);
       if(!tests.length)fields.append(this.ui.row('Sin exámenes coincidentes',this.labTests.length?'Prueba otro nombre o categoría.':'No hay exámenes activos. Actualiza o contacta al laboratorio.'));
-      fields.append(this.node('h3','Resumen · '+this.labSelected.size+' exámenes seleccionados'));
-      for(const test of this.labTests.filter(t=>this.labSelected.has(Number(t.id))))fields.append(this.node('p','• '+test.name));
+      this.stepHead(fields,'2','Resumen y motivo','Revisa la selección e indica el motivo clínico.','list');
+      fields.append(this.node('h3','Resumen · '+this.labSelected.size+' exámenes seleccionados','lab-summary-title'));
+      const chips=this.node('div',null,'record-chips');for(const test of this.labTests.filter(t=>this.labSelected.has(Number(t.id))))chips.append(this.node('span','• '+test.name,'record-chip'));fields.append(chips);
       this.field(fields,'Motivo e indicaciones clínicas',this.lab,'instructions','textarea').maxLength=10000;box.append(fields);
       if(this.pendingLabs)box.append(this.node('p','Envío sin confirmar. Se reintentará exactamente la misma selección, sin duplicar órdenes.','auth-notice'),this.node('p',this.labPendingPatient?.full_name||this.labPendingPatient?.patient_name),this.node('p',this.labPendingNames.join(' · ')),this.node('p',this.pendingLabs.p_reason));
       if(this.labReview||this.pendingLabs){
@@ -499,15 +862,15 @@
       parent.append(box);
     }
     ownLabsView(parent){
-      parent.append(this.node('h2','Mis órdenes de laboratorio'));this.command(parent,'Actualizar órdenes',()=>this.loadOwnLabs());
+      const head=this.node('div',null,'admission-list-header');head.append(this.node('h2','Mis órdenes de laboratorio'));this.command(head,'Actualizar órdenes',()=>this.loadOwnLabs());parent.append(head);
       if(this.pendingLabs){parent.append(this.node('p','Envío sin confirmar · '+(this.labPendingPatient?.full_name||this.labPendingPatient?.patient_name||'')+' · '+this.labPendingNames.join(' · '),'auth-notice'));this.command(parent,'Reintentar el mismo envío',()=>this.sendLabs(),true);}
       if(this.ownLabsError)parent.append(this.ui.row('No se pudieron cargar las órdenes',this.ownLabsError));
-      if(!this.ownLabOrders.length&&!this.ownLabsError)parent.append(this.ui.row('Sin órdenes','Todavía no has solicitado exámenes de laboratorio.'));
+      if(!this.ownLabOrders.length&&!this.ownLabsError){const empty=this.node('article',null,'record-empty');empty.append(this.node('span','🧪','record-empty-icon'),this.node('strong','Sin órdenes'),this.node('p','Todavía no has solicitado exámenes de laboratorio.','sched-hint'));parent.append(empty);}
       for(const order of this.ownLabOrders)this.labOrderView(parent,order);
       if(this.ownLabPage?.has_more)this.command(parent,'Cargar más órdenes',()=>this.loadOwnLabs(true));
     }
     labOrderView(parent,order){
-      const card=this.node('article',null,'lab-order-card');card.append(this.node('h3',order.test_name));
+      const card=this.node('article',null,'lab-order-card'+(order.result_summary!=null?' has-result':''));const top=this.node('div',null,'lab-order-top');top.append(this.node('span',order.result_summary!=null?'✓':'🧪','lab-order-icon'),this.node('h3',order.test_name));card.append(top);
       if(order.patient_name)card.append(this.node('p',order.patient_name));
       card.append(this.node('small',dateTime(order.ordered_at)),this.node('span',({pendiente:'Pendiente',en_proceso:'En proceso',completado:'Completado'})[order.status]||order.status,'lab-state '+(order.status==='completado'?'is-completed':order.status==='en_proceso'?'is-processing':'is-pending')));
       const detail=this.node('details');detail.append(this.node('summary','Ver detalle del examen'));
@@ -528,23 +891,39 @@
           this.lines.push({medication_id:rx.medication,dose,dose_unit:rx.unit,frequency_hours:frequency,route:rx.route,quantity,duration_days:days,observations:rx.instructions});
           for(const key of ['medication','dose','unit','interval','quantity','days','instructions'])rx[key]='';
         });
-        this.field(form,'Medicamento y concentración',this.rx,'medication','text',medications.map(m=>[m.id,[m.name,m.strength,m.presentation].filter(Boolean).join(' · ')]));
+        const label=m=>[m.name,m.strength,m.presentation].filter(Boolean).join(' · ');
+        form.className+=' rx-form';this.stepHead(form,'1','Medicamento','Busca en el catálogo activo del hospital.','rx');
+        const search=this.field(form,'Buscar en el catálogo de medicamentos',this,'medicationQuery','search');
+        search.addEventListener('input',()=>{const start=search.selectionStart;this.ui.repaint();const input=document.querySelector('[aria-label="Buscar en el catálogo de medicamentos"]');input?.focus?.();if(start!=null)input?.setSelectionRange?.(start,start);});
+        const visible=medications.filter(m=>this.matches(label(m),this.medicationQuery));
+        this.field(form,'Medicamento y concentración',this.rx,'medication','text',visible.map(m=>[m.id,label(m)]));
+        if(medications.length&&!visible.length)form.append(this.node('p','Ningún medicamento coincide con la búsqueda.'));
         if(!medications.length)form.append(this.node('p','No hay medicamentos activos publicados.'));
-        this.field(form,'Unidad de dosis',this.rx,'unit');
-        this.field(form,'Vía',this.rx,'route','text',[['oral','Oral'],['inyectable','Inyectable']]);
-        for(const [label,key,type] of [['Dosis','dose','number'],['Cada cuántas horas','interval','number'],['Duración en días','days','number'],['Cantidad total','quantity','number'],['Indicaciones de receta','instructions','textarea']])this.field(form,label,this.rx,key,type);
+        this.stepHead(form,'2','Indicación','Dosis, vía, frecuencia, duración e instrucciones.','list');
+        const grid=this.node('div',null,'rx-grid');form.append(grid);
+        this.field(grid,'Unidad de dosis',this.rx,'unit');
+        this.field(grid,'Vía de administración',this.rx,'route','text',[['oral','Oral'],['inyectable','Inyectable']]);
+        for(const [label,key,type] of [['Dosis','dose','number'],['Cada cuántas horas','interval','number'],['Duración en días','days','number'],['Cantidad total','quantity','number']])this.field(grid,label,this.rx,key,type);
+        this.field(form,'Instrucciones para el paciente',this.rx,'instructions','textarea');
         finish();
         this.lines.forEach((line,index)=>{
           const medication=medications.find(m=>m.id===line.medication_id);
-          const card=this.ui.row(medication?[medication.name,medication.strength].filter(Boolean).join(' · '):'Medicamento no disponible',line.dose+' '+line.dose_unit+' · cada '+line.frequency_hours+' h · '+line.duration_days+' días · '+line.route);
+          const card=this.ui.row(medication?[medication.name,medication.strength].filter(Boolean).join(' · '):'Medicamento no disponible',line.dose+' '+line.dose_unit+' · cada '+line.frequency_hours+' h · '+line.duration_days+' días · '+line.route);card.className+=' rx-line';
           this.detail(card,'Indicaciones',line.observations);
           this.command(card,'Retirar medicamento',async()=>{this.lines.splice(index,1);});parent.append(card);
         });
-        if(this.lines.length)this.command(parent,'Emitir receta autorizada',()=>this.mutation('nativePrescription',{p_encounter:this.encounter.id,p_key:this.keys.rx,p_lines:this.lines.map(l=>({...l}))},'Receta emitida.',()=>{this.keys.rx=root.crypto.randomUUID();this.lines=[];}),true);
-      } else parent.append(this.ui.row('Emisión de recetas','Selecciona e inicia una consulta asignada para emitir recetas.'));
+        const reviewHead=this.node('section',null,'rx-review-head');this.stepHead(reviewHead,'3','Revisión de la receta','Revisa cada línea antes de emitir.','sign');reviewHead.append(this.node('h3','Revisión de la receta · '+this.lines.length+' medicamento(s)'));parent.append(reviewHead);
+        if(!this.lines.length)parent.append(this.node('p','Añade uno o varios medicamentos para revisarlos antes de emitir.','scope-note'));
+        else if(!this.rxReview)this.command(parent,'Revisar y emitir receta',async()=>{this.rxReview=true;},true);
+        else {
+          const review=this.node('section',null,'consultation-confirm rx-review');review.setAttribute('role','alertdialog');review.append(this.node('h3','¿Emitir esta receta?'),this.node('p','Se emitirá con '+this.lines.length+' medicamento(s) para esta consulta. Los reintentos no duplican la receta.'));
+          this.command(review,'Confirmar y emitir receta',()=>this.mutation('nativePrescription',{p_encounter:this.encounter.id,p_key:this.keys.rx,p_lines:this.lines.map(l=>({...l}))},'Receta emitida.',()=>{this.keys.rx=root.crypto.randomUUID();this.lines=[];this.rxReview=false;}),true);
+          review.append(this.ui.button('Seguir editando',()=>{this.rxReview=false;this.ui.repaint();},'text-button'));parent.append(review);
+        }
+      } else parent.append(this.ui.row('Emisión de recetas','Abre la consulta desde la agenda para emitir recetas.'));
       parent.append(this.node('h2','Recetas de mis consultas de este paciente','section-title'));
       for(const rx of this.context?.prescriptions||[]){
-        const card=this.ui.row(rx.code,dateTime(rx.issued_at),rx.status==='pendiente'?'Pendiente de entrega':rx.status);
+        const card=this.ui.row(rx.code,dateTime(rx.issued_at),rx.status==='pendiente'?'Pendiente de entrega':rx.status);card.className+=' rx-issued';
         for(const line of rx.lines||[])card.append(this.node('p',line));parent.append(card);
       }
     }

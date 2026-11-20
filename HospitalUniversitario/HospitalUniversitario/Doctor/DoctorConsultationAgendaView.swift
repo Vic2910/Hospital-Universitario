@@ -1,92 +1,261 @@
 import SwiftUI
 
-/// Agenda visual: los ejemplos son locales y nunca entran al repositorio clínico.
+/// Agenda médica: dos filtros (PENDIENTES y FINALIZADAS), fecha compacta y búsqueda.
+/// Reglas en DoctorClinicalRules.pending/finished (espejo de HospitalCore.doctorClinical). Los estados no se modifican:
+/// canceladas y no asistidas no aparecen en ninguno de los dos filtros. Los ejemplos son locales y nunca entran al repositorio clínico.
 struct DoctorConsultationAgendaView: View {
     @Binding var day: Date
     let appointments: [DoctorAppointment]
     let search: String
     let period: (String) -> String
     var demonstration = false
+    var statusFilter: Binding<String>? = nil
     let select: (UUID) -> Void
     @State private var ticket: DoctorAppointment?
+    @State private var localFilter = "pending"
+    @State private var query = ""
+    @State private var showCalendar = false
 
-    private var rows: [DoctorAppointment] {
-        appointments.filter { search.isEmpty || ($0.patient_name + " " + $0.record_number).localizedCaseInsensitiveContains(search) }
-            .sorted { $0.period < $1.period }
+    private var filter: Binding<String> { statusFilter ?? $localFilter }
+    private var calendar: Calendar { DoctorClinicalRules.calendar }
+    private var isToday: Bool { calendar.isDate(day, inSameDayAs: Date()) }
+    private func visible(_ list: [DoctorAppointment]) -> [DoctorAppointment] {
+        list.filter { DoctorClinicalRules.matches($0, query: query) && DoctorClinicalRules.matches($0, query: search) }
     }
-    private var dateTitle: String {
-        day.formatted(.dateTime.locale(Locale(identifier: "es_GT")).weekday(.wide).day().month(.wide))
-    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 10) {
-                Label("TU AGENDA", systemImage: "calendar").font(.system(size: 10, weight: .bold)).tracking(1.2)
-                Text("Tus consultas, a tiempo").font(.system(size: 24, weight: .bold))
-                Text(dateTitle).font(.subheadline)
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text("\(appointments.count)").font(.system(size: 36, weight: .bold))
-                    Text((appointments.count == 1 ? "consulta" : "consultas") + (Calendar.current.isDateInToday(day) ? " para hoy" : " para esta fecha")).font(.footnote)
-                }
-            }.foregroundStyle(.white).padding(22).frame(maxWidth: .infinity, alignment: .leading)
-                .background(LinearGradient.vinoDestacado, in: RoundedRectangle(cornerRadius: 22))
-            PatientFormCard(titulo: "Buscar por fecha", icono: "calendar.badge.clock") {
-                DatePicker("Fecha de consultas", selection: $day, displayedComponents: .date).tint(HospitalTheme.wine)
-                HStack(spacing: 8) {
-                    dateButton("Hoy", offset: 0)
-                    dateButton("Mañana", offset: 1)
-                    dateButton("En 7 días", offset: 7)
-                }
-                Text("Elige una fecha para ver tu agenda y próximas consultas.").font(.footnote).foregroundStyle(HospitalTheme.secondary)
-            }
+        let pending = visible(DoctorClinicalRules.pending(appointments, day: day))
+        let finished = visible(DoctorClinicalRules.finished(appointments, day: day))
+        let showFinished = filter.wrappedValue == "finished"
+        let rows = showFinished ? finished : pending
+        VStack(alignment: .leading, spacing: 14) {
+            header(pending: pending.count, finished: finished.count)
+            dateBar
+            searchField
             if demonstration {
                 Text("Agenda de ejemplo · Datos precargados, sin reservas reales. No permiten iniciar ni guardar consultas.")
-                    .font(.footnote).foregroundStyle(HospitalTheme.wine).padding(14)
-                    .frame(maxWidth: .infinity, alignment: .leading).background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 14))
+                    .font(.footnote).foregroundStyle(HospitalTheme.wine).padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading).background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 12))
             }
-            Text(Calendar.current.isDateInToday(day) ? "Consultas de hoy" : "Consultas del día seleccionado").font(.system(size: 16, weight: .semibold))
-            if rows.isEmpty {
-                HospitalCard {
-                    Label("No hay consultas para mostrar", systemImage: "calendar.badge.exclamationmark").font(.subheadline.weight(.semibold))
-                    Text(search.isEmpty ? "Prueba otra fecha para revisar tu agenda." : "Ningún paciente coincide con tu búsqueda.").font(.footnote).foregroundStyle(HospitalTheme.secondary)
-                }
+            HStack {
+                Text(showFinished ? "Consultas finalizadas" : "Consultas pendientes").font(.headline).accessibilityAddTraits(.isHeader)
+                Spacer()
+                Text(showFinished ? "Última finalizada primero" : "Por hora").font(.caption).foregroundStyle(HospitalTheme.secondary)
             }
-            ForEach(rows) { appointment in
-                PatientFormCard(titulo: DoctorConsultationFields.value(appointment.patient_name), icono: "person") {
-                    HStack {
-                        Label(DoctorConsultationFields.time(period(appointment.period)), systemImage: "clock")
-                            .font(.subheadline.weight(.semibold)).foregroundStyle(HospitalTheme.wine)
-                        Spacer()
-                        Text(DoctorConsultationFields.status(appointment.status)).font(.caption.weight(.semibold))
-                            .foregroundStyle(HospitalTheme.wine).padding(6).background(HospitalTheme.rose, in: Capsule())
-                    }
-                    HStack(alignment: .top, spacing: 16) {
-                        DoctorConsultationField(label: "Edad", value: DoctorConsultationFields.age(appointment.age))
-                        DoctorConsultationField(label: "Teléfono", value: DoctorConsultationFields.value(appointment.phone))
-                    }
-                    DoctorConsultationField(label: "Motivo de la consulta", value: DoctorConsultationFields.value(appointment.reason))
-                    DoctorConsultationField(label: "Síntomas", value: DoctorConsultationFields.symptoms(appointment.symptoms))
-                    Text(appointment.room_code.map { "Consultorio \($0)" } ?? "Consultorio no publicado").font(.footnote)
-                    if let duration=appointment.duration_minutes { Text("Duración: \(duration) minutos").font(.footnote) }
-                    Button("Ver detalle") { ticket = appointment }
-                        .buttonStyle(.bordered).tint(HospitalTheme.wine)
-                        .accessibilityLabel("Ver detalle de \(DoctorConsultationFields.value(appointment.patient_name))")
-                }
+            if rows.isEmpty { emptyState(finished: showFinished) }
+            LazyVStack(spacing: 10) {
+                ForEach(rows) { appointment in card(appointment, finished: showFinished) }
             }
-        }.foregroundStyle(HospitalTheme.ink)
+        }
+        .foregroundStyle(HospitalTheme.ink)
         .onChange(of: day) { _, _ in ticket = nil }
         .sheet(item: $ticket) { appointment in
             DoctorConsultationTicketView(appointment: appointment, day: day, time: period(appointment.period), demonstration: demonstration,
                 close: { ticket = nil }, openCare: demonstration ? nil : { ticket = nil; select(appointment.id) })
                 .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $showCalendar) { calendarSheet.presentationDetents([.medium, .large]).presentationDragIndicator(.visible) }
     }
-    private func dateButton(_ label: String, offset: Int) -> some View {
-        let target = Calendar.current.date(byAdding: .day, value: offset, to: Calendar.current.startOfDay(for: Date()))!
-        return Button(label) { day = target }
-            .font(.caption.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 44)
-            .background(Calendar.current.isDate(day, inSameDayAs: target) ? HospitalTheme.rose : HospitalTheme.background, in: RoundedRectangle(cornerRadius: 12))
-            .foregroundStyle(HospitalTheme.wine).buttonStyle(.plain)
-            .accessibilityAddTraits(Calendar.current.isDate(day, inSameDayAs: target) ? .isSelected : [])
+
+    // MARK: Cabecera con indicadores-filtro
+
+    private func header(pending: Int, finished: Int) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Label("AGENDA MÉDICA", systemImage: "calendar").font(.caption2.weight(.heavy)).tracking(1.2).opacity(0.85)
+                    Text("Consultas").font(.system(size: 28, weight: .bold))
+                }
+                Spacer()
+                Text(longDate).font(.caption.weight(.semibold)).multilineTextAlignment(.trailing).opacity(0.9)
+            }
+            HStack(spacing: 10) {
+                indicator("pending", "Pendientes", pending, icon: "clock.badge")
+                indicator("finished", "Finalizadas", finished, icon: "checkmark.seal.fill")
+            }
+        }
+        .foregroundStyle(.white).padding(18).frame(maxWidth: .infinity, alignment: .leading)
+        .background(LinearGradient.vinoDestacado, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: HospitalTheme.wine.opacity(0.18), radius: 12, y: 5)
+    }
+
+    private func indicator(_ value: String, _ title: String, _ count: Int, icon: String) -> some View {
+        let selected = filter.wrappedValue == value
+        return Button { withAnimation(.easeInOut(duration: 0.15)) { filter.wrappedValue = value } } label: {
+            HStack(spacing: 10) {
+                Image(systemName: icon).font(.headline)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("\(count)").font(.system(size: 24, weight: .bold).monospacedDigit())
+                    Text(title.uppercased()).font(.caption2.weight(.bold)).tracking(0.6)
+                }
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(selected ? HospitalTheme.wine : .white)
+            .padding(.horizontal, 12).padding(.vertical, 10).frame(maxWidth: .infinity, minHeight: 60)
+            .background(selected ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.white.opacity(0.15)), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title): \(count)")
+        .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+    }
+
+    // MARK: Fecha y búsqueda
+
+    private var dateBar: some View {
+        HStack(spacing: 8) {
+            stepButton("chevron.left", label: "Día anterior", offset: -1)
+            Button { showCalendar = true } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "calendar").foregroundStyle(HospitalTheme.wine)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(relativeDay).font(.caption2.weight(.bold)).foregroundStyle(HospitalTheme.wine)
+                        Text(shortDate).font(.subheadline.weight(.semibold)).foregroundStyle(HospitalTheme.ink)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down").font(.caption.bold()).foregroundStyle(HospitalTheme.secondary)
+                }.padding(.horizontal, 10).frame(maxWidth: .infinity, minHeight: 44)
+            }.buttonStyle(.plain).accessibilityLabel("Fecha consultada: \(longDate). Cambiar fecha")
+            stepButton("chevron.right", label: "Día siguiente", offset: 1)
+            Button("Hoy") { day = calendar.startOfDay(for: Date()) }
+                .font(.subheadline.bold()).padding(.horizontal, 12).frame(minHeight: 40)
+                .foregroundStyle(isToday ? HospitalTheme.secondary : .white)
+                .background(isToday ? AnyShapeStyle(HospitalTheme.background) : AnyShapeStyle(LinearGradient.vinoDestacado), in: Capsule())
+                .buttonStyle(.plain).disabled(isToday)
+        }
+        .padding(6).background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(HospitalTheme.rose, lineWidth: 1))
+    }
+
+    private func stepButton(_ icon: String, label: String, offset: Int) -> some View {
+        Button { if let next = calendar.date(byAdding: .day, value: offset, to: day) { day = next } } label: {
+            Image(systemName: icon).font(.subheadline.bold()).foregroundStyle(HospitalTheme.wine)
+                .frame(width: 40, height: 40).background(HospitalTheme.rose, in: Circle())
+        }.buttonStyle(.plain).accessibilityLabel(label)
+    }
+
+    private var calendarSheet: some View {
+        NavigationStack {
+            VStack(spacing: 12) {
+                DatePicker("Fecha de consultas", selection: $day, displayedComponents: .date)
+                    .datePickerStyle(.graphical).tint(HospitalTheme.wine).environment(\.timeZone, DoctorClinicalRules.timeZone)
+                    .environment(\.locale, Locale(identifier: "es_SV"))
+                Button("Ir a hoy") { day = calendar.startOfDay(for: Date()); showCalendar = false }
+                    .buttonStyle(.bordered).tint(HospitalTheme.wine)
+                Spacer(minLength: 0)
+            }.padding()
+            .navigationTitle("Elegir fecha").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Listo") { showCalendar = false } } }
+        }
+        .onChange(of: day) { _, _ in showCalendar = false }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").foregroundStyle(HospitalTheme.wine)
+            TextField("Paciente, código o expediente", text: $query)
+                .textInputAutocapitalization(.never).autocorrectionDisabled().submitLabel(.search)
+                .accessibilityLabel("Buscar consultas")
+            if !query.isEmpty {
+                Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(HospitalTheme.secondary) }
+                    .accessibilityLabel("Borrar búsqueda")
+            }
+        }
+        .padding(.horizontal, 14).frame(minHeight: 46)
+        .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(HospitalTheme.rose, lineWidth: 1))
+    }
+
+    // MARK: Tarjetas
+
+    private func card(_ appointment: DoctorAppointment, finished: Bool) -> some View {
+        let start = appointment.startDate
+        let inProgress = appointment.status == "in_progress"
+        let earlier = start.map { !calendar.isDate($0, inSameDayAs: day) } ?? false
+        return Button { ticket = appointment } label: {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(spacing: 2) {
+                    Text(hour(start)).font(.system(size: 20, weight: .bold).monospacedDigit())
+                    Text(meridiem(start)).font(.caption2.weight(.bold))
+                    if let minutes = appointment.duration_minutes, minutes > 0 { Text("\(minutes) min").font(.caption2).opacity(0.8) }
+                }
+                .foregroundStyle(inProgress ? .white : HospitalTheme.wine)
+                .frame(width: 74).padding(.vertical, 12)
+                .background(inProgress ? AnyShapeStyle(LinearGradient.vinoDestacado) : AnyShapeStyle(HospitalTheme.rose), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(DoctorConsultationFields.value(appointment.patient_name)).font(.headline).foregroundStyle(HospitalTheme.ink)
+                            .multilineTextAlignment(.leading).lineLimit(2)
+                        Spacer(minLength: 4)
+                        statusBadge(appointment.status)
+                    }
+                    if let reason = DoctorRecordRules.text(appointment.reason) {
+                        Text(reason).font(.subheadline).foregroundStyle(HospitalTheme.ink.opacity(0.85)).lineLimit(2).multilineTextAlignment(.leading)
+                    }
+                    HStack(spacing: 10) {
+                        Label(appointment.room_code.map { "Consultorio \($0)" } ?? "Sin consultorio", systemImage: "door.left.hand.open")
+                        Label(DoctorRecordRules.text(appointment.patient_code) ?? appointment.record_number, systemImage: "folder")
+                    }.font(.caption).foregroundStyle(HospitalTheme.secondary).lineLimit(1)
+                    if finished {
+                        Label(appointment.finishedDate.map { "Finalizada a las \(ConsultationFormat.time($0))" } ?? "Finalizada · hora de la cita", systemImage: "checkmark.seal")
+                            .font(.caption.weight(.semibold)).foregroundStyle(Color(red: 0.13, green: 0.5, blue: 0.3))
+                    } else if earlier, let start {
+                        Label("Abierta el \(start.formatted(.dateTime.locale(Locale(identifier: "es_SV")).weekday(.abbreviated).day().month(.abbreviated)))", systemImage: "exclamationmark.circle")
+                            .font(.caption.weight(.semibold)).foregroundStyle(HospitalTheme.wine)
+                    }
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(HospitalTheme.wine.opacity(0.7)).padding(.top, 6)
+            }
+            .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+            .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(inProgress ? HospitalTheme.wine : HospitalTheme.rose, lineWidth: inProgress ? 2 : 1))
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Ver detalle de \(DoctorConsultationFields.value(appointment.patient_name)), \(DoctorConsultationFields.status(appointment.status))")
+    }
+
+    private func statusBadge(_ status: String) -> some View {
+        let inProgress = status == "in_progress", done = status == "completed"
+        return Text(DoctorClinicalRules.statusLabel(status)).font(.caption2.weight(.bold))
+            .foregroundStyle(inProgress ? .white : done ? Color(red: 0.13, green: 0.5, blue: 0.3) : HospitalTheme.wine)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(inProgress ? AnyShapeStyle(HospitalTheme.wine) : AnyShapeStyle(done ? HospitalTheme.green : HospitalTheme.rose), in: Capsule())
+    }
+
+    private func emptyState(finished: Bool) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: finished ? "checkmark.seal" : "calendar.badge.checkmark").font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(HospitalTheme.wine).frame(width: 58, height: 58).background(HospitalTheme.rose, in: Circle())
+            Text(!query.isEmpty || !search.isEmpty ? "Sin coincidencias" : finished ? "Aún no hay consultas finalizadas" : "No tienes consultas pendientes")
+                .font(.subheadline.weight(.semibold))
+            Text(!query.isEmpty || !search.isEmpty ? "Ningún paciente de esta fecha coincide con la búsqueda." :
+                    finished ? "Las consultas que finalices en esta fecha aparecerán aquí." : "No hay citas por atender en esta fecha.")
+                .font(.footnote).foregroundStyle(HospitalTheme.secondary).multilineTextAlignment(.center)
+        }.padding(20).frame(maxWidth: .infinity).background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    // MARK: Formato (America/El_Salvador)
+
+    private func style(_ format: Date.FormatStyle) -> Date.FormatStyle {
+        var value = format; value.timeZone = DoctorClinicalRules.timeZone; value.calendar = calendar; value.locale = Locale(identifier: "es_SV"); return value
+    }
+    private func hour(_ date: Date?) -> String {
+        guard let date else { return "--:--" }
+        let parts = calendar.dateComponents([.hour, .minute], from: date)
+        let h = (parts.hour ?? 0) % 12 == 0 ? 12 : (parts.hour ?? 0) % 12
+        return String(format: "%d:%02d", h, parts.minute ?? 0)
+    }
+    private func meridiem(_ date: Date?) -> String {
+        guard let date else { return "" }
+        return (calendar.component(.hour, from: date) < 12) ? "a. m." : "p. m."
+    }
+    private var shortDate: String { day.formatted(style(.dateTime.weekday(.abbreviated).day().month(.abbreviated).year())) }
+    private var longDate: String { day.formatted(style(.dateTime.weekday(.wide).day().month(.wide))) }
+    private var relativeDay: String {
+        if isToday { return "HOY" }
+        let today = calendar.startOfDay(for: Date()), target = calendar.startOfDay(for: day)
+        let offset = calendar.dateComponents([.day], from: today, to: target).day ?? 0
+        return offset == -1 ? "AYER" : offset == 1 ? "MAÑANA" : offset < 0 ? "HACE \(-offset) DÍAS" : "EN \(offset) DÍAS"
     }
 }
 

@@ -8,6 +8,12 @@ struct PatientAttentionLiveView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("SOLICITAR ATENCIÓN", systemImage: "stethoscope").font(.caption2.weight(.heavy)).tracking(1.2).opacity(0.85)
+                Text("Cuéntanos qué necesitas").font(.title2.bold())
+                Text("Recepción revisa tu solicitud y te programa la cita. Solo puedes tener una solicitud activa a la vez.").font(.subheadline).opacity(0.9)
+            }.foregroundStyle(.white).padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                .background(LinearGradient.vinoDestacado, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             HospitalNotice(text: "Este formulario no es para emergencias. Ante una emergencia, acude al servicio de urgencias. Los síntomas que declares no constituyen un diagnóstico.")
             if model.loading { ProgressView("Cargando tus datos y solicitudes…") }
             if let error = model.error {
@@ -20,7 +26,23 @@ struct PatientAttentionLiveView: View {
                     .padding(16).frame(maxWidth: .infinity, alignment: .leading)
                     .background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 16))
             }
-            if let context = model.context {
+            if let blocker = model.submissionBlocker, model.context != nil {
+                // Una sola solicitud activa: recepción debe programarla o rechazarla antes de enviar otra.
+                VStack(alignment: .leading, spacing: 12) {
+                    Image(systemName: model.scheduledAppointment != nil && !model.requests.contains { AttentionRules.openStates.contains($0.status) } ? "calendar.badge.checkmark" : "hourglass")
+                        .font(.title.weight(.semibold)).foregroundStyle(HospitalTheme.wine)
+                        .frame(width: 60, height: 60).background(HospitalTheme.rose, in: Circle())
+                    Text(model.requests.contains { AttentionRules.openStates.contains($0.status) } ? "Tu solicitud está en revisión" : "Ya tienes una cita programada")
+                        .font(.title3.bold()).foregroundStyle(HospitalTheme.ink)
+                    Text(blocker).font(.subheadline).foregroundStyle(HospitalTheme.secondary).fixedSize(horizontal: false, vertical: true)
+                    Button { navigate("appointments") } label: {
+                        Label("Ver mis citas", systemImage: "calendar").font(.headline).frame(maxWidth: .infinity, minHeight: 48)
+                    }.buttonStyle(.bordered).tint(HospitalTheme.wine)
+                }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(HospitalTheme.rose, lineWidth: 1.5))
+                    .accessibilityElement(children: .combine)
+            } else if let context = model.context {
                 personalCard(context.person)
                 symptomsCard(context)
                 requestCard(context)

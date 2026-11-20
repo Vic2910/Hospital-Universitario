@@ -88,8 +88,8 @@ enum MobileFormatting {
         return formatter.string(from: date)
     }
     static func status(_ status: String) -> String {
-        ["pending":"Pendiente", "scheduled":"Programada", "confirmed":"Confirmada", "checked_in":"Registrada en recepción",
-         "in_progress":"En curso", "completed":"Finalizada", "cancelled":"Cancelada", "rejected":"Rechazada",
+        ["pending":"Pendiente", "scheduled":"Programada", "confirmed":"Programada", "checked_in":"Registrada en recepción",
+         "in_progress":"En consulta", "completed":"Finalizada", "cancelled":"Cancelada", "rejected":"Rechazada",
          "open":"Abierta", "closed":"Cerrada", "issued":"Emitida", "draft":"Borrador", "released":"Publicado",
          "unread":"No leída", "read":"Leída", "ordered":"Emitida", "no_show":"No se presentó",
          "active":"Vigente", "expired":"Tratamiento finalizado"][status] ?? "Estado no disponible"

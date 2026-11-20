@@ -13,7 +13,7 @@ for (const linked of [false,true]) {
   }});
   await ui.login();
   assert.match(ui.app.textContent,/¡Hola, María López!/);
-  if(linked) {assert.match(ui.app.textContent,/Doctora Real Autorizada/);assert.match(ui.app.textContent,/Confirmada/);}
+  if(linked) {assert.match(ui.app.textContent,/Doctora Real Autorizada/);assert.match(ui.app.textContent,/Programada/);}
   else {assert.match(ui.app.textContent,/No tienes citas programadas/);assert.match(ui.app.textContent,/Recepción debe crear o vincular/);}
   for(const label of ['Mis citas','Solicitar atención','Laboratorios','Recetas']) {
     const shortcut=ui.app.all().find(n=>n.tagName==='button'&&n.className==='dash-card'&&n.textContent.endsWith(label));

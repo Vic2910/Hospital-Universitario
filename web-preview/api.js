@@ -1,10 +1,12 @@
 (function (root) {
   'use strict';
   class APIError extends Error {
-    constructor(status, code) {
+    constructor(status, code, detail) {
       super(({ 400: 'Credenciales o datos inválidos. Revisa el correo y la contraseña.', 401: 'La sesión no es válida. Inicia sesión de nuevo.', 403: 'Tu cuenta no tiene acceso a esta información o requiere verificación.', 422: 'Datos inválidos.', 429: 'Demasiados intentos. Espera antes de volver a intentarlo.' })[status] || 'No se pudo conectar con el hospital. Inténtalo de nuevo.');
       this.status = status;
       this.code = code;
+      // Texto del servidor (sin datos clínicos), solo para reconocer causas concretas; no se muestra tal cual.
+      this.detail = typeof detail === 'string' ? detail : '';
       if (code === 'PGRST202') this.message = 'No se pudo encontrar el servicio de este módulo. Actualiza la conexión.';
       if (status === 409 || ['40001','23505','PT409'].includes(code)) this.message = 'El registro cambió o ya existe. Actualiza antes de continuar.';
       if (['22023','23514','PT400','PT422'].includes(code)) this.message = 'Revisa los datos y el estado de la atención antes de continuar.';
@@ -33,7 +35,7 @@
       catch { throw new Error('No se pudo conectar con el hospital. Revisa la conexión e inténtalo de nuevo.'); }
       if (!response.ok) {
         let detail; try { detail = await response.json(); } catch { /* No clinical response bodies are surfaced. */ }
-        throw new APIError(response.status, detail?.code);
+        throw new APIError(response.status, detail?.code, detail?.message);
       }
       if (response.status === 204) return null;
       const text = await response.text();
@@ -107,8 +109,10 @@
       if (!['my_attention_context','my_attention_requests','submit_my_attention_request'].includes(name)) throw new Error('Operación de atención no permitida.');
       return this.request('/rest/v1/rpc/'+name,parameters,await this.token());
     }
+    // public.planning_revision: una fila que sube con cada cambio en appointments (RLS: admin, recepción o médico).
+    async planningRevision() { const rows = await this.request('/rest/v1/planning_revision?select=revision&limit=1',undefined,await this.token(),'GET'); return Array.isArray(rows) && rows[0] ? Number(rows[0].revision) : null; }
     async doctorRPC(name,parameters={}) {
-      if(!['workspace','chart','start','save','finish','lab','prescribe','patients','patient_labs','admissions','admission_request','lab_catalog','lab_orders','labs'].includes(name))throw new Error('Operación médica no permitida.');
+      if(!['workspace','chart','start','save','finish','lab','prescribe','patients','patient_labs','admissions','admission_request','lab_catalog','lab_orders','labs','alerts'].includes(name))throw new Error('Operación médica no permitida.');
       return this.request('/rest/v1/rpc/doctor_native_'+name,parameters,await this.token());
     }
     async changePassword(password) {

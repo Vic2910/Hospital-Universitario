@@ -55,6 +55,8 @@ export function createApp(roleCodes = ['doctor'], options = {}) {
     if (url.includes('/rest/v1/user_roles?')) return response(roleCodes.map(code=>({user_id:uuid,role:code==='patient'?'paciente':code,active:!options.suspended})));
     if (url.includes('/rest/v1/patients?')) return response(registered && roleCodes.includes('patient') ? [{id:uuid,profile_id:uuid,first_name:accountMetadata.first_name,last_name:accountMetadata.last_name,birth_date:accountMetadata.birth_date,phone:accountMetadata.phone,dui:'01234567-8',patient_code:'PAC-TEST',medical_records:[{record_code:'EXP-TEST'}]}] : []);
     if (url.includes('/rest/v1/staff?')) return response(roleCodes.includes('doctor')?[{id:uuid,profile_id:uuid,active:!options.suspended,category:'doctor'}]:[]);
+    if (url.endsWith('/rpc/doctor_native_alerts')) return response({items:[],unread:0,has_more:false,upcoming:[]});
+    if (url.endsWith('/rpc/my_consultation_history')) return response([]);
     if (url.endsWith('/rpc/doctor_native_workspace')) return response({doctor_name:[accountMetadata.first_name,accountMetadata.last_name].join(' '),facility_name:'Hospital Universitario',appointments:[],orders:[],tests:[],medications:[],notifications:[],stats:{consultations:0,completed_consultations:0,issued_orders:0,pending_orders:0}});
     if (url.endsWith('/rpc/doctor_native_patients')) return response({patients:[],total:0,has_more:false,next_offset:null});
     if (url.endsWith('/rpc/doctor_native_lab_catalog')) return response([]);
@@ -71,7 +73,7 @@ export function createApp(roleCodes = ['doctor'], options = {}) {
     if (url.includes('/rest/v1/')) return response([]);
     throw new Error('Unexpected request: ' + url);
   };
-  const context = {Date,Intl,console,URL,crypto:webcrypto,AbortSignal,fetch,setInterval(){},sessionStorage:storage,document:{body,hidden:false,querySelector:selector => find(node => node.id === selector.slice(1)),createElement:tag => new Element(tag),addEventListener(){}}};
+  const context = {Date,Intl,console,URL,crypto:webcrypto,AbortSignal,fetch,setInterval(){},clearInterval(){},setTimeout,clearTimeout,sessionStorage:storage,document:{body,hidden:false,querySelector:selector => find(node => node.id === selector.slice(1)),createElement:tag => new Element(tag),addEventListener(){}}};
   for (const path of ['HospitalUniversitario/HospitalUniversitario/Shared/hospital-core.js','web-preview/api.js','web-preview/modules.js','web-preview/doctor-dashboard.js','web-preview/clinical-labs.js','web-preview/patient-history.js','web-preview/patient-prescriptions.js','web-preview/patient-appointments.js','web-preview/applicant.js','web-preview/app.js']) runInNewContext(read(path),context);
   const app = find(node => node.id === 'app');
   return {
@@ -104,7 +106,8 @@ for (const role of ['patient','doctor']) {
   assert.match(ui.get('preview-mode').textContent,/MODO DISEÑO/);
   for (const screen of catalog[role].filter(item => item.id !== 'home')) {
     await ui.click('Más'); await ui.click(screen.title + '　›');
-    assert.ok(ui.app.all().some(node => node.tagName === 'h1' && node.textContent === screen.title),screen.id);
+    if(role==='doctor'&&screen.id==='notifications'){assert.ok(ui.app.all().some(node=>node.id==='doctor-notifications-panel'));await ui.click('Cerrar notificaciones');}
+    else assert.ok(ui.app.all().some(node => node.tagName === 'h1' && node.textContent === screen.title),screen.id);
     assert.equal(ui.app.textContent.includes('true'),false,'No boolean shown as a badge');
     if (role === 'doctor') assert.equal(ui.app.textContent.includes('Mis citas'),false,'Sin Mis citas en ninguna pantalla del doctor');
   }

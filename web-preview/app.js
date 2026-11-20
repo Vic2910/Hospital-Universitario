@@ -2,9 +2,11 @@
   'use strict';
   const $ = selector => document.querySelector(selector);
   const app = $('#app'), notice = $('#notice');
+  let patientNotices = null;
   let api, modules, patientLabModules, patientClinical, doctorDashboard, doctorConsultations, labDesign, patientHistory, patientPrescriptions, appointmentFlow, catalog, fixtures, access = null, roles = [], role = null, page = 'home', search = '', busy = false, design = false;
   let profile = null, summary = null, overview = null, items = [], queue = [], cursor = null, more = false;
   let screenNote = '';
+  let notificationsOpen = false;
   let attention = newAttention();
   function newAttention() { return {context:null,rows:[],missing:{},symptoms:new Set(),specialty:'',period:'indiferente',reason:'',other:'',key:crypto.randomUUID(),error:null,confirmation:null}; }
   let nextAppointment = null, dashboardError = null;
@@ -38,7 +40,7 @@
   }
   function matches(value) { return !search || value.toLocaleLowerCase('es').includes(search.toLocaleLowerCase('es')); }
   function definition() { return catalog?.[role]?.find(screen => screen.id === page); }
-  function clearData() { patientLabModules?.clear();patientClinical?.reset(); receptionPreview=false; appointmentFlow?.reset(); patientHistory?.clear(); labConnected = false; labDesign?.reset(); doctorConsultations?.clear(); doctorDashboard?.clear(); resetSchedule(); modules?.clear(); profile = summary = overview = null; items = []; queue = []; cursor = null; more = false; screenNote = ''; }
+  function clearData() { notificationsOpen=false; patientLabModules?.clear();patientNotices?.clear();patientClinical?.reset(); receptionPreview=false; appointmentFlow?.reset(); patientHistory?.clear(); labConnected = false; labDesign?.reset(); doctorConsultations?.clear(); doctorDashboard?.clear(); resetSchedule(); modules?.clear(); profile = summary = overview = null; items = []; queue = []; cursor = null; more = false; screenNote = ''; }
   function reset() { attention=newAttention(); nextAppointment = null; dashboardError = null; registrationDraft = {}; access = null; roles = []; role = null; page = 'home'; registerOpen = false; clearData(); }
   async function run(action) {
     if (busy) return;
@@ -48,7 +50,7 @@
       if (error.status === 403) {
         const requestDraft = role === 'patient' && ['request','schedule','health'].includes(page) ? {...modules.request} : null;
         const requestKey = modules?.keys.request;
-        modules?.clear();patientLabModules?.clear();
+        modules?.clear();patientLabModules?.clear();patientNotices?.clear();
         if (requestDraft) {
           modules.configure(access,role,access.roles.find(item=>item.code===role)?.context_id);
           modules.request=requestDraft;modules.keys.request=requestKey;
@@ -76,6 +78,7 @@
       if (role==='patient'&&['request','schedule','health'].includes(page)) { await loadAttention(); return; }
       if (page === 'profile') { profile = await api.operation('profile'); return; }
       modules.configure(access,role,facility);
+      if(role==='patient'&&patientNotices){patientNotices.configure(access,role,facility);if(!patientNotices.data)await patientNotices.load('notifications').catch(()=>{});}
       if (modules.supports(role,page)) { await modules.load(page,append);if(role==='patient'&&page==='chart'){patientLabModules.configure(access,role,facility);await patientLabModules.load('laboratory');}return; }
       if (page === 'home') {
         summary = null;
@@ -97,13 +100,16 @@
   }
   function go(id) {
     if (busy) return;
+    if(role==='doctor'&&id==='notifications'){notificationsOpen=!notificationsOpen;run(async()=>{if(!design&&notificationsOpen)await modules.loadAlerts();});return;}
+    if(role==='patient'&&id==='notifications'&&!design&&patientNotices){notificationsOpen=!notificationsOpen;run(async()=>{if(notificationsOpen)await patientNotices.load('notifications');});return;}
+    notificationsOpen=false;
     run(async () => { if(role==='patient'&&['chart','laboratory'].includes(page)&&id!==page){labDesign.modal='';patientClinical.reset();} if(receptionPreview){receptionPreview=false;setModeLabel();} if(['request','schedule','health'].includes(page)&&!['request','schedule','health'].includes(id))resetSchedule(); if(id==='appointments'&&page!==id)appointmentFlow.selected=false; if(page === 'history' && id !== page)patientHistory?.clear(); if (page === 'patients' && id !== page) { doctorDashboard?.clear(); labDesign.modal=''; } if(id === 'patients' && page !== id)labDesign.modal=''; page = id; search = ''; items = []; queue = []; more = false; cursor = null; await load(); });
   }
   function displayName() {
     if (design) return fixtures[role].name;
     return access?.profile?.preferred_name || (profile?.person ? `${profile.person.given_names} ${profile.person.family_names}` : role === 'doctor' ? 'Doctor' : 'Paciente');
   }
-  function title() { return receptionPreview ? 'Recepción de ejemplo' : role==='patient'&&page==='home' ? 'Mi espacio de salud' : role==='patient'&&['request','schedule','health'].includes(page) ? 'Solicitar atención' : page === 'home' ? 'Hola, ' + displayName() : definition()?.title || ({ more: 'Más', health: 'Mi salud', rooms: 'Habitaciones', schedule: 'Solicitar atención' })[page] || 'Hospital'; }
+  function title() { return receptionPreview ? 'Recepción de ejemplo' : role==='patient'&&page==='home' ? 'Mi espacio de salud' : role==='patient'&&['request','schedule','health'].includes(page) ? 'Solicitar atención' : page === 'home' ? (role==='doctor'?'Panel general':'Hola, ' + displayName()) : definition()?.title || ({ more: 'Más', health: 'Mi salud', rooms: 'Habitaciones', schedule: 'Solicitar atención' })[page] || 'Hospital'; }
   function render() {
     app.replaceChildren();
     document.body.classList.toggle('authenticated', !!role);
@@ -244,7 +250,14 @@
     content.append(button('Actualizar',()=>run(loadAttention),'text-button'));
     const context=attention.context;
     if(!context){content.append(row(busy?'Cargando tus datos…':'No se pudieron cargar tus datos','Pulsa Actualizar para recuperar el formulario.'));return;}
-    const form=el('form',null,'attention-form');
+    // Una sola solicitud activa: recepción debe programarla o rechazarla antes de enviar otra.
+    const blocker=HospitalCore.attentionBlocker(attention.rows,attention.next);
+    if(blocker){
+      const card=el('article',null,'record-empty attention-blocked');card.setAttribute('role','status');
+      card.append(el('span',blocker.kind==='request'?'⏳':'📅','record-empty-icon'),el('strong',blocker.kind==='request'?'Tu solicitud está en revisión':'Ya tienes una cita programada'),el('p',blocker.message,'sched-hint'),button('Ver mis citas',()=>go('appointments'),'module-action'));
+      content.append(card);
+    }
+    const form=el('form',null,'attention-form');if(blocker)form.hidden=true;
     const personal=el('article',null,'card attention-card');personal.append(el('h2','Tus datos'),el('p','Datos de tu cuenta. Completa únicamente lo que falta. Recepción verificará tu identidad.'));
     for(const [key,label] of [['first_name','Nombres'],['last_name','Apellidos'],['dui','DUI declarado'],['birth_date','Fecha de nacimiento'],['phone','Teléfono'],['email','Correo de la cuenta']]){
       const value=context.person[key];
@@ -283,7 +296,7 @@
     const issue=el('p',null,'auth-error');issue.hidden=true;details.append(issue);
     const submit=el('button',busy?'Enviando…':'Solicitar atención','primary');submit.type='submit';submit.disabled=busy||!available.length||!context.symptoms.length;details.append(submit);
     details.append(el('p','Enviar no crea un expediente ni una cita. Recepción revisará tu solicitud.'));
-    form.append(details);content.append(form);
+    form.append(details);if(!blocker)content.append(form);
     form.addEventListener('submit',event=>{
       event.preventDefault();if(busy)return;
       const problem=attentionProblem();
@@ -316,6 +329,7 @@
       const context=await api.attentionRPC('my_attention_context');
       if(!context?.person||!Array.isArray(context.symptoms)||!Array.isArray(context.specialties))throw new Error('No se pudo interpretar el formulario del hospital.');
       attention.context=context;
+      attention.next=null;if(access?.patient_id){try{attention.next=(await api.operation('patientDashboard'))?.next_appointment||null;}catch{attention.next=null;}}
       const rows=await api.attentionRPC('my_attention_requests');
       if(!Array.isArray(rows))throw new Error('No se pudo interpretar el seguimiento.');
       attention.rows=rows;
@@ -348,18 +362,68 @@
   function renderPortal() {
     const screen = definition(), portal = el('section', null, 'portal');
     const header = el('header', null, 'hospital-header'), line = el('div', null, 'brand-line');
-    const bell = button('♧', () => go('notifications'), 'bell'); bell.setAttribute('aria-label', 'Notificaciones');
+    const bell = button('🔔', () => go('notifications'), 'bell'); bell.id='notifications-bell';bell.setAttribute('aria-label', 'Notificaciones');if(role==='doctor'||(role==='patient'&&!design)){bell.setAttribute('aria-expanded',String(notificationsOpen));bell.setAttribute('aria-controls','doctor-notifications-panel');bell.setAttribute('aria-haspopup','dialog');}
+    if(role==='doctor'&&!design){const count=el('span',String(modules?.unreadAlerts||0),'notification-count');count.hidden=!modules?.unreadAlerts;bell.append(count);}
+    if(role==='patient'&&!design&&patientNotices){const unread=patientUnread();const count=el('span',String(unread),'notification-count');count.hidden=!unread;bell.append(count);}
     line.append(el('span', 'Hospital Universitario'), bell);
+    if(role==='doctor'&&!design){const alert=el('p',null,'doctor-header-alert');alert.id='doctor-alert-live';alert.setAttribute('role','status');const latest=modules?.alerts?.find(n=>!n.read_at);alert.textContent=latest?latest.title:'';alert.hidden=!latest;header.append(alert);}
     header.append(line, el('h1', title()), el('p', screen?.subtitle || (page === 'schedule' ? 'Elige especialidad y horario' : 'Servicios y consultas del hospital')));
     const searchbox = el('div', null, 'searchbox'), field = el('input');
     field.type = 'search'; field.placeholder = screen?.search || 'Buscar servicios…'; field.value = search; field.setAttribute('aria-label', field.placeholder);
     field.addEventListener('input', () => { search = field.value; const content = $('#screen-content'); if (content) renderContent(content); });
     searchbox.append(el('span', '⌕'), field);
     const content = el('div', null, 'screen-content'); content.id = 'screen-content'; content.setAttribute('aria-busy', String(busy)); renderContent(content);
-    const clinicalFlow = (['patients','chart','laboratory'].includes(page) && design)||(role==='doctor'&&['patients','laboratory','admissions'].includes(page));
+    const clinicalFlow = (['patients','chart','laboratory'].includes(page) && design)||(role==='doctor'&&['home','patients','laboratory','admissions'].includes(page));
     if(clinicalFlow || page === 'profile' || (role === 'patient' && ['home','chart','laboratory','appointments','request','schedule','health','information'].includes(page))) { portal.className += ' clinical-flow'; portal.append(header,content,bottomBar()); }
     else portal.append(header,searchbox,content,bottomBar());
+    if(role==='doctor'&&notificationsOpen)notificationPanel(portal);
+    if(role==='patient'&&notificationsOpen&&!design)patientNotificationPanel(portal);
     app.append(portal);
+  }
+  function closeNotifications(){notificationsOpen=false;render();$('#notifications-bell')?.focus?.();}
+  document.addEventListener?.('keydown',event=>{if(event.key==='Escape'&&notificationsOpen){event.preventDefault();closeNotifications();}});
+  function patientUnread(){return (patientNotices?.items||[]).filter(item=>item.status==='unread').length;}
+  // Avisos propios del paciente (paridad con PatientNotificationBell en ContentView.swift).
+  function patientNotificationPanel(portal){
+    const backdrop=button(null,closeNotifications,'notification-backdrop');backdrop.setAttribute('aria-label','Cerrar panel de notificaciones');backdrop.tabIndex=-1;
+    const panel=el('section',null,'notification-popover');panel.id='doctor-notifications-panel';panel.setAttribute('role','dialog');panel.setAttribute('aria-label','Mis avisos');
+    const unread=patientUnread(),head=el('div',null,'notification-popover-head'),heading=el('div');heading.append(el('h2','Mis avisos'),el('p',unread?unread+' sin leer':'Estás al día'));
+    const close=button('×',closeNotifications,'notification-close');close.setAttribute('aria-label','Cerrar notificaciones');head.append(heading,close);panel.append(head);
+    const list=el('div',null,'notification-popover-list'),items=patientNotices.items||[];
+    if(patientNotices.error)list.append(el('p',patientNotices.error,'scope-note'));
+    if(!items.length)list.append(el('div','No tienes avisos recientes. Te avisaremos cuando tengas una cita, resultados o una receta lista.','notification-empty'));
+    const target=item=>{const t=(item.title+' '+(item.subtitle||'')).toLowerCase();return t.includes('laboratorio')||t.includes('resultado')?['🧪','laboratory']:t.includes('receta')?['💊','prescriptions']:t.includes('cita')?['📅','appointments']:t.includes('solicitud')?['💬','request']:['🔔',null];};
+    for(const item of items){
+      const [icon,destination]=target(item),card=el('article',null,'notification-item'+(item.status==='unread'?' unread':''));
+      card.append(el('span',icon,'notification-icon'),el('h3',item.title),el('p',item.subtitle||''),el('time',new Intl.DateTimeFormat('es-SV',{dateStyle:'medium',timeStyle:'short',timeZone:'America/El_Salvador'}).format(new Date(item.event_at))));
+      if(destination)card.append(button('Ver',()=>{notificationsOpen=false;go(destination);},'notification-read'));
+      if(item.status==='unread')card.append(button('Marcar como leída',()=>run(async()=>{await api.operation('updateItem',{p_resource:'notifications',p_id:item.id,p_values:{read_at:new Date().toISOString()},p_expected_version:item.row_version});await patientNotices.load('notifications');}),'notification-read'));
+      else card.append(el('span','✓ Leída','notification-read-state'));
+      list.append(card);
+    }
+    if(patientNotices.data?.has_more)list.append(button('Cargar más avisos',()=>run(()=>patientNotices.load('notifications',true)),'module-action'));
+    panel.append(list,button('Actualizar avisos',()=>run(()=>patientNotices.load('notifications')),'notification-refresh'));portal.append(backdrop,panel);
+  }
+  function notificationPanel(portal){
+    const backdrop=button(null,closeNotifications,'notification-backdrop');backdrop.setAttribute('aria-label','Cerrar panel de notificaciones');backdrop.tabIndex=-1;
+    const panel=el('section',null,'notification-popover');panel.id='doctor-notifications-panel';panel.setAttribute('role','dialog');panel.setAttribute('aria-label','Notificaciones');
+    const head=el('div',null,'notification-popover-head'),heading=el('div');heading.append(el('h2','Notificaciones'),el('p',(design?0:modules.unreadAlerts)+' sin leer'));
+    const close=button('×',closeNotifications,'notification-close');close.setAttribute('aria-label','Cerrar notificaciones');head.append(heading,close);panel.append(head);
+    const list=el('div',null,'notification-popover-list');
+    if(modules.alertsError&&!design)list.append(el('p',modules.alertsError,'scope-note'));
+    const rows=design?[]:modules.alerts;
+    if(!rows.length)list.append(el('div',design?'Modo diseño · Sin avisos reales.':'Estás al día. No hay avisos recientes.','notification-empty'));
+    for(const item of rows){
+      const card=el('article',null,'notification-item'+(item.read_at?'':' unread'));
+      card.append(el('h3',item.title),el('p',item.body),el('time',new Intl.DateTimeFormat('es-GT',{dateStyle:'medium',timeStyle:'short'}).format(new Date(item.created_at))));
+      if(!item.read_at)card.append(button('Marcar como leída',()=>run(async()=>{await api.operation('updateItem',{p_resource:'notifications',p_id:item.id,p_values:{read_at:new Date().toISOString()},p_expected_version:item.row_version});await modules.loadAlerts();}),'notification-read'));
+      else card.append(el('span','✓ Leída','notification-read-state'));
+      list.append(card);
+    }
+    if(!design&&modules.alertsHaveMore)list.append(button('Cargar más avisos',()=>run(()=>modules.loadAlerts(true)),'module-action'));
+    panel.append(list);
+    if(!design)panel.append(button('Actualizar avisos',()=>run(()=>modules.loadAlerts()),'notification-refresh'));
+    portal.append(backdrop,panel);
   }
   function bottomBar() {
     const nav = el('nav', null, role === 'doctor' ? 'bottom-nav doctor-nav' : 'bottom-nav'); nav.setAttribute('aria-label', 'Navegación principal');
@@ -392,8 +456,10 @@
     }
     if(role==='patient'&&page==='appointments'){
       const demo=design;
-      return appointmentFlow.render(content,{appointments:demo?appointmentFlow.appointments:HospitalPatientAppointments.fromItems(modules.items,profile,formatConsultationTime),demonstration:demo,loading:busy,error:!design&&!busy&&!modules.data,
-        renderConnected:!design?parent=>modules.render(parent,'appointments',search):null});
+      if(!demo)return appointmentFlow.renderLive(content,{items:modules.items,loading:busy,error:!busy&&!modules.data,period:formatConsultationTime,search,go,
+        hasMore:!!modules.data?.has_more,loadMore:()=>run(()=>modules.load('appointments',true)),
+        cancel:(item,reason)=>run(()=>modules.mutation('cancelAppointment',{p_id:item.id,p_status:'cancelled',p_reason:reason,p_expected_version:item.row_version},'Cita cancelada.'))});
+      return appointmentFlow.render(content,{appointments:appointmentFlow.appointments,demonstration:demo,loading:busy,error:false,renderConnected:null});
     }
     if(role === 'patient' && page === 'prescriptions') {
       const useExamples=design;
@@ -489,7 +555,7 @@
       card.append(el('p',new Intl.DateTimeFormat('es-GT',{weekday:'long',day:'numeric',month:'long'}).format(date),'dash-cita-day'),
         el('strong',new Intl.DateTimeFormat('es-GT',{hour:'numeric',minute:'2-digit'}).format(date),'dash-time'),
         el('p',nextAppointment.doctor_name || 'Nombre del médico no disponible','dash-medico'),
-        el('p',nextAppointment.status==='confirmed'?'Confirmada':'Programada','dash-medico'));
+        el('p',HospitalCore.doctorClinical.statusLabel(nextAppointment.status),'dash-medico'));
     } else {
       card.append(el('strong', 'No tienes citas programadas', 'dash-empty'), el('p', 'Cuando recepción programe tu próxima cita, la encontrarás aquí.', 'dash-medico'));
     }
@@ -799,19 +865,25 @@
     doctorConsultations = new HospitalDoctorConsultations({el,button,busy:() => busy,repaint:() => { const content = $('#screen-content'); if (content) renderContent(content); }});
     patientClinical=new HospitalPatientClinical({el,button,go,run,busy:()=>busy,model:()=>modules,laboratory:()=>patientLabModules,retry:()=>run(()=>load()),repaint:()=>{const content=$('#screen-content');if(content)renderContent(content);}});
     patientLabModules=new HospitalModules(api,{el,button,row,run,message,go,period:formatPeriod,busy:()=>busy});
+    patientNotices=new HospitalModules(api,{el,button,row,run,message,go,period:formatPeriod,busy:()=>busy});
     doctorDashboard = new HospitalDoctorDashboard({el,button,go,run,busy:() => busy});
     modules = new HospitalModules(api,{el,button,row,run,message,go,period:formatPeriod,busy:() => busy,repaint:()=>{const content=$('#screen-content');if(content)renderContent(content);},
       doctorConsultations:(parent,module) => {
         const demo = false;
-        doctorConsultations.render(parent,{day:module.day,appointments:module.workspace.appointments.filter(a=>module.stateFilter==='all'||a.status===module.stateFilter),demo,search,period:formatConsultationTime,
+        doctorConsultations.render(parent,{day:module.day,appointments:module.workspace.appointments,stateFilter:module.stateFilter,demo,search,period:formatConsultationTime,
+          onFilter:value => { module.stateFilter = value; renderContent($('#screen-content')); },
           onDay:day => { module.day = day; module.select(''); module.workspace = null; run(() => module.load('consultation')); },
-          onSelect:id => { module.select(id); run(() => module.loadChart()); }});
+          // ABRIR CONSULTA MÉDICA: doctor_native_start es idempotente (misma clave y consulta existente reutilizada).
+          onSelect:id => { module.select(id); run(async()=>{await module.loadChart();const a=module.appointment;if(a&&!a.encounter_id&&!HospitalCore.doctorClinical.openingBlocker(a))await module.mutation('startConsultation',{p_appointment:id,p_request_key:module.keys.start},'Consulta abierta. Estado: En consulta.',()=>{module.keys.start=crypto.randomUUID();module.seedDraft=true;});}); }});
       },
       doctorDashboard:(parent,module) => {
-        const workspace = module.workspace;
+        const workspace = module.workspace, clinical = HospitalCore.doctorClinical;
+        const agenda = clinical.agenda(workspace.appointments,module.day);
+        const dayAppointments = clinical.chronological(workspace.appointments).filter(a=>clinical.dayKey(clinical.start(a)||NaN)===module.day);
         doctorDashboard.render(parent,{name:workspace.doctor_name,facility:workspace.facility_name,
-          appointments:workspace.appointments,
-          count:workspace.appointments.filter(item => !['cancelled','rejected','no_show'].includes(item.status)).length});
+          // Contadores del día elegido (la agenda trae 14 días) y siguiente cita en orden cronológico.
+          appointments:dayAppointments,unread:module.unreadAlerts,alerts:module.alerts,next:agenda.day.concat(agenda.upcoming).find(a=>a.status==='in_progress'||(HospitalCore.doctorClinical.start(a)||0)>=new Date())||null,
+          count:dayAppointments.filter(item => !['cancelled','rejected','no_show'].includes(item.status)).length});
       },
       doctorPatientHistory:(parent,module) => {
         const patients = [...new Map(module.workspace.appointments.map(item => [item.patient_id,{id:item.patient_id,name:item.patient_name,record:item.record_number}])).values()].sort((a,b) => a.name.localeCompare(b.name,'es'));
@@ -833,5 +905,14 @@
     });
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden && role && !design && !busy) run(() => load()); });
+  setInterval(async()=>{if(!document.hidden&&!design&&!busy&&role==='doctor'&&modules){await modules.loadAlerts();if(notificationsOpen&&!busy)render();else if(page==='notifications')modules.ui.repaint();const badge=document.querySelector('.notification-count');if(badge){badge.textContent=String(modules.unreadAlerts);badge.hidden=!modules.unreadAlerts;}const alert=document.querySelector('#doctor-alert-live');if(alert){const latest=modules.alerts.find(n=>!n.read_at);alert.textContent=latest?latest.title:'';alert.hidden=!latest;}}},30000);
+  // Avisos del paciente cada 30 s en primer plano (resultados, citas, recetas, solicitudes).
+  setInterval(async()=>{if(document.hidden||design||busy||role!=='patient'||!patientNotices)return;try{await patientNotices.load('notifications');}catch{return;}
+    if(notificationsOpen&&!busy)render();else{const badge=document.querySelector('.notification-count');if(badge){const unread=patientUnread();badge.textContent=String(unread);badge.hidden=!unread;}}},30000);
+  // Agenda: sin Realtime en la app. Lee planning_revision (una fila) y solo vuelve a pedir la agenda si cambió.
+  let planningRevision=null;
+  setInterval(async()=>{if(document.hidden||design||busy||role!=='doctor'||page!=='consultation'||!modules||modules.selected)return;
+    let revision=null;try{revision=await api.planningRevision();}catch{return;}
+    if(revision!==null&&planningRevision!==null&&revision===planningRevision)return;planningRevision=revision;if(!busy&&!modules.selected)run(()=>modules.load('consultation'));},30000);
   setInterval(() => { if (!document.hidden && !design && !busy && ((role === 'patient' && ['turns','notifications'].includes(page)) || (role === 'doctor' && ['home','patients','notifications'].includes(page)))) run(() => load()); },30000);
 })();

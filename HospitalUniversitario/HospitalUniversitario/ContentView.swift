@@ -13,6 +13,7 @@ struct ContentView: View {
     @State private var showApplicantDemo = false
     @State private var showRecoveryInfo = false
     @State private var search = ""
+    @State private var notificationsPresented = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -46,17 +47,31 @@ struct ContentView: View {
             search = ""
             await store.refreshScreen()
         }
-        .onChange(of: store.selectedRole) { _, _ in showLabDesign = false; labDesign.reset(); appointmentFlow.reset() }
+        .onChange(of: store.selectedRole) { _, _ in showLabDesign = false; notificationsPresented = false; labDesign.reset(); appointmentFlow.reset() }
         .onChange(of: store.doctor?.workspace?.doctor_name) { _, name in
             if store.selectedRole == "doctor", let name { labDesign.doctorName = name }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active && store.selectedRole != nil { Task { await store.refreshScreen() } }
         }
+        .task(id: store.selectedRole) {
+            while store.selectedRole == "doctor" && !Task.isCancelled {
+                if scenePhase == .active { await store.doctor?.refreshAlerts() }
+                do { try await Task.sleep(for: .seconds(30)) } catch { break }
+            }
+        }
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
             if scenePhase == .active && store.attention?.saving != true && ((store.selectedRole == "patient" && ["home", "appointments", "request", "health", "schedule", "turns", "notifications"].contains(store.screenID)) ||
                 (store.selectedRole == "doctor" && ["home", "patients", "notifications"].contains(store.screenID))) {
                 Task { await store.refreshScreen() }
+            }
+            // Avisos del paciente (resultados, citas, recetas): se actualizan cada 30 s en primer plano.
+            if scenePhase == .active && store.selectedRole == "patient", let notices = store.patientNotifications, !notices.saving {
+                Task { await notices.load("notifications") }
+            }
+            if scenePhase == .active && store.selectedRole == "doctor" && ["consultation", "agenda"].contains(store.screenID) {
+                // Agenda: solo vuelve a pedirla si planning_revision cambió; no interrumpe una consulta abierta.
+                Task { await store.doctor?.syncAgendaIfChanged() }
             }
         }
     }
@@ -128,6 +143,7 @@ struct ContentView: View {
     private var screen: HospitalScreen? { store.screens.first { $0.id == store.screenID } }
     private var isDoctor: Bool { store.selectedRole == "doctor" }
     private var title: String {
+        if isDoctor && store.screenID == "home" { return "Panel general" }
         if isDoctor && store.screenID == "agenda" { return "Agenda médica" }
         if !isDoctor && store.screenID == "home" { return "Mi espacio de salud" }
         if store.screenID == "home" { return "Hola, \(store.name == "Bienvenido" ? (isDoctor ? "Doctor" : "Paciente") : store.name)" }
@@ -141,14 +157,20 @@ struct ContentView: View {
                 HStack {
                     Text("Hospital Universitario").font(.system(size: 14, weight: .medium))
                     Spacer()
-                    Button { go("notifications") } label: { Image(systemName: "bell.badge") }.accessibilityLabel("Notificaciones")
+                    if isDoctor, let doctor = store.doctor {
+                        DoctorNotificationBell(model: doctor, isPresented: $notificationsPresented)
+                    } else if store.selectedRole == "patient", let notices = store.patientNotifications {
+                        PatientNotificationBell(model: notices, isPresented: $notificationsPresented, navigate: go)
+                    } else {
+                        Button { go("notifications") } label: { Image(systemName: "bell") }.accessibilityLabel("Notificaciones")
+                    }
                 }.padding(.bottom, 24)
                 Text(title).font(.system(size: 25, weight: .semibold)).lineLimit(2)
                 Text(screen?.subtitle ?? (store.screenID == "schedule" ? "Elige especialidad y horario" : "Servicios y consultas del hospital")).font(.system(size: 12)).padding(.top, 8)
             }
-            .foregroundStyle(.white).padding(.horizontal, 24).padding(.top, 18).padding(.bottom, (store.screenID == "profile" || (!isDoctor && ["chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) || (showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID))) ? 24 : 48)
+            .foregroundStyle(.white).padding(.horizontal, 24).padding(.top, 18).padding(.bottom, (store.screenID == "profile" || (isDoctor && store.screenID == "home") || (!isDoctor && ["chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) || (showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID))) ? 24 : 48)
             .frame(maxWidth: .infinity, alignment: .leading).background(HospitalTheme.wine.ignoresSafeArea(edges: .top))
-            if store.screenID != "profile" && !(isDoctor && ["patients","laboratory","admissions"].contains(store.screenID)) && !(!isDoctor && ["home", "chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) && !(showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID)) {
+            if store.screenID != "profile" && !(isDoctor && ["home","patients","laboratory","admissions"].contains(store.screenID)) && !(!isDoctor && ["home", "chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) && !(showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID)) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").font(.system(size: 11))
                 TextField(isDoctor && ["agenda","consultation","patients"].contains(store.screenID) ? "Buscar paciente o expediente…" : screen?.search ?? "Buscar servicios…", text: $search).font(.system(size: 12)).autocorrectionDisabled()
@@ -217,7 +239,7 @@ struct ContentView: View {
                 demonstration: useExamples, search: search, loading: modules.loading, error: modules.error, hasMore: modules.page?.has_more == true,
                 retry: { Task { await modules.load("history") } }, loadMore: { Task { await modules.load("history", more: true) } })
         } else if let modules = store.modules,
-           ((!isDoctor && ["appointments", "request", "chart", "history", "prescriptions", "laboratory"].contains(store.screenID)) || store.screenID == "notifications") {
+           ((!isDoctor && ["appointments", "request", "chart", "history", "prescriptions", "laboratory"].contains(store.screenID)) || (!isDoctor && store.screenID == "notifications")) {
             MobileModuleView(model: modules, module: store.screenID, role: isDoctor ? "doctor" : "patient", search: search, period: store.period, navigate: go)
         } else if isDoctor, let doctor = store.doctor,
            ["home", "agenda", "patients", "consultation", "chart", "laboratory", "notifications", "admissions"].contains(store.screenID) {
@@ -237,7 +259,7 @@ struct ContentView: View {
     }
 
     private func heading(_ value: String) -> some View { Text(value).font(.system(size: 16, weight: .semibold)).padding(.top, 1) }
-    private func go(_ id: String) { guard !store.busy, store.doctor?.saving != true, store.modules?.saving != true, store.attention?.saving != true else { return }; if id == "consultation", store.screenID != id, store.doctor?.selectedAppointmentID == nil { store.doctor?.day = Date() }; store.screenID = id; search = "" }
+    private func go(_ id: String) { if isDoctor && id == "notifications" { notificationsPresented = true; return }; notificationsPresented = false; guard !store.busy, store.doctor?.saving != true, store.modules?.saving != true, store.attention?.saving != true else { return }; if id == "consultation", store.screenID != id, store.doctor?.selectedAppointmentID == nil { store.doctor?.day = Date() }; store.screenID = id; search = "" }
     private func matches(_ value: String) -> Bool { search.isEmpty || value.localizedCaseInsensitiveContains(search) }
 
     /// Inicio del paciente: dashboard nuevo con saludo, fecha/cita y accesos rápidos.
@@ -388,5 +410,142 @@ struct ContentView: View {
                 }.buttonStyle(.plain).disabled(store.busy).accessibilityAddTraits(active == id ? .isSelected : [])
             }
         }.padding(.horizontal, 12).padding(.top, 7).background(Color.white.ignoresSafeArea(edges: .bottom))
+    }
+}
+
+@MainActor
+/// Campana del paciente: sus avisos propios (resultados publicados, citas, recetas, solicitudes), igual que el médico.
+private struct PatientNotificationBell: View {
+    @ObservedObject var model: MobileModuleViewModel
+    @Binding var isPresented: Bool
+    let navigate: (String) -> Void
+    @State private var reading: UUID?
+    private var unread: Int { model.items.filter { $0.status == "unread" }.count }
+    private func icon(_ item: MobileItem) -> String {
+        let text = (item.title + " " + (item.subtitle ?? "")).lowercased()
+        if text.contains("laboratorio") || text.contains("resultado") { return "testtube.2" }
+        if text.contains("receta") { return "pills.fill" }
+        if text.contains("cita") { return "calendar" }
+        if text.contains("solicitud") { return "text.bubble" }
+        return "bell"
+    }
+    private func destination(_ item: MobileItem) -> String? {
+        ["testtube.2": "laboratory", "pills.fill": "prescriptions", "calendar": "appointments", "text.bubble": "request"][icon(item)]
+    }
+    var body: some View {
+        Button { isPresented.toggle() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: unread > 0 ? "bell.badge.fill" : "bell").font(.title3)
+                if unread > 0 { Text("\(unread)").font(.caption.bold()).padding(5).background(.white.opacity(0.2), in: Capsule()) }
+            }.frame(minWidth: 44, minHeight: 44)
+        }.accessibilityLabel("Notificaciones").accessibilityValue("\(unread) sin leer")
+            .task { if model.items.isEmpty { await model.load("notifications") } }
+            .popover(isPresented: $isPresented, arrowEdge: .top) {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Mis avisos").font(.title3.bold())
+                            Text(unread == 0 ? "Estás al día" : "\(unread) sin leer").font(.caption).foregroundStyle(HospitalTheme.secondary)
+                        }
+                        Spacer()
+                        Button { isPresented = false } label: { Image(systemName: "xmark.circle.fill").font(.title2) }.accessibilityLabel("Cerrar notificaciones")
+                    }
+                    Divider()
+                    if let error = model.error { Text(error).font(.footnote).foregroundStyle(.red) }
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 10) {
+                            if model.items.isEmpty && !model.loading {
+                                VStack(spacing: 8) {
+                                    Image(systemName: "checkmark.circle").font(.title).foregroundStyle(HospitalTheme.wine)
+                                    Text("No tienes avisos recientes.").font(.subheadline)
+                                    Text("Te avisaremos cuando tengas una cita, resultados o una receta lista.").font(.caption).foregroundStyle(HospitalTheme.secondary).multilineTextAlignment(.center)
+                                }.frame(maxWidth: .infinity).padding(.vertical, 24)
+                            }
+                            ForEach(model.items) { item in
+                                HStack(alignment: .top, spacing: 10) {
+                                    Image(systemName: icon(item)).font(.subheadline.weight(.semibold)).foregroundStyle(HospitalTheme.wine)
+                                        .frame(width: 34, height: 34).background(.white, in: Circle())
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(item.title).font(.subheadline.bold()).foregroundStyle(HospitalTheme.ink)
+                                        if let body = item.subtitle { Text(body).font(.footnote).fixedSize(horizontal: false, vertical: true) }
+                                        Text(DoctorDate.display(item.event_at)).font(.caption2).foregroundStyle(HospitalTheme.secondary)
+                                        HStack(spacing: 14) {
+                                            if let target = destination(item) { Button("Ver") { isPresented = false; navigate(target) }.font(.caption.bold()) }
+                                            if item.status == "unread" {
+                                                Button(reading == item.id ? "Guardando…" : "Marcar como leída") {
+                                                    reading = item.id
+                                                    Task { await model.markRead(item); reading = nil }
+                                                }.font(.caption.bold()).disabled(reading != nil)
+                                            }
+                                        }
+                                    }
+                                    Spacer(minLength: 0)
+                                }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(item.status == "unread" ? HospitalTheme.rose : HospitalTheme.background, in: RoundedRectangle(cornerRadius: 14))
+                            }
+                            if model.page?.has_more == true { Button("Cargar más avisos") { Task { await model.load("notifications", more: true) } } }
+                        }
+                    }
+                    Button("Actualizar avisos", systemImage: "arrow.clockwise") { Task { await model.load("notifications") } }.font(.caption.bold())
+                }.padding(18).frame(width: 320, height: 460).foregroundStyle(HospitalTheme.ink).tint(HospitalTheme.wine)
+                    .background(.white).presentationCompactAdaptation(.popover)
+                    .task { await model.load("notifications") }
+            }
+    }
+}
+
+private struct DoctorNotificationBell: View {
+    @ObservedObject var model: DoctorViewModel
+    @Binding var isPresented: Bool
+    @State private var reading: UUID?
+    var body: some View {
+        Button { isPresented.toggle() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: model.unreadAlerts > 0 ? "bell.badge.fill" : "bell").font(.title3)
+                if model.unreadAlerts > 0 { Text("\(model.unreadAlerts)").font(.caption.bold()).padding(5).background(.white.opacity(0.2), in: Capsule()) }
+            }.frame(minWidth: 44, minHeight: 44)
+        }.accessibilityLabel("Notificaciones").accessibilityValue("\(model.unreadAlerts) sin leer")
+            .popover(isPresented: $isPresented, arrowEdge: .top) {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Notificaciones").font(.title3.bold())
+                            Text("\(model.unreadAlerts) sin leer").font(.caption).foregroundStyle(HospitalTheme.secondary)
+                        }
+                        Spacer()
+                        Button { isPresented = false } label: { Image(systemName: "xmark.circle.fill").font(.title2) }.accessibilityLabel("Cerrar notificaciones")
+                    }
+                    Divider()
+                    if let error = model.alertsError { Text(error).font(.footnote).foregroundStyle(.red) }
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if model.alerts.isEmpty { Label("Estás al día. No hay avisos recientes.", systemImage: "checkmark.circle").font(.subheadline).padding(.vertical, 24) }
+                            ForEach(model.alerts) { item in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Label(item.title, systemImage: item.read_at == nil ? "circle.fill" : "checkmark.circle").font(.subheadline.bold()).foregroundStyle(HospitalTheme.wine)
+                                    Text(item.body).font(.footnote).fixedSize(horizontal: false, vertical: true)
+                                    Text(DoctorDate.display(item.created_at)).font(.caption2).foregroundStyle(HospitalTheme.secondary)
+                                    if item.read_at == nil {
+                                        Button(reading == item.id ? "Guardando…" : "Marcar como leída") {
+                                            reading = item.id
+                                            Task { await model.markRead(item); reading = nil }
+                                        }.font(.caption.bold()).disabled(reading != nil)
+                                    } else { Text("Leída").font(.caption).foregroundStyle(HospitalTheme.secondary) }
+                                }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(item.read_at == nil ? HospitalTheme.rose : HospitalTheme.background, in: RoundedRectangle(cornerRadius: 14))
+                            }
+                            if model.alertsHaveMore { Button("Cargar más avisos") { Task { await model.refreshAlerts(more: true) } } }
+                        }
+                    }
+                    HStack {
+                        Button("Actualizar avisos", systemImage: "arrow.clockwise") { Task { await model.refreshAlerts() } }
+                        Spacer()
+                        Button("Recordatorios") { Task { await model.enableReminders() } }
+                    }.font(.caption.bold())
+                    if let message = model.notificationMessage { Text(message).font(.caption).foregroundStyle(HospitalTheme.secondary) }
+                }.padding(18).frame(width: 310, height: 440).foregroundStyle(HospitalTheme.ink).tint(HospitalTheme.wine)
+                    .background(.white).presentationCompactAdaptation(.popover)
+                    .task { await model.refreshAlerts() }
+            }
     }
 }

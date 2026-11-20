@@ -79,6 +79,7 @@ final class HospitalAPI {
                let problem = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let code = problem["code"] as? String, ["22023", "42501", "40001"].contains(code),
                let message = problem["message"] as? String {
+                if code == "40001" && path.contains("doctor_native_") { throw HospitalError.conflict(message) }
                 throw HospitalError.message(message)
             }
             throw BackendFailure(status: response.statusCode)
@@ -100,12 +101,17 @@ final class HospitalAPI {
 
     func token() async throws -> String { try await client.auth.session.accessToken }
     func doctorRPC<T: Decodable>(_ name: String, parameters: [String: Any] = [:]) async throws -> T {
-        guard ["workspace", "chart", "start", "save", "lab", "prescribe", "finish", "patients", "patient_labs", "admissions", "admission_request", "lab_catalog", "lab_orders", "labs"].contains(name) else {
+        guard ["workspace", "chart", "start", "save", "lab", "prescribe", "finish", "patients", "patient_labs", "admissions", "admission_request", "lab_catalog", "lab_orders", "labs", "alerts"].contains(name) else {
             throw HospitalError.message("Operación médica no permitida.")
         }
         let value = try await request("/rest/v1/rpc/doctor_native_" + name, body: parameters, method: "POST")
         let data = try JSONSerialization.data(withJSONObject: value, options: .fragmentsAllowed)
         return try JSONDecoder().decode(T.self, from: data)
+    }
+    /// Lectura de una sola fila (RLS: admin, recepción o médico); sirve para saber si la agenda cambió sin pedirla entera.
+    func planningRevision() async throws -> Int64? {
+        let rows = try await request("/rest/v1/planning_revision?select=revision&limit=1") as? [[String: Any]]
+        return (rows?.first?["revision"] as? NSNumber)?.int64Value
     }
     func attentionRPC<T: Decodable>(_ name: String, parameters: [String: Any] = [:]) async throws -> T {
         guard ["my_attention_context", "my_attention_requests", "submit_my_attention_request"].contains(name) else {

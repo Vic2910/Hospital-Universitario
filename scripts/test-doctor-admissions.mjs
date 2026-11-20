@@ -18,6 +18,11 @@ const ui=createApp(['doctor'],{transport:async(url,p)=>{
 await ui.login();await ui.click('Ingresos hospitalarios');
 assert.match(ui.app.textContent,/Sin solicitudes/);
 await ui.click('Nueva solicitud');
+// Sin texto no se lista ningún paciente; con una sola letra tampoco se consulta.
+const wait=()=>new Promise(resolve=>setTimeout(resolve,420)),searches=()=>ui.calls.filter(c=>c.url.endsWith('/doctor_native_patients')).length;
+assert.equal(ui.app.textContent.includes(patient.full_name),false,'No aparece el listado de pacientes al abrir');assert.match(ui.app.textContent,/Escribe al menos 2 letras/);
+let before=searches();await ui.input('Buscar paciente para hospitalizar','P');await wait();assert.equal(searches(),before,'Una letra no consulta');
+await ui.input('Buscar paciente para hospitalizar','ingreso');await wait();assert.equal(searches(),before+1);assert.equal(ui.calls.filter(c=>c.url.endsWith('/doctor_native_patients')).at(-1).params.p_query,'ingreso');
 await ui.click('Seleccionar paciente '+patient.full_name);assert.match(ui.app.textContent,/EXP-LOCAL/);
 await ui.input('Categoría de habitación','semiprivada','change');await ui.input('Prioridad','urgente','change');
 await ui.input('Motivo clínico del ingreso','Motivo médico local');await ui.input('Observaciones e indicaciones (opcional)','Observación local');

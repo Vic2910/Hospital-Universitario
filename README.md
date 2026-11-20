@@ -43,6 +43,20 @@ Si Auth vuelve a exigir correo, la app informa de la discrepancia sin simular un
 
 **Ingresos hospitalarios:** doctor → acceso del Dashboard, Más o paciente/consulta → Nueva solicitud. iOS y web-preview envían solicitudes reales y muestran su seguimiento, habitación/cama cuando recepción confirma. Categorías reales VIP/Semiprivada, prioridad Normal/Urgente; el médico no ocupa camas. [Contrato breve para integrar recepción en su proyecto separado](docs/INGRESOS_DOCTOR_2026-11-13.md).
 
+## Doctor: consulta y avisos
+
+Panel general con saludo único, resumen del día y accesos a Agenda, Pacientes, Laboratorios e Ingresos. Consultas y Recetas conservan su navegación fuera de los accesos rápidos. La campana abre un panel flotante sin salir de la pantalla, con lectura y actualización de avisos propios de asignación y recordatorio 15 minutos antes; actualización cada 30 segundos en primer plano. Consulta por secciones, expediente previo, observaciones, peso/altura, diagnóstico y plan; Terminar consulta guarda y completa. Historial del paciente con notas finalizadas y medidas, accesible desde Mi expediente. Solo el médico autor y el paciente leen las notas/diagnósticos.
+
+iOS ofrece Activar recordatorios en este iPhone para citas ya sincronizadas. No hay push de nuevas asignaciones con la app cerrada. Compilación Xcode y revisión visual pendientes. [Implementación, pruebas y límites](docs/DOCTOR_CONSULTA_AVISOS_2026-11-19.md).
+
+**Flujo de atención (iOS y web-preview):** Agenda (hoy y 13 días siguientes en hora de El Salvador, en orden cronológico, con secciones Hoy/Próximas/Finalizadas/Canceladas) → Ver detalle → **ABRIR CONSULTA MÉDICA** → tarjeta del paciente y datos de la cita automáticos → A Datos físicos (peso, altura, temperatura), B Evaluación médica (síntomas, diagnóstico, observaciones), C Servicios adicionales (**Solicitar exámenes** y **Recetar medicamentos**, opcionales) → Guardar consulta → **FINALIZAR CONSULTA** con confirmación. Estados para médico y paciente: Programada → En consulta → Finalizada. **El cierre requiere aplicar `supabase/doctor-consultation-six-fields.sql`** (preparada, no aplicada): el servidor actual todavía exige plan de tratamiento y la app lo avisa sin cerrar. [Flujo](docs/DOCTOR_FLUJO_CONSULTA_2026-11-19.md) · [Formulario de seis campos](docs/DOCTOR_FORMULARIO_SEIS_CAMPOS_2026-11-19.md).
+
+**Paciente (iOS y web-preview):** Mis citas muestra la próxima cita con todos sus detalles, las siguientes y el historial, sin pantallas intermedias. La campana muestra los avisos propios del paciente. Solo puede haber una solicitud de atención activa: con una pendiente o una cita programada se muestra un aviso en lugar del formulario. Los avisos de cita, receta y solicitud, y el bloqueo en el servidor, requieren `supabase/paciente-avisos-solicitud-unica.sql`. [Detalle](docs/PACIENTE_CITAS_AVISOS_SOLICITUD_2026-11-20.md).
+
+**Agenda de Consultas (iOS y web-preview):** dos filtros, **PENDIENTES** (por hora ascendente; hoy también las consultas en atención de días previos) y **FINALIZADAS** (por hora real de finalización, la última primero). Fecha inicial hoy, con día anterior y siguiente, calendario y botón Hoy, y búsqueda por nombre, apellido, código o expediente. Las canceladas no aparecen en ninguno de los dos. Sincronización cada 30 s mediante `planning_revision`, que solo vuelve a pedir la agenda si cambió. La hora real de finalización requiere `supabase/doctor-consultation-six-fields.sql`. [Análisis del módulo y de Supabase](docs/ANALISIS_MODULO_DOCTOR_SUPABASE.md).
+
+**Expedientes (iOS y web-preview):** el médico busca por nombre, apellido, DUI o código de expediente (con espera breve y sin selector desplegable), abre un expediente con cabecera única y pulsa **VER HISTORIAL MÉDICO** para ver sus consultas finalizadas, de la más reciente a la más antigua, con detalle de datos físicos, evaluación, recetas y exámenes. El paciente entra directamente a su propio expediente e historial. La búsqueda por código de paciente, y la especialidad, el motivo y las recetas por consulta, requieren `supabase/expedientes-historial.sql` (preparada, no aplicada). [Detalle](docs/EXPEDIENTES_2026-11-20.md).
+
 ## Abrir en Mac
 
 1. Copia o clona el proyecto completo, conservando rutas relativas.
@@ -62,7 +76,12 @@ node --preserve-symlinks --preserve-symlinks-main scripts/test-patient-registrat
 node --preserve-symlinks --preserve-symlinks-main scripts/test-patient-dashboard.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-attention-navigation.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-preview-live.mjs
+node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-clinical-rules.mjs
+node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-alerts-history.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-directory.mjs
+node --preserve-symlinks --preserve-symlinks-main scripts/test-patient-record.mjs
+node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-agenda.mjs
+node --preserve-symlinks --preserve-symlinks-main scripts/test-patient-portal.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-admissions.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-applicant.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-clinical-labs.mjs

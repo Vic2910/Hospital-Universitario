@@ -64,7 +64,7 @@ struct PatientDateAppointmentCard: View {
                     Image(systemName: "stethoscope").font(.system(size: 12))
                     Text(cita.medico).font(.system(size: 12))
                 }.foregroundStyle(.white.opacity(0.9))
-                Text(cita.status == "confirmed" ? "Confirmada" : "Programada")
+                Text(DoctorClinicalRules.statusLabel(cita.status))
                     .font(.footnote.bold()).foregroundStyle(.white)
             } else {
                 Text("No tienes citas programadas").font(.headline).foregroundStyle(.white)
