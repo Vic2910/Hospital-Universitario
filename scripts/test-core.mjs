@@ -33,7 +33,7 @@ const access=c.backendAccess(user,profile,[{user_id:id,role:'paciente',active:tr
 assert.deepEqual(plain(c.routes(access)),['patient']);
 const dashboardPath=decodeURIComponent(c.backendPlan('patientDashboard',{now:'2026-11-13T10:00:00Z'},access)[0].path);
 assert.match(dashboardPath,/patient_id=eq\./);assert.match(dashboardPath,/status=in\.\(programada,confirmada,en_atencion\)/);
-assert.match(dashboardPath,/or=\(status.eq.en_atencion,starts_at.gte\./);assert.match(dashboardPath,/order=starts_at.asc,id.asc/);assert.match(dashboardPath,/limit=1$/);
+assert.match(dashboardPath,/or=\(status.eq.en_atencion,ends_at.gt\./,'Vigente mientras no termine el horario reservado (como el servidor)');assert.match(dashboardPath,/order=starts_at.asc,id.asc/);assert.match(dashboardPath,/limit=1$/);
 const other={id,patient_id:'00000000-0000-4000-8000-000000000002',starts_at:'2026-11-14T10:00:00Z',status:'confirmada'};
 assert.equal(c.backendPresent('patientDashboard',{now:'2026-11-13T10:00:00Z'},access,[[other]]).next_appointment,null);
 assert.deepEqual(plain(c.routes(c.backendAccess(user,profile,[],[{id,profile_id:id}],[]))),[],'User metadata never grants a role');

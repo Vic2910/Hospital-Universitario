@@ -1,6 +1,6 @@
 (function (root) {
   'use strict';
-  const labels = {pending:'Pendiente',scheduled:'Programada',confirmed:'Programada',checked_in:'Registrado en recepción',in_progress:'En consulta',completed:'Finalizada',cancelled:'Cancelada',rejected:'Rechazada',open:'Abierta',closed:'Cerrada',issued:'Emitida',draft:'Borrador',ordered:'Emitida',released:'Publicado',unread:'No leída',read:'Leída',no_show:'No se presentó',active:'Vigente',expired:'Tratamiento finalizado'};
+  const labels = {pending:'Pendiente',scheduled:'Programada',confirmed:'Programada',checked_in:'Registrado en recepción',in_progress:'En consulta',completed:'Finalizada',cancelled:'Cancelada',rejected:'Rechazada',open:'Abierta',closed:'Cerrada',issued:'Emitida',draft:'Borrador',ordered:'Emitida',released:'Publicado',unread:'No leída',read:'Leída',no_show:'No atendida',active:'Vigente',expired:'Tratamiento finalizado'};
   const clinical = () => root.HospitalCore.doctorClinical;
   const localDay = date => new Intl.DateTimeFormat('en-CA',{year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
   const dateTime = value => value && Number.isFinite(new Date(value).getTime()) ? new Intl.DateTimeFormat('es-GT',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value)) : 'No registrado';
@@ -106,7 +106,7 @@
         this.vitals={...(encounter?.vitals||{})};this.noteID = encounter?.note_id || null; this.noteVersion = encounter?.note_version ?? 0; this.seedDraft = false;
         this.savedNote=encounter?this.snapshot():null;
         // Primera apertura: precarga lo que el paciente ya envió; queda como cambio pendiente hasta guardar.
-        if(encounter&&encounter.status==='open'&&!this.noteVersion&&!this.consultation.subjective&&this.appointment)this.consultation.subjective=clinical().seedSubjective(this.appointment);
+        // Los síntomas que envió el paciente se muestran aparte, de solo lectura; no se copian a la nota médica.
       }
     }
     async loadPatients(more=false) {
@@ -283,13 +283,6 @@
           throw new Error('Las preferencias todavía no están habilitadas en Hospital Móviles.');
         })); group.append(toggle,this.node('span',item.name)); parent.append(group);
       }
-      const passwords = {password:'',repeat:''}, passwordForm = this.form(parent,'Actualizar contraseña',async () => {
-        const value = passwords.password; passwords.password = ''; const repeated = passwords.repeat; passwords.repeat = '';
-        if (value.length < 12 || value !== repeated) throw new Error('Usa al menos 12 caracteres y confirma la misma contraseña.');
-        await this.api.changePassword(value); this.ui.message('Contraseña actualizada.');
-      });
-      this.field(passwordForm.form,'Nueva contraseña',passwords,'password','password').autocomplete = 'new-password';
-      this.field(passwordForm.form,'Repetir contraseña',passwords,'repeat','password').autocomplete = 'new-password'; passwordForm.finish();
     }
     patientPicker(parent) {
       const state = {id:this.selected};
@@ -315,7 +308,7 @@
         const appointments = workspace.appointments.filter(item => this.matches(item.patient_name+' '+item.record_number+' '+(item.ticket_number || ''),this.search));
         if (!appointments.length) parent.append(this.ui.row('Sin pacientes','No tienes pacientes asignados para esta fecha.'));
         for (const item of appointments) {
-          const card = this.ui.row(item.patient_name,item.record_number+' · '+this.ui.period(item.period),labels[item.status]);
+          const card = this.ui.row(item.patient_name,item.record_number+' · '+this.ui.period(item.period),clinical().statusLabel(item.status));
           for (const [id,label] of [['consultation','Atender'],['chart','Expediente']]) card.append(this.ui.button(label,() => { this.select(item.id); this.ui.go(id); },'module-action')); parent.append(card);
         }
         if (page === 'patients') this.ui.doctorPatientHistory(parent,this);
@@ -493,7 +486,8 @@
       if(visit){
         const box=this.node('section',null,'record-visit');box.setAttribute('role','region');box.setAttribute('aria-label','Detalle de consulta');
         box.append(this.ui.button('← Volver al historial',()=>{this.recordVisit='';this.ui.repaint();},'text-button'));
-        const vh=this.node('div',null,'record-visit-head');vh.append(this.node('strong',day(visit.started_at)+' · '+hour(visit.started_at)),this.node('span','🩺 '+doctor(visit)));if(real(visit.specialty))vh.append(this.node('span',visit.specialty));if(real(visit.reason))vh.append(this.node('span','Motivo: '+visit.reason));box.append(vh);
+        const vh=this.node('div',null,'record-visit-head');vh.append(this.node('small','🔒 Finalizada · solo lectura'),this.node('strong',(chart.patient?.full_name?chart.patient.full_name+' · ':'')+day(visit.started_at)+' · '+hour(visit.started_at)+(visit.ended_at?' – '+hour(visit.ended_at)+' · '+Math.max(0,Math.round((Date.parse(visit.ended_at)-Date.parse(visit.started_at))/60000))+' min':'')),this.node('span','🩺 '+doctor(visit)));if(real(visit.specialty))vh.append(this.node('span',visit.specialty));if(real(visit.reason))vh.append(this.node('span','Motivo: '+visit.reason));box.append(vh);
+        const reported=(visit.reported_symptoms||[]).filter(real);if(reported.length||real(visit.reported_other)){const g=this.node('div',null,'record-visit-group');g.append(this.node('h3','Síntomas iniciales · reportados por el paciente'));const chips=this.node('div',null,'record-chips');for(const sym of reported)chips.append(this.node('span',sym,'record-chip'));g.append(chips);if(real(visit.reported_other))g.append(this.node('p','Otros: '+visit.reported_other));box.append(g);}
         const vitals=clinical().recordedVitals.filter(v=>real(visit.vitals?.[v.key]));
         if(vitals.length){const g=this.node('div',null,'record-visit-group');g.append(this.node('h3','Datos físicos'));for(const v of vitals)this.detail(g,v.label+' ('+v.unit+')',String(visit.vitals[v.key]));const bmi=clinical().bmi(visit.vitals||{});if(bmi)this.detail(g,'IMC (calculado)',bmi+' kg/m²');box.append(g);}
         const ev=this.node('div',null,'record-visit-group');ev.append(this.node('h3','Evaluación médica'));
@@ -636,7 +630,8 @@
     async finishConsultation(){
       const blockers=this.finishBlockers();
       if(blockers.length){this.finishConfirm=false;throw new Error(blockers.join('. ')+'.');}
-      await this.saveNote();
+      // Finalizar guarda primero; si el guardado falla no se cierra y se explica.
+      try{await this.saveNote();}catch(error){if(this.conflict)throw error;throw new Error('No se ha guardado la consulta. Guarda los cambios antes de finalizar la atención.');}
       const saved=this.encounter;
       if(!saved?.note_id||saved.status!=='open')throw new Error('Actualiza la consulta antes de finalizar.');
       // Hasta aplicar supabase/doctor-consultation-six-fields.sql el servidor exige `plan`; se informa sin cerrar ni perder datos.
@@ -717,9 +712,12 @@
         input.addEventListener('input',()=>{const ok=input.value.trim()!=='';badge.textContent=ok?'Completo':'Obligatorio';badge.setAttribute('data-state',ok?'done':'missing');});
         if(hint)holder.append(this.node('small',hint,'scope-note'));
       };
-      note('Síntomas que presentaba','subjective','Describe los síntomas, cuándo iniciaron y cómo han evolucionado','Se precargó con lo que envió el paciente; revísalo y precísalo.',holder=>this.reportedSymptoms(holder,appointment));
+      // Síntomas del paciente: referencia de solo lectura (appointment_requests), separada de la evaluación médica.
+      const reported=this.node('div',null,'consultation-readonly');reported.append(this.node('small','Reportados por el paciente · solo lectura','consultation-kicker'));this.reportedSymptoms(reported,appointment);evaluation.append(reported);
+      note('Síntomas actuales','subjective','Síntomas que encuentras en la consulta, cuándo iniciaron y cómo han evolucionado','Lo que registras tú; los síntomas del paciente se conservan arriba sin cambios.');
+      note('Exploración y observaciones','objective','Hallazgos de la exploración física y observaciones clínicas');
       note('Diagnóstico','assessment','Diagnóstico principal y, si aplica, diagnósticos adicionales');
-      note('Observaciones','objective','Hallazgos de la exploración, indicaciones y recomendaciones');
+      note('Plan de tratamiento','plan','Tratamiento, indicaciones y seguimiento');
       // C. Formularios existentes de laboratorio y receta, abiertos sin salir de la consulta.
       const services=this.block(editor,'C','Servicios adicionales','Opcionales. Quedan asociados a esta consulta.','grid');
       const service=(label,caption,badge,open)=>{
@@ -802,7 +800,7 @@
     }
     consultationRecord(parent,encounter){
       const card=this.ui.row(dateTime(encounter.started_at),'',encounter.status==='open'?'En consulta':'Finalizada');
-      for(const [key,label] of [['subjective','Síntomas que presentaba'],['assessment','Diagnóstico'],['diagnosis_code','Código diagnóstico'],['objective','Observaciones'],['plan','Plan de tratamiento (registro anterior)']])if(String(encounter[key]||'').trim())this.detail(card,label,encounter[key]);
+      for(const [key,label] of [['subjective','Síntomas actuales'],['objective','Exploración y observaciones'],['assessment','Diagnóstico'],['diagnosis_code','Código diagnóstico'],['plan','Plan de tratamiento']])if(String(encounter[key]||'').trim())this.detail(card,label,encounter[key]);
       for(const v of clinical().recordedVitals)if(encounter.vitals?.[v.key]!=null)this.detail(card,v.label+' ('+v.unit+')',encounter.vitals[v.key]);
       const bmi=clinical().bmi(encounter.vitals||{});if(bmi)this.detail(card,'IMC (calculado)',bmi+' kg/m²');parent.append(card);
     }

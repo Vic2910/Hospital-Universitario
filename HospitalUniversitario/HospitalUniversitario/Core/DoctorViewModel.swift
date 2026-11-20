@@ -296,10 +296,7 @@ final class DoctorViewModel: ObservableObject {
                 if !draftInitialized, let note = activeConsultation {
                     let stored = Self.draft(from: note)
                     draft = stored; savedDraft = stored
-                    // Primera apertura: precarga lo que el paciente ya envió; queda como cambio pendiente hasta guardar.
-                    if (note.note_version ?? 0) == 0, stored.subjective.isEmpty, let appointment = selectedAppointment {
-                        draft.subjective = DoctorClinicalRules.seedSubjective(appointment)
-                    }
+                    // Los síntomas que envió el paciente se muestran aparte, de solo lectura; no se copian a la nota médica.
                     draftNoteID = note.note_id; draftNoteVersion = note.note_version; draftInitialized = true
                 }
             }
@@ -486,6 +483,7 @@ final class DoctorViewModel: ObservableObject {
         return values
     }
 
+    static let unsavedFinishMessage = "No se ha guardado la consulta. Guarda los cambios antes de finalizar la atención."
     /// Guarda los cambios pendientes y después ejecuta doctor_native_finish con la versión recién guardada.
     @discardableResult
     func closeConsultation() async -> Bool {
@@ -495,7 +493,10 @@ final class DoctorViewModel: ObservableObject {
         }
         let scope = generation, selection = selectionGeneration
         guard await saveConsultation(), generation == scope, selectionGeneration == selection, error == nil,
-              let encounter = activeConsultation, let note = encounter.note_id, let version = encounter.note_version else { return false }
+              let encounter = activeConsultation, let note = encounter.note_id, let version = encounter.note_version else {
+            if generation == scope && conflictNote == nil { error = Self.unsavedFinishMessage }
+            return false
+        }
         let finished = await mutate(success: "Consulta finalizada. La información quedó registrada en el expediente del paciente.") {
             try await self.repository.close(encounter: encounter.id, note: note,
                 noteVersion: version, encounterVersion: encounter.row_version)

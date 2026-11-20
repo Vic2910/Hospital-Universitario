@@ -17,7 +17,7 @@ struct PatientHistoryRecord: Identifiable, Codable {
         .init(id: "history-demo-3", startedAt: "2026-04-15T08:35:00-06:00", dateLabel: "15 abr 2026", timeLabel: "08:35", specialty: "Medicina general", doctor: "Dra. Laura Campos", reason: "Revisión general")
     ]
     static let physical = ["Peso (kg)", "Altura (cm)", "Temperatura (°C)", "Presión sistólica (mmHg)", "Presión diastólica (mmHg)", "Frecuencia cardíaca (lpm)"]
-    static let evaluation = ["Motivo de consulta", "Síntomas que presentaba", "Diagnóstico", "Código diagnóstico", "Observaciones", "Tratamiento"]
+    static let evaluation = ["Atención", "Motivo de consulta", "Síntomas reportados por el paciente", "Otros síntomas reportados", "Síntomas actuales", "Exploración y observaciones", "Diagnóstico", "Código diagnóstico", "Plan de tratamiento"]
 
     static func from(_ item: MobileItem) -> Self {
         let details = item.details.filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }

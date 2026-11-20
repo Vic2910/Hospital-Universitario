@@ -13,10 +13,6 @@ final class MobileModuleRepository {
     }
     func perform(_ name: String, _ parameters: [String: DoctorJSON]) async throws { try await api.perform(name, parameters: parameters) }
 
-    func changePassword(_ password: String) async throws {
-        _ = try await api.client.auth.update(user: .init(password: password))
-    }
-
     func documentURL(_ id: UUID) async throws -> URL {
         throw HospitalError.message("Los documentos todavía no están habilitados en Hospital Móviles.")
     }

@@ -5,34 +5,37 @@ import SwiftUI
 struct PatientAttentionLiveView: View {
     @ObservedObject var model: PatientAttentionModel
     let navigate: (String) -> Void
+    @State private var showPreviousRequests = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("SOLICITAR ATENCIÓN", systemImage: "stethoscope").font(.caption2.weight(.heavy)).tracking(1.2).opacity(0.85)
-                Text("Cuéntanos qué necesitas").font(.title2.bold())
-                Text("Recepción revisa tu solicitud y te programa la cita. Solo puedes tener una solicitud activa a la vez.").font(.subheadline).opacity(0.9)
-            }.foregroundStyle(.white).padding(20).frame(maxWidth: .infinity, alignment: .leading)
-                .background(LinearGradient.vinoDestacado, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            HospitalNotice(text: "Este formulario no es para emergencias. Ante una emergencia, acude al servicio de urgencias. Los síntomas que declares no constituyen un diagnóstico.")
-            if model.loading { ProgressView("Cargando tus datos y solicitudes…") }
-            if let error = model.error {
-                HospitalNotice(text: error)
-                Button("Actualizar") { Task { await model.load() } }.disabled(model.saving || model.loading)
+        VStack(alignment: .leading, spacing: 16) {
+            hero
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark").font(.caption.weight(.heavy)).foregroundStyle(.white)
+                    .frame(width: 22, height: 22).background(Color(red: 0.89, green: 0.64, blue: 0.23), in: Circle())
+                Text("Este formulario no es para emergencias. Ante una emergencia, acude a urgencias. Los síntomas declarados no son diagnósticos.")
+                    .font(.caption).foregroundStyle(Color(red: 0.44, green: 0.33, blue: 0.13)).fixedSize(horizontal: false, vertical: true)
             }
+            .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(red: 1, green: 0.97, blue: 0.91), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color(red: 0.95, green: 0.87, blue: 0.71), lineWidth: 1))
+            .accessibilityElement(children: .combine)
+            if model.loading { ProgressView("Cargando tus datos y solicitudes…").frame(maxWidth: .infinity) }
+            if let error = model.error { HospitalNotice(text: error) }
             if let confirmation = model.confirmation {
                 Label(confirmation, systemImage: "checkmark.circle.fill")
-                    .font(.subheadline).foregroundStyle(HospitalTheme.wine)
-                    .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 16))
+                    .font(.footnote.weight(.semibold)).foregroundStyle(Color(red: 0.12, green: 0.42, blue: 0.24))
+                    .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(red: 0.91, green: 0.96, blue: 0.93), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             if let blocker = model.submissionBlocker, model.context != nil {
                 // Una sola solicitud activa: recepción debe programarla o rechazarla antes de enviar otra.
+                let reviewing = model.requests.contains { AttentionRules.openStates.contains($0.status) }
                 VStack(alignment: .leading, spacing: 12) {
-                    Image(systemName: model.scheduledAppointment != nil && !model.requests.contains { AttentionRules.openStates.contains($0.status) } ? "calendar.badge.checkmark" : "hourglass")
+                    Image(systemName: reviewing ? "hourglass" : "calendar.badge.checkmark")
                         .font(.title.weight(.semibold)).foregroundStyle(HospitalTheme.wine)
                         .frame(width: 60, height: 60).background(HospitalTheme.rose, in: Circle())
-                    Text(model.requests.contains { AttentionRules.openStates.contains($0.status) } ? "Tu solicitud está en revisión" : "Ya tienes una cita programada")
+                    Text(reviewing ? "Tu solicitud está en revisión" : "Ya tienes una cita programada")
                         .font(.title3.bold()).foregroundStyle(HospitalTheme.ink)
                     Text(blocker).font(.subheadline).foregroundStyle(HospitalTheme.secondary).fixedSize(horizontal: false, vertical: true)
                     Button { navigate("appointments") } label: {
@@ -45,7 +48,8 @@ struct PatientAttentionLiveView: View {
             } else if let context = model.context {
                 personalCard(context.person)
                 symptomsCard(context)
-                requestCard(context)
+                specialtyCard(context)
+                detailsCard(context)
             } else if !model.loading && model.error == nil {
                 Button("Cargar formulario") { Task { await model.load() } }
             }
@@ -55,147 +59,285 @@ struct PatientAttentionLiveView: View {
         .accessibilityIdentifier("patient-attention-form")
     }
 
-    private func personalCard(_ person: AttentionPerson) -> some View {
-        HospitalCard {
-            VStack(alignment: .leading, spacing: 14) {
-                Label("Tus datos", systemImage: "person.crop.circle").font(.headline)
-                Text("Cargados de tu cuenta. Completa únicamente los datos que falten; recepción verificará tu identidad.")
-                    .font(.footnote).foregroundStyle(HospitalTheme.secondary)
-                personalField("Nombres", key: "first_name", existing: person.first_name)
-                personalField("Apellidos", key: "last_name", existing: person.last_name)
-                personalField("DUI declarado", key: "dui", existing: person.dui, placeholder: "00000000-0")
-                personalField("Fecha de nacimiento", key: "birth_date", existing: person.birth_date, placeholder: "AAAA-MM-DD")
-                personalField("Teléfono", key: "phone", existing: person.phone, placeholder: "0000-0000")
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Correo de la cuenta").font(.caption).foregroundStyle(HospitalTheme.secondary)
-                    Text(model.isMissing(person.email) ? "No disponible. Contacta al hospital para completar tu cuenta." : person.email ?? "")
-                        .font(.subheadline).textSelection(.enabled)
-                }
+    /// Encabezado con los tres pasos (paridad con .req-hero de web-preview).
+    private var hero: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("NUEVA SOLICITUD").font(.caption2.weight(.heavy)).tracking(1.4).opacity(0.85)
+                Spacer()
+                Button("Actualizar") { Task { await model.load() } }
+                    .font(.caption.weight(.bold)).foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(Color.white.opacity(0.14), in: Capsule()).overlay(Capsule().stroke(Color.white.opacity(0.35), lineWidth: 1))
+                    .buttonStyle(.plain).disabled(model.loading || model.saving)
             }
-        }
-    }
-    private func personalField(_ label: String, key: String, existing: String?, placeholder: String = "") -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.caption).foregroundStyle(HospitalTheme.secondary)
-            if model.isMissing(existing) {
-                TextField(placeholder.isEmpty ? label : placeholder, text: Binding(
-                    get: { model.missing[key] ?? "" },
-                    set: { value in
-                        if key == "dui" { model.missing[key] = ApplicantRules.shared.formatDUI(value) }
-                        else if key == "phone" {
-                            let digits = String(value.filter(\.isNumber).prefix(8))
-                            model.missing[key] = digits.count > 4 ? String(digits.prefix(4)) + "-" + String(digits.dropFirst(4)) : digits
-                        } else { model.missing[key] = value }
-                    }))
-                    .keyboardType(key == "dui" || key == "phone" ? .numberPad : key == "birth_date" ? .numbersAndPunctuation : .default)
-                    .textFieldStyle(.roundedBorder).accessibilityLabel(label)
-            } else {
-                Text(existing ?? "").font(.subheadline).textSelection(.enabled)
-            }
-        }
-    }
-    private func symptomsCard(_ context: AttentionContext) -> some View {
-        HospitalCard {
-            VStack(alignment: .leading, spacing: 14) {
-                Label("¿Qué síntomas presentas?", systemImage: "heart.text.square").font(.headline)
-                Text("Selecciona uno o varios síntomas declarados.").font(.footnote).foregroundStyle(HospitalTheme.secondary)
-                if context.symptoms.isEmpty {
-                    Text("El hospital todavía no tiene síntomas activos en el catálogo. Contacta a recepción.")
-                        .font(.subheadline)
-                }
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 125), alignment: .leading)], alignment: .leading, spacing: 10) {
-                    ForEach(context.symptoms) { symptom in
-                        let selected = model.selectedSymptoms.contains(symptom.id)
-                        Button {
-                            if selected { model.selectedSymptoms.remove(symptom.id) }
-                            else { model.selectedSymptoms.insert(symptom.id) }
-                        } label: {
-                            Label(symptom.name, systemImage: selected ? "checkmark.circle.fill" : "circle")
-                                .font(.subheadline).multilineTextAlignment(.leading)
-                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).padding(10)
-                                .background(selected ? HospitalTheme.rose : HospitalTheme.background, in: RoundedRectangle(cornerRadius: 12))
-                        }.buttonStyle(.plain).foregroundStyle(HospitalTheme.wine)
-                            .accessibilityAddTraits(selected ? .isSelected : [])
+            Text("¿Cómo podemos ayudarte?").font(.title2.bold())
+            Text("Cuéntanos qué sientes. Recepción revisará tu solicitud y te asignará una cita.").font(.subheadline).opacity(0.9)
+            HStack(spacing: 8) {
+                ForEach(Array(["Síntomas", "Especialidad", "Detalles"].enumerated()), id: \.offset) { index, label in
+                    HStack(spacing: 6) {
+                        Text("\(index + 1)").font(.caption2.weight(.heavy)).foregroundStyle(HospitalTheme.wine)
+                            .frame(width: 20, height: 20).background(Color.white, in: Circle())
+                        Text(label).font(.caption2.weight(.bold)).lineLimit(1).minimumScaleFactor(0.75)
                     }
+                    .padding(8).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
-                if model.needsOtherDescription {
-                    TextField("Describe el otro síntoma", text: $model.otherSymptoms, axis: .vertical)
-                        .lineLimit(2...5).textFieldStyle(.roundedBorder).accessibilityLabel("Otro síntoma")
-                    Text("\(model.otherSymptoms.count)/1000").font(.caption).foregroundStyle(HospitalTheme.secondary)
+            }.padding(.top, 4)
+        }
+        .foregroundStyle(.white).padding(20).frame(maxWidth: .infinity, alignment: .leading)
+        .background(LinearGradient.vinoDestacado, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+
+    private func stepHeader(_ number: String, _ title: String, _ hint: String?, count: String? = nil, highlighted: Bool = false) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(number).font(.subheadline.weight(.heavy)).foregroundStyle(HospitalTheme.wine)
+                .frame(width: 30, height: 30).background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.headline).foregroundStyle(HospitalTheme.ink)
+                if let hint { Text(hint).font(.caption).foregroundStyle(HospitalTheme.secondary) }
+                if let count {
+                    Text(count).font(.caption2.weight(.bold)).foregroundStyle(highlighted ? HospitalTheme.wine : HospitalTheme.secondary)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(highlighted ? HospitalTheme.rose : HospitalTheme.background, in: Capsule()).padding(.top, 2)
                 }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func cardStyle<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 14) { content() }
+            .padding(18).frame(maxWidth: .infinity, alignment: .leading)
+            .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(HospitalTheme.rose, lineWidth: 1))
+            .shadow(color: HospitalTheme.ink.opacity(0.05), radius: 9, y: 4)
+    }
+
+    /// Tus datos: resumen compacto de la cuenta; solo se piden los datos que faltan.
+    private func personalCard(_ person: AttentionPerson) -> some View {
+        let name = [person.first_name, person.last_name].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: " ")
+        let initials = name.split(separator: " ").prefix(2).compactMap { $0.first.map { String($0).uppercased() } }.joined()
+        let candidates: [(String, String?)] = [("DUI", person.dui), ("Nacimiento", displayDate(person.birth_date)), ("Teléfono", person.phone)]
+        let facts: [(String, String)] = candidates.compactMap { item in model.isMissing(item.1) ? nil : (item.0, item.1 ?? "") }
+        let missing: [(String, String, String)] = [("Nombres", "first_name", ""), ("Apellidos", "last_name", ""), ("DUI declarado", "dui", "00000000-0"),
+            ("Fecha de nacimiento", "birth_date", "AAAA-MM-DD"), ("Teléfono", "phone", "0000-0000")]
+            .filter { item in model.isMissing(value(of: item.1, in: person)) }
+        return cardStyle {
+            HStack(spacing: 12) {
+                Text(initials.isEmpty ? "—" : initials).font(.headline.weight(.heavy)).foregroundStyle(.white)
+                    .frame(width: 46, height: 46).background(LinearGradient.vinoDestacado, in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("TUS DATOS").font(.caption2.weight(.heavy)).tracking(1).foregroundStyle(HospitalTheme.secondary)
+                    Text(name.isEmpty ? "Completa tu nombre" : name).font(.headline).foregroundStyle(HospitalTheme.ink)
+                    Text("Recepción verificará tu identidad.").font(.caption).foregroundStyle(HospitalTheme.secondary)
+                }
+            }
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], alignment: .leading, spacing: 8) {
+                ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in factView(fact.0, fact.1) }
+            }
+            if !model.isMissing(person.email) { factView("Correo", person.email ?? "") }
+            else { Text("Tu cuenta no publica correo. Contacta al hospital.").font(.caption).foregroundStyle(HospitalTheme.secondary) }
+            if !missing.isEmpty {
+                Text("Completa los datos que faltan en tu cuenta:").font(.caption.weight(.bold)).foregroundStyle(HospitalTheme.wine)
+                ForEach(Array(missing.enumerated()), id: \.offset) { _, item in missingField(item.0, key: item.1, placeholder: item.2) }
             }
         }
     }
-    private func requestCard(_ context: AttentionContext) -> some View {
-        HospitalCard {
-            VStack(alignment: .leading, spacing: 14) {
-                Label("Tu solicitud", systemImage: "cross.case").font(.headline)
-                if context.specialties.contains(where: \.available) {
-                    Picker("Especialidad médica", selection: $model.specialty) {
-                        Text("Seleccionar").tag(nil as Int64?)
-                        ForEach(context.specialties.filter(\.available)) { specialty in
-                            Text(specialty.name).tag(Optional(specialty.id))
+    private func value(of key: String, in person: AttentionPerson) -> String? {
+        switch key {
+        case "first_name": return person.first_name
+        case "last_name": return person.last_name
+        case "dui": return person.dui
+        case "birth_date": return person.birth_date
+        default: return person.phone
+        }
+    }
+    private func displayDate(_ value: String?) -> String? {
+        guard let value, value.count == 10 else { return value }
+        let parts = value.split(separator: "-")
+        return parts.count == 3 ? "\(parts[2])/\(parts[1])/\(parts[0])" : value
+    }
+    private func factView(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased()).font(.caption2.weight(.bold)).foregroundStyle(HospitalTheme.secondary)
+            Text(value).font(.subheadline.weight(.semibold)).foregroundStyle(HospitalTheme.ink).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+        }.padding(.horizontal, 12).padding(.vertical, 10).frame(maxWidth: .infinity, alignment: .leading)
+            .background(HospitalTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+    private func missingField(_ label: String, key: String, placeholder: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.caption.weight(.semibold)).foregroundStyle(HospitalTheme.ink)
+            TextField(placeholder.isEmpty ? label : placeholder, text: Binding(
+                get: { model.missing[key] ?? "" },
+                set: { value in
+                    if key == "dui" { model.missing[key] = ApplicantRules.shared.formatDUI(value) }
+                    else if key == "phone" {
+                        let digits = String(value.filter(\.isNumber).prefix(8))
+                        model.missing[key] = digits.count > 4 ? String(digits.prefix(4)) + "-" + String(digits.dropFirst(4)) : digits
+                    } else { model.missing[key] = value }
+                }))
+                .keyboardType(key == "dui" || key == "phone" ? .numberPad : key == "birth_date" ? .numbersAndPunctuation : .default)
+                .padding(12).background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(HospitalTheme.wine.opacity(0.45), lineWidth: 1.5))
+                .accessibilityLabel(label)
+        }
+    }
+
+    /// Paso 1: síntomas, selección múltiple.
+    private func symptomsCard(_ context: AttentionContext) -> some View {
+        let count = model.selectedSymptoms.count
+        return cardStyle {
+            stepHeader("1", "¿Qué síntomas presentas?", "Selecciona todos los que apliquen.",
+                count: count == 0 ? "Elige al menos uno" : count == 1 ? "1 elegido" : "\(count) elegidos", highlighted: count > 0)
+            if context.symptoms.isEmpty {
+                Text("No hay síntomas activos en el catálogo. Contacta a recepción.").font(.caption).foregroundStyle(HospitalTheme.secondary)
+            }
+            ConsultationFlowLayout(spacing: 8) {
+                ForEach(context.symptoms) { symptom in
+                    let selected = model.selectedSymptoms.contains(symptom.id)
+                    Button {
+                        if selected { model.selectedSymptoms.remove(symptom.id) } else { model.selectedSymptoms.insert(symptom.id) }
+                    } label: {
+                        HStack(spacing: 5) {
+                            if selected { Image(systemName: "checkmark").font(.caption.weight(.heavy)) }
+                            Text(symptom.name).font(.subheadline.weight(.semibold))
                         }
-                    }.pickerStyle(.menu)
-                    Text("Las especialidades seleccionables tienen médico activo asignado. Recepción revisará la disponibilidad real; no estás eligiendo una cita.")
-                        .font(.footnote).foregroundStyle(HospitalTheme.secondary)
-                } else {
-                    Text("No hay especialidades con médicos activos asignados. Contacta a recepción para solicitar orientación.")
-                        .font(.subheadline)
+                        .foregroundStyle(selected ? .white : HospitalTheme.ink)
+                        .padding(.horizontal, 14).padding(.vertical, 9)
+                        .background(selected ? AnyShapeStyle(HospitalTheme.wine) : AnyShapeStyle(Color.white), in: Capsule())
+                        .overlay(Capsule().stroke(selected ? HospitalTheme.wine : HospitalTheme.rose, lineWidth: 1.5))
+                    }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
                 }
-                ForEach(context.specialties.filter { !$0.available }) { specialty in
-                    Text("\(specialty.name) · Sin médico activo asignado")
-                        .font(.caption).foregroundStyle(HospitalTheme.secondary)
+            }
+            if model.needsOtherDescription {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Describe el otro síntoma").font(.caption.weight(.semibold))
+                    TextField("Describe el otro síntoma", text: $model.otherSymptoms, axis: .vertical)
+                        .lineLimit(2...5).padding(12).background(HospitalTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .accessibilityLabel("Otro síntoma")
+                    HStack { Spacer(); Text("\(model.otherSymptoms.count) / 1000").font(.caption2).foregroundStyle(HospitalTheme.secondary) }
                 }
-                Picker("Preferencia de horario", selection: $model.preferredPeriod) {
-                    Text("Mañana").tag("manana")
-                    Text("Tarde").tag("tarde")
-                    Text("Indiferente").tag("indiferente")
-                }.pickerStyle(.menu)
-                TextField("Motivo de solicitud (obligatorio)", text: $model.reason, axis: .vertical)
-                    .lineLimit(3...7).textFieldStyle(.roundedBorder).accessibilityLabel("Motivo de solicitud")
-                Text("\(model.reason.count)/2000").font(.caption).foregroundStyle(HospitalTheme.secondary)
-                if let validation = model.validationError {
-                    Text(validation).font(.footnote).foregroundStyle(HospitalTheme.secondary)
-                }
-                Button { Task { await model.submit() } } label: {
-                    HStack { if model.saving { ProgressView().tint(.white) }; Text(model.saving ? "Enviando…" : "Solicitar atención") }
-                }.buttonStyle(HospitalPrimaryButtonStyle()).disabled(!model.canSubmit)
-                Text("Recepción recibe la solicitud y gestiona tu expediente y tu cita cuando corresponda. Enviar no crea ninguno de ellos.")
-                    .font(.footnote).foregroundStyle(HospitalTheme.secondary)
             }
         }
     }
+
+    /// Paso 2: especialidad en tarjetas de dos columnas; las que no tienen médico activo se muestran desactivadas.
+    private func specialtyCard(_ context: AttentionContext) -> some View {
+        cardStyle {
+            stepHeader("2", "Especialidad", "Elige el área que mejor corresponde a tu malestar.")
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                ForEach(context.specialties) { specialty in
+                    let selected = model.specialty == specialty.id
+                    Button { model.specialty = specialty.id } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(specialty.name).font(.subheadline.weight(.bold)).multilineTextAlignment(.leading)
+                            if !specialty.available { Text("Sin médico disponible").font(.caption2) }
+                        }
+                        .foregroundStyle(!specialty.available ? HospitalTheme.secondary : selected ? HospitalTheme.wine : HospitalTheme.ink)
+                        .padding(12).frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                        .background(!specialty.available ? HospitalTheme.background : selected ? HospitalTheme.rose : Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(selected ? HospitalTheme.wine : HospitalTheme.rose, style: StrokeStyle(lineWidth: selected ? 2 : 1.5, dash: specialty.available ? [] : [4])))
+                    }
+                    .buttonStyle(.plain).disabled(!specialty.available)
+                    .accessibilityLabel("Especialidad médica: \(specialty.name)\(specialty.available ? "" : ", sin médico disponible")")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+            Text(context.specialties.contains(where: \.available) ? "Elegir una especialidad no reserva una cita: recepción confirma la disponibilidad real."
+                 : "No hay especialidades con médico activo asignado. Contacta a recepción.")
+                .font(.caption).foregroundStyle(HospitalTheme.secondary)
+        }
+    }
+
+    /// Paso 3: preferencia de horario y motivo.
+    private func detailsCard(_ context: AttentionContext) -> some View {
+        cardStyle {
+            stepHeader("3", "Detalles de tu solicitud", nil)
+            Text("Preferencia de horario").font(.caption.weight(.bold)).foregroundStyle(HospitalTheme.ink)
+            Picker("Preferencia de horario", selection: $model.preferredPeriod) {
+                Text("Mañana").tag("manana")
+                Text("Tarde").tag("tarde")
+                Text("Indiferente").tag("indiferente")
+            }.pickerStyle(.segmented)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Motivo de solicitud").font(.caption.weight(.bold)).foregroundStyle(HospitalTheme.ink)
+                TextField("Describe brevemente qué te ocurre y desde cuándo.", text: $model.reason, axis: .vertical)
+                    .lineLimit(4...8).padding(14).frame(minHeight: 104, alignment: .topLeading)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(HospitalTheme.rose, lineWidth: 1.5))
+                    .accessibilityLabel("Motivo de solicitud")
+                HStack { Spacer(); Text("\(model.reason.count) / 2000").font(.caption2).foregroundStyle(HospitalTheme.secondary) }
+            }
+            if let validation = model.validationError {
+                Label(validation, systemImage: "info.circle").font(.footnote.weight(.semibold)).foregroundStyle(HospitalTheme.wine)
+                    .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            Button { Task { await model.submit() } } label: {
+                HStack(spacing: 10) {
+                    if model.saving { ProgressView().tint(.white) } else { Image(systemName: "paperplane.fill") }
+                    Text(model.saving ? "Enviando…" : "Solicitar atención").font(.headline)
+                }.foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 54)
+                    .background(LinearGradient.vinoDestacado, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .opacity(model.canSubmit ? 1 : 0.55)
+            }.buttonStyle(.plain).disabled(!model.canSubmit)
+            Text("Enviar no crea un expediente ni una cita. Recepción revisará tu solicitud.")
+                .font(.caption).foregroundStyle(HospitalTheme.secondary).frame(maxWidth: .infinity).multilineTextAlignment(.center)
+        }
+    }
+    /// Solo la solicitud más reciente; las anteriores siguen disponibles en una hoja aparte, sin mezclarse con el formulario.
     private var history: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Mis solicitudes").font(.headline)
+                Text("Tu solicitud reciente").font(.headline)
                 Spacer()
-                Button("Actualizar") { Task { await model.load() } }.font(.footnote).disabled(model.loading || model.saving)
             }
-            if model.requests.isEmpty && !model.loading && model.error == nil {
-                HospitalCard { Text("Todavía no has enviado solicitudes de atención.").font(.subheadline).foregroundStyle(HospitalTheme.secondary) }
+            if let request = model.requests.first {
+                requestSummary(request)
+                if model.requests.count > 1 {
+                    Button { showPreviousRequests = true } label: {
+                        Label("Ver solicitudes anteriores (\(model.requests.count - 1))", systemImage: "clock.arrow.circlepath").font(.subheadline.weight(.semibold))
+                    }.tint(HospitalTheme.wine)
+                }
+            } else if !model.loading && model.error == nil {
+                Text("Todavía no has enviado solicitudes de atención.").font(.subheadline).foregroundStyle(HospitalTheme.secondary)
             }
-            ForEach(model.requests) { request in
-                HospitalCard {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(alignment: .top) {
-                            Text(request.specialty_name).font(.headline)
-                            Spacer()
-                            HospitalBadge(text: request.statusLabel, warning: ["pendiente", "en_revision"].contains(request.status))
-                        }
-                        Text(dateLabel(request.created_at)).font(.caption).foregroundStyle(HospitalTheme.secondary)
-                        Text(request.reason).font(.subheadline)
-                        Text(request.symptoms.joined(separator: " · ")).font(.footnote).foregroundStyle(HospitalTheme.secondary)
-                        if let other = request.other_symptoms { Text(other).font(.footnote) }
-                        Text("Preferencia: \(request.periodLabel)").font(.footnote)
-                        if request.appointment_id != nil {
-                            Button("Ver mi cita") { navigate("appointments") }.font(.subheadline.weight(.semibold))
-                        }
+        }
+        .sheet(isPresented: $showPreviousRequests) {
+            NavigationStack {
+                ScrollView { VStack(spacing: 12) { ForEach(model.requests.dropFirst()) { requestSummary($0) } }.padding(18) }
+                    .background(HospitalTheme.background)
+                    .navigationTitle("Solicitudes anteriores").navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Cerrar") { showPreviousRequests = false } } }
+            }.tint(HospitalTheme.wine)
+        }
+    }
+    private func requestSummary(_ request: AttentionRequest) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(request.specialty_name).font(.headline)
+                    Text("Enviada el \(dateLabel(request.created_at))").font(.caption).foregroundStyle(HospitalTheme.secondary)
+                }
+                Spacer()
+                HospitalBadge(text: request.statusLabel, warning: ["pendiente", "en_revision"].contains(request.status))
+            }
+            Text(request.reason).font(.subheadline)
+            if !request.symptoms.isEmpty {
+                ConsultationFlowLayout(spacing: 6) {
+                    ForEach(request.symptoms, id: \.self) { item in
+                        Text(item).font(.caption.weight(.semibold)).foregroundStyle(HospitalTheme.wine)
+                            .padding(.horizontal, 10).padding(.vertical, 5).background(HospitalTheme.rose, in: Capsule())
                     }
                 }
             }
-        }
+            if let other = request.other_symptoms { Text("Otros: \(other)").font(.footnote) }
+            Label("Preferencia: \(request.periodLabel)", systemImage: "clock").font(.footnote).foregroundStyle(HospitalTheme.secondary)
+            if request.appointment_id != nil {
+                Button("Ver mi cita") { navigate("appointments") }.font(.subheadline.weight(.semibold)).tint(HospitalTheme.wine)
+            }
+        }.modifier(ConsultationCardStyle())
     }
     private func dateLabel(_ value: String) -> String {
         let parser = ISO8601DateFormatter(); parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

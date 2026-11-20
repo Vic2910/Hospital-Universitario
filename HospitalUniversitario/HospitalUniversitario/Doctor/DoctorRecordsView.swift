@@ -316,14 +316,28 @@ struct DoctorRecordsView: View {
         return NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    // Información de la consulta: paciente, médico, especialidad, inicio, fin y duración reales. Solo lectura.
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(ConsultationFormat.date(date)).font(.title3.bold())
-                        Label(ConsultationFormat.time(date), systemImage: "clock")
+                        HStack {
+                            Label("Finalizada · solo lectura", systemImage: "lock.fill").font(.caption2.weight(.heavy)).opacity(0.85)
+                            Spacer()
+                        }
+                        if let name = model.chart?.patient.full_name { Text(name).font(.title3.bold()) }
+                        Text(ConsultationFormat.date(date)).font(.subheadline.weight(.semibold))
+                        Label(timeRange(entry), systemImage: "clock")
                         Label(DoctorRecordRules.text(entry.doctor_name) ?? (workspace.doctor_name.isEmpty ? "Médico responsable" : workspace.doctor_name), systemImage: "stethoscope")
                         if let specialty = DoctorRecordRules.text(entry.specialty) { Label(specialty, systemImage: "cross.case") }
                         if let reason = DoctorRecordRules.text(entry.reason) { Label("Motivo: \(reason)", systemImage: "text.bubble") }
                     }.font(.subheadline).foregroundStyle(.white).padding(18).frame(maxWidth: .infinity, alignment: .leading)
                         .background(LinearGradient.vinoDestacado, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+
+                    let reported = (entry.reported_symptoms ?? []).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                    if !reported.isEmpty || DoctorRecordRules.text(entry.reported_other) != nil {
+                        VStack(alignment: .leading, spacing: 10) {
+                            ConsultationBlockHeader(icon: "person.wave.2", title: "Síntomas iniciales", subtitle: "Reportados por el paciente en su solicitud")
+                            ConsultationReportedSymptoms(symptoms: reported, other: DoctorRecordRules.text(entry.reported_other))
+                        }.modifier(ConsultationCardStyle())
+                    }
 
                     if !vitals.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
@@ -394,6 +408,14 @@ struct DoctorRecordsView: View {
     }
 
     // MARK: Piezas
+
+    /// Inicio, fin y duración reales (ended_at llega con supabase/expedientes-historial.sql).
+    private func timeRange(_ entry: DoctorConsultation) -> String {
+        let start = DoctorDate.parse(entry.started_at)
+        guard let end = entry.ended_at.flatMap(DoctorDate.parse), let start else { return ConsultationFormat.time(start) }
+        let minutes = max(0, Int(end.timeIntervalSince(start) / 60))
+        return "\(ConsultationFormat.time(start)) – \(ConsultationFormat.time(end)) · \(minutes) min"
+    }
 
     private func chip(_ icon: String, _ text: String) -> some View {
         Label(text, systemImage: icon).font(.caption.weight(.semibold)).foregroundStyle(HospitalTheme.wine)

@@ -57,7 +57,26 @@ struct PatientAssignedAppointment: Identifiable {
             date: date, specialty: request.specialty, doctor: "Dra. Ana Morales", room: "Consultorio 3", dui: request.dui, email: request.email)
     }
 }
-/// Mis citas: todos los detalles a la vista, sin pantallas intermedias. Paridad con web-preview/patient-appointments.js.
+/// Citas del paciente (Mis citas y Mi turno). Espejo exacto de HospitalCore.patientAppointments (hospital-core.js).
+/// Activa: en consulta, o programada/confirmada cuyo horario reservado aún no termina (ends_at > ahora, como el servidor).
+enum PatientAppointmentRules {
+    static func isActive(_ item: MobileItem, now: Date = Date()) -> Bool {
+        if item.status == "in_progress" { return true }
+        guard ["scheduled", "confirmed"].contains(item.status) else { return false }
+        if let raw = item.ends_at, let end = DoctorDate.parse(raw) { return end > now }
+        guard let start = DoctorDate.parse(item.event_at) else { return false }
+        return start.addingTimeInterval(1800) > now
+    }
+    static func split(_ items: [MobileItem], now: Date = Date()) -> (active: [MobileItem], past: [MobileItem]) {
+        let date: (MobileItem) -> Date = { DoctorDate.parse($0.event_at) ?? .distantPast }
+        return (items.filter { isActive($0, now: now) }.sorted { date($0) < date($1) },
+                items.filter { !isActive($0, now: now) }.sorted { date($0) > date($1) })
+    }
+    /// El turno es appointments.queue_number; el cliente solo le da formato (016).
+    static func turn(_ value: Int?) -> String? { value.map { String(format: "%03d", $0) } }
+}
+/// Mis citas: solo la cita activa (o las activas) y, si no hay ninguna, la solicitud enviada. Las finalizadas, canceladas,
+/// no atendidas o vencidas no se muestran aquí; conservan su turno y estado en Mi turno. Paridad con patient-appointments.js.
 /// Datos reales del módulo "appointments" (RLS del paciente); la cancelación usa la acción existente cancel_appointment.
 struct PatientAppointmentsView: View {
     @ObservedObject var flow: PatientAppointmentFlowStore
@@ -67,6 +86,8 @@ struct PatientAppointmentsView: View {
     let search: String
     let period: (String) -> String
     let navigate: (String) -> Void
+    /// Solicitud de atención pendiente o en revisión (my_attention_requests), mientras recepción no la programe.
+    var openRequest: AttentionRequest? = nil
     @State private var cancelling: MobileItem?
     @State private var cancellationReason = ""
 
@@ -74,22 +95,15 @@ struct PatientAppointmentsView: View {
     private var visible: [MobileItem] {
         modules.items.filter { search.isEmpty || ($0.title + " " + $0.details.map(\.value).joined(separator: " ")).localizedCaseInsensitiveContains(search) }
     }
-    /// En atención o programadas a futuro, de la más próxima a la más lejana.
-    private var upcoming: [MobileItem] {
-        visible.filter { $0.status == "in_progress" || (["scheduled", "confirmed"].contains($0.status) && date($0) >= Date().addingTimeInterval(-1800)) }
-            .sorted { date($0) < date($1) }
-    }
-    /// Finalizadas, canceladas o pasadas, de la más reciente a la más antigua.
-    private var past: [MobileItem] {
-        let ids = Set(upcoming.map(\.id))
-        return visible.filter { !ids.contains($0.id) }.sorted { date($0) > date($1) }
-    }
+    /// Activas (en consulta o con horario aún vigente), de la más próxima a la más lejana.
+    private var upcoming: [MobileItem] { PatientAppointmentRules.split(visible).active }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
                 Label("MIS CITAS", systemImage: "calendar").font(.caption2.weight(.heavy)).tracking(1.2).opacity(0.85)
-                Text(upcoming.isEmpty ? "No tienes citas próximas" : upcoming.count == 1 ? "Tienes 1 cita próxima" : "Tienes \(upcoming.count) citas próximas").font(.title2.bold())
+                Text(!upcoming.isEmpty ? (upcoming.count == 1 ? "Tienes 1 cita programada" : "Tienes \(upcoming.count) citas programadas")
+                     : openRequest != nil ? "Tu solicitud está en revisión" : "No tienes citas programadas").font(.title2.bold())
                 Text("Recepción programa tus citas. Aquí ves la fecha, el médico, el consultorio y el motivo.").font(.subheadline).opacity(0.9)
             }.foregroundStyle(.white).padding(20).frame(maxWidth: .infinity, alignment: .leading)
                 .background(LinearGradient.vinoDestacado, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -105,6 +119,8 @@ struct PatientAppointmentsView: View {
                     sectionTitle("Siguientes citas", count: upcoming.count - 1)
                     ForEach(upcoming.dropFirst()) { appointmentCard($0, featured: false) }
                 }
+            } else if let request = openRequest {
+                requestCard(request)
             } else if !modules.loading && modules.error == nil {
                 VStack(spacing: 10) {
                     Image(systemName: "calendar.badge.plus").font(.system(size: 30, weight: .semibold)).foregroundStyle(HospitalTheme.wine)
@@ -114,10 +130,6 @@ struct PatientAppointmentsView: View {
                     Button { navigate("request") } label: { Label("Solicitar atención", systemImage: "stethoscope").font(.headline).frame(maxWidth: .infinity, minHeight: 46) }
                         .buttonStyle(.bordered).tint(HospitalTheme.wine)
                 }.padding(22).frame(maxWidth: .infinity).background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            }
-            if !past.isEmpty {
-                sectionTitle("Historial de citas", count: past.count)
-                ForEach(past) { appointmentCard($0, featured: false) }
             }
             if modules.page?.has_more == true {
                 Button("Cargar más citas") { Task { await modules.load("appointments", more: true) } }.frame(maxWidth: .infinity).disabled(modules.loading).tint(HospitalTheme.wine)
@@ -131,6 +143,47 @@ struct PatientAppointmentsView: View {
             }.disabled(cancellationReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             Button("Volver", role: .cancel) { cancelling = nil }
         } message: { Text("Recepción verá el motivo. Esta acción no se puede deshacer.") }
+    }
+
+    /// Solicitud enviada y pendiente de recepción: mismo estilo de tarjeta, sin cita todavía.
+    private func requestCard(_ request: AttentionRequest) -> some View {
+        let sent = DoctorDate.parse(request.created_at).map {
+            $0.formatted(Date.FormatStyle(date: .long, time: .shortened, locale: Locale(identifier: "es_SV"), calendar: DoctorClinicalRules.calendar, timeZone: DoctorClinicalRules.timeZone))
+        } ?? "fecha no disponible"
+        let rows: [(String, String, String)] = [("text.bubble", "Motivo", request.reason), ("heart.text.square", "Síntomas", request.symptoms.joined(separator: ", ")),
+            ("clock", "Preferencia", request.periodLabel)].filter { !$0.2.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: "hourglass").font(.title2.weight(.semibold)).foregroundStyle(.white)
+                    .frame(width: 66, height: 70).background(LinearGradient.vinoDestacado, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("SOLICITUD DE ATENCIÓN").font(.caption2.weight(.heavy)).tracking(1).foregroundStyle(HospitalTheme.wine)
+                    Text(request.specialty_name).font(.title3.bold()).foregroundStyle(HospitalTheme.ink)
+                    Text("Enviada el \(sent)").font(.caption).foregroundStyle(HospitalTheme.secondary)
+                }
+                Spacer(minLength: 0)
+                Text(request.status == "en_revision" ? "En revisión" : "Pendiente").font(.caption2.bold()).foregroundStyle(HospitalTheme.wine)
+                    .padding(.horizontal, 8).padding(.vertical, 4).background(HospitalTheme.rose, in: Capsule())
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: row.0).font(.footnote.weight(.semibold)).foregroundStyle(HospitalTheme.wine).frame(width: 20)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(row.1).font(.caption2).foregroundStyle(HospitalTheme.secondary)
+                            Text(row.2).font(.subheadline).foregroundStyle(HospitalTheme.ink).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                .background(HospitalTheme.background, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            Label("Recepción revisará tu solicitud y te asignará la cita. Mientras tanto no puedes enviar otra.", systemImage: "info.circle")
+                .font(.footnote).foregroundStyle(HospitalTheme.secondary)
+        }
+        .padding(18).frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(HospitalTheme.wine.opacity(0.35), lineWidth: 1.5))
+        .accessibilityElement(children: .contain)
     }
 
     private func sectionTitle(_ title: String, count: Int) -> some View {

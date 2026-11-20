@@ -3,12 +3,15 @@
   const $ = selector => document.querySelector(selector);
   const app = $('#app'), notice = $('#notice');
   let patientNotices = null;
+  // Mi horario del médico: semana de HospitalCore.doctorWeek con la jornada real de administración.
+  let doctorWeek = null, scheduleWeek = null;
   let api, modules, patientLabModules, patientClinical, doctorDashboard, doctorConsultations, labDesign, patientHistory, patientPrescriptions, appointmentFlow, catalog, fixtures, access = null, roles = [], role = null, page = 'home', search = '', busy = false, design = false;
   let profile = null, summary = null, overview = null, items = [], queue = [], cursor = null, more = false;
   let screenNote = '';
   let notificationsOpen = false;
   let attention = newAttention();
   function newAttention() { return {context:null,rows:[],missing:{},symptoms:new Set(),specialty:'',period:'indiferente',reason:'',other:'',key:crypto.randomUUID(),error:null,confirmation:null}; }
+  let passwordDraft = {current:'',next:'',confirm:'',visible:false,error:null,success:null};
   let nextAppointment = null, dashboardError = null;
   let registerOpen = false;
   let registrationDraft = {};
@@ -40,8 +43,8 @@
   }
   function matches(value) { return !search || value.toLocaleLowerCase('es').includes(search.toLocaleLowerCase('es')); }
   function definition() { return catalog?.[role]?.find(screen => screen.id === page); }
-  function clearData() { notificationsOpen=false; patientLabModules?.clear();patientNotices?.clear();patientClinical?.reset(); receptionPreview=false; appointmentFlow?.reset(); patientHistory?.clear(); labConnected = false; labDesign?.reset(); doctorConsultations?.clear(); doctorDashboard?.clear(); resetSchedule(); modules?.clear(); profile = summary = overview = null; items = []; queue = []; cursor = null; more = false; screenNote = ''; }
-  function reset() { attention=newAttention(); nextAppointment = null; dashboardError = null; registrationDraft = {}; access = null; roles = []; role = null; page = 'home'; registerOpen = false; clearData(); }
+  function clearData() { notificationsOpen=false;doctorWeek=null;scheduleWeek=null; patientLabModules?.clear();patientNotices?.clear();patientClinical?.reset(); receptionPreview=false; appointmentFlow?.reset(); patientHistory?.clear(); labConnected = false; labDesign?.reset(); doctorConsultations?.clear(); doctorDashboard?.clear(); resetSchedule(); modules?.clear(); profile = summary = overview = null; items = []; queue = []; cursor = null; more = false; screenNote = ''; }
+  function reset() { passwordDraft={current:'',next:'',confirm:'',visible:false,error:null,success:null}; attention=newAttention(); nextAppointment = null; dashboardError = null; registrationDraft = {}; access = null; roles = []; role = null; page = 'home'; registerOpen = false; clearData(); }
   async function run(action) {
     if (busy) return;
     busy = true; message(null); render();
@@ -79,15 +82,25 @@
       if (page === 'profile') { profile = await api.operation('profile'); return; }
       modules.configure(access,role,facility);
       if(role==='patient'&&patientNotices){patientNotices.configure(access,role,facility);if(!patientNotices.data)await patientNotices.load('notifications').catch(()=>{});}
-      if (modules.supports(role,page)) { await modules.load(page,append);if(role==='patient'&&page==='chart'){patientLabModules.configure(access,role,facility);await patientLabModules.load('laboratory');}return; }
+      if (modules.supports(role,page)) { await modules.load(page,append);
+        // Mis citas también muestra la solicitud enviada mientras recepción no la programe (una sola activa).
+        if(role==='patient'&&page==='appointments'&&!append)attention.rows=await api.attentionRPC('my_attention_requests').catch(()=>attention.rows||[]);
+        if(role==='patient'&&page==='chart'){patientLabModules.configure(access,role,facility);await patientLabModules.load('laboratory');}return; }
       if (page === 'home') {
         summary = null;
         if(role==='patient') nextAppointment = (await api.operation('patientDashboard')).next_appointment;
       } else if (page === 'rooms' || page === 'turns') {
         if (!append) { items = []; queue = []; cursor = null; more = false; }
-        if(page==='turns' && role==='patient'){screenNote='Hospital Móviles no publica una fila numerada. Consulta Mis citas.';return;}
+        // Turno de la próxima cita: lo asigna el servidor (assign_appointment_queue); la app solo lo lee.
+        if(page==='turns' && role==='patient'){if(access?.patient_id)await modules.load('appointments');return;}
         const result = await api.read(page==='rooms'?'rooms':'staff_shifts',append?cursor:null);
         items=append?[...items,...result.data]:result.data;cursor=result.next_cursor;more=result.has_more;
+        if(page==='turns'&&role==='doctor'&&!append){
+          // Jornada recurrente con descansos registrados (doctor_native_schedule); si la RPC aún no existe, horario básico.
+          const ws=scheduleWeek||HospitalCore.doctorWeekStart(),from=new Date(ws+'T00:00:00-06:00'),until=new Date(from.getTime()+7*86400000);
+          let recurring=null;try{recurring=await api.doctorRPC('schedule',{p_from:from.toISOString(),p_until:until.toISOString()});}catch{recurring=null;}
+          doctorWeek=await api.operation('doctorWeek',{week:ws,recurring});
+        }
       } else if (page === 'information') overview = facility ? await api.operation('overview', { p_facility: facility }) : null;
       else if (page === 'profile') profile = await api.operation('profile');
     } catch (error) {
@@ -244,11 +257,18 @@
     app.append(view);
   }
   function renderLiveAttention(content) {
-    content.append(el('p','Este formulario no es para emergencias. Ante una emergencia, acude a urgencias. Los síntomas declarados no son diagnósticos.','auth-notice'));
-    if(attention.error)content.append(row('No se pudo actualizar',attention.error));
-    if(attention.confirmation)content.append(el('p',attention.confirmation,'auth-notice'));
-    content.append(button('Actualizar',()=>run(loadAttention),'text-button'));
+    // Presentación limpia en tres pasos (paridad con PatientAttentionLiveView.swift). La lógica no cambia:
+    // mismos campos, validaciones (attentionProblem), envío idempotente y una sola solicitud activa.
     const context=attention.context;
+    const hero=el('section',null,'req-hero'),heroTop=el('div',null,'req-hero-top');
+    heroTop.append(el('small','NUEVA SOLICITUD'),button('Actualizar',()=>run(loadAttention),'req-refresh'));
+    hero.append(heroTop,el('h2','¿Cómo podemos ayudarte?'),el('p','Cuéntanos qué sientes. Recepción revisará tu solicitud y te asignará una cita.'));
+    const steps=el('ol',null,'req-steps');for(const [n,label] of [['1','Síntomas'],['2','Especialidad'],['3','Detalles']]){const li=el('li');li.append(el('span',n),el('em',label));steps.append(li);}
+    hero.append(steps);content.append(hero);
+    const notice=el('div',null,'req-notice');notice.setAttribute('role','note');
+    notice.append(el('span','!','req-notice-icon'),el('p','Este formulario no es para emergencias. Ante una emergencia, acude a urgencias. Los síntomas declarados no son diagnósticos.'));content.append(notice);
+    if(attention.error)content.append(row('No se pudo actualizar',attention.error));
+    if(attention.confirmation){const ok=el('div',null,'req-confirmation');ok.setAttribute('role','status');ok.append(el('span','✓'),el('p',attention.confirmation));content.append(ok);}
     if(!context){content.append(row(busy?'Cargando tus datos…':'No se pudieron cargar tus datos','Pulsa Actualizar para recuperar el formulario.'));return;}
     // Una sola solicitud activa: recepción debe programarla o rechazarla antes de enviar otra.
     const blocker=HospitalCore.attentionBlocker(attention.rows,attention.next);
@@ -257,45 +277,82 @@
       card.append(el('span',blocker.kind==='request'?'⏳':'📅','record-empty-icon'),el('strong',blocker.kind==='request'?'Tu solicitud está en revisión':'Ya tienes una cita programada'),el('p',blocker.message,'sched-hint'),button('Ver mis citas',()=>go('appointments'),'module-action'));
       content.append(card);
     }
+    const stepHead=(card,n,title,hint,extra)=>{const head=el('header',null,'req-step-head'),text=el('div');text.append(el('h2',title));if(hint)text.append(el('p',hint));if(extra)text.append(extra);head.append(el('span',n,'req-step-number'),text);card.append(head);};
     const form=el('form',null,'attention-form');if(blocker)form.hidden=true;
-    const personal=el('article',null,'card attention-card');personal.append(el('h2','Tus datos'),el('p','Datos de tu cuenta. Completa únicamente lo que falta. Recepción verificará tu identidad.'));
-    for(const [key,label] of [['first_name','Nombres'],['last_name','Apellidos'],['dui','DUI declarado'],['birth_date','Fecha de nacimiento'],['phone','Teléfono'],['email','Correo de la cuenta']]){
-      const value=context.person[key];
-      if(value) {const item=el('div',null,'attention-personal');item.append(el('small',label),el('strong',value));personal.append(item);}
-      else if(key==='email')personal.append(el('p','Tu cuenta no publica correo. Contacta al hospital.'));
-      else {
+    // Tus datos: resumen compacto de la cuenta; solo se piden los datos que faltan.
+    const person=context.person,personal=el('article',null,'card attention-card req-card req-person');
+    const who=el('header',null,'req-person-head'),name=[person.first_name,person.last_name].filter(Boolean).join(' ');
+    const initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('')||'—';
+    const whoText=el('div');whoText.append(el('h2','Tus datos'),el('strong',name||'Completa tu nombre'),el('small','Recepción verificará tu identidad.'));
+    who.append(el('span',initials,'req-avatar'),whoText);personal.append(who);
+    const facts=el('dl',null,'req-facts');let factCount=0;const halves=[];
+    const shown=value=>/^\d{4}-\d{2}-\d{2}$/.test(value||'')?new Intl.DateTimeFormat('es-SV',{timeZone:'UTC',day:'2-digit',month:'2-digit',year:'numeric'}).format(new Date(value+'T00:00:00Z')):value;
+    for(const [key,label] of [['dui','DUI'],['birth_date','Nacimiento'],['phone','Teléfono'],['email','Correo']]){
+      if(!person[key])continue;const fact=el('div',null,key==='email'?'req-fact is-wide':'req-fact');if(key!=='email')halves.push(fact);fact.append(el('dt',label),el('dd',shown(person[key])));facts.append(fact);factCount++;
+    }
+    if(halves.length%2)halves[halves.length-1].className='req-fact is-wide';
+    if(factCount)personal.append(facts);
+    const missingKeys=[['first_name','Nombres'],['last_name','Apellidos'],['dui','DUI declarado'],['birth_date','Fecha de nacimiento'],['phone','Teléfono']].filter(([key])=>!person[key]);
+    if(missingKeys.length){
+      const missing=el('div',null,'req-missing');missing.append(el('p','Completa los datos que faltan en tu cuenta:','req-missing-title'));
+      for(const [key,label] of missingKeys){
         const field=authField('attention-'+key,label,key==='birth_date'?'date':'text',key==='dui'?'00000000-0':key==='phone'?'0000-0000':label,'off');
         const input=field.querySelector('input');input.value=attention.missing[key]||'';
         input.addEventListener('input',()=>{
           if(key==='dui')input.value=HospitalCore.formatDui(input.value);
           if(key==='phone'){const digits=input.value.replace(/\D/g,'').slice(0,8);input.value=digits.length>4?digits.slice(0,4)+'-'+digits.slice(4):digits;}
           attention.missing[key]=input.value;
-        });personal.append(field);
+        });missing.append(field);
       }
+      personal.append(missing);
     }
+    if(!person.email)personal.append(el('p','Tu cuenta no publica correo. Contacta al hospital.','req-hint'));
     form.append(personal);
-    const symptoms=el('article',null,'card attention-card');symptoms.append(el('h2','¿Qué síntomas presentas?'),el('p','Selecciona uno o varios síntomas declarados.'));
-    const choices=el('div',null,'attention-symptoms');
+    // Paso 1: síntomas (selección múltiple; la marca de selección es solo visual).
+    const symptoms=el('article',null,'card attention-card req-card');
+    const count=el('span',attention.symptoms.size?attention.symptoms.size+(attention.symptoms.size===1?' elegido':' elegidos'):'Elige al menos uno','req-count'+(attention.symptoms.size?' is-on':''));
+    stepHead(symptoms,'1','¿Qué síntomas presentas?','Selecciona todos los que apliquen.',count);
+    const choices=el('div',null,'attention-symptoms req-chips');
     for(const symptom of context.symptoms){
-      const control=button((attention.symptoms.has(symptom.id)?'✓ ':'')+symptom.name,()=>{
+      const control=button(symptom.name,()=>{
         attention.symptoms.has(symptom.id)?attention.symptoms.delete(symptom.id):attention.symptoms.add(symptom.id);render();
-      },'attention-symptom');control.setAttribute('aria-pressed',String(attention.symptoms.has(symptom.id)));choices.append(control);
+      },'attention-symptom req-chip');control.setAttribute('aria-pressed',String(attention.symptoms.has(symptom.id)));choices.append(control);
     }
     symptoms.append(choices);
-    if(!context.symptoms.length)symptoms.append(el('p','No hay síntomas activos en el catálogo. Contacta a recepción.'));
+    if(!context.symptoms.length)symptoms.append(el('p','No hay síntomas activos en el catálogo. Contacta a recepción.','req-hint'));
     const other=context.symptoms.some(s=>s.name==='Otro'&&attention.symptoms.has(s.id));
     if(other) modules.field(symptoms,'Describe el otro síntoma',attention,'other','textarea');
     form.append(symptoms);
-    const details=el('article',null,'card attention-card');details.append(el('h2','Tu solicitud'));
+    // Paso 2: especialidad en tarjetas (mismo valor que el selector anterior: id de la especialidad).
+    const specialtyCard=el('article',null,'card attention-card req-card');
     const available=context.specialties.filter(s=>s.available);
-    modules.field(details,'Especialidad',attention,'specialty','text',available.map(s=>[String(s.id),s.name]));
-    details.append(el('p',available.length?'Recepción confirmará la disponibilidad real. Seleccionar especialidad no reserva una cita.':'No hay especialidades con médico activo asignado. Contacta a recepción.'));
-    for(const s of context.specialties.filter(s=>!s.available))details.append(el('small',s.name+' · Sin médico activo asignado'));
-    modules.field(details,'Preferencia',attention,'period','text',[['manana','Mañana'],['tarde','Tarde'],['indiferente','Indiferente']]);
-    modules.field(details,'Motivo de solicitud',attention,'reason','textarea');
-    const issue=el('p',null,'auth-error');issue.hidden=true;details.append(issue);
-    const submit=el('button',busy?'Enviando…':'Solicitar atención','primary');submit.type='submit';submit.disabled=busy||!available.length||!context.symptoms.length;details.append(submit);
-    details.append(el('p','Enviar no crea un expediente ni una cita. Recepción revisará tu solicitud.'));
+    stepHead(specialtyCard,'2','Especialidad','Elige el área que mejor corresponde a tu malestar.');
+    const tiles=el('div',null,'req-tiles');tiles.setAttribute('role','radiogroup');tiles.setAttribute('aria-label','Especialidad');
+    for(const s of context.specialties){
+      const selected=String(attention.specialty)===String(s.id);
+      const tile=button(s.available?s.name:s.name+' · Sin médico disponible',()=>{attention.specialty=String(s.id);render();},'req-tile'+(selected?' is-selected':''));
+      tile.setAttribute('role','radio');tile.setAttribute('aria-checked',String(selected));if(!s.available)tile.disabled=true;tiles.append(tile);
+    }
+    specialtyCard.append(tiles);
+    specialtyCard.append(el('p',available.length?'Elegir una especialidad no reserva una cita: recepción confirma la disponibilidad real.':'No hay especialidades con médico activo asignado. Contacta a recepción.','req-hint'));
+    form.append(specialtyCard);
+    // Paso 3: preferencia de horario (segmentado) y motivo.
+    const details=el('article',null,'card attention-card req-card');
+    stepHead(details,'3','Detalles de tu solicitud',null);
+    details.append(el('p','Preferencia de horario','req-label'));
+    const segment=el('div',null,'req-segment');segment.setAttribute('role','radiogroup');segment.setAttribute('aria-label','Preferencia');
+    for(const [value,label] of [['manana','Mañana'],['tarde','Tarde'],['indiferente','Indiferente']]){
+      const on=attention.period===value,option=button(label,()=>{attention.period=value;render();},'req-segment-option'+(on?' is-selected':''));
+      option.setAttribute('role','radio');option.setAttribute('aria-checked',String(on));segment.append(option);
+    }
+    details.append(segment);
+    const reason=modules.field(details,'Motivo de solicitud',attention,'reason','textarea');
+    reason.placeholder='Describe brevemente qué te ocurre y desde cuándo.';reason.maxLength=2000;reason.rows=4;
+    const counter=el('small',(attention.reason||'').length+' / 2000','req-counter');details.append(counter);
+    reason.addEventListener('input',()=>{counter.textContent=reason.value.length+' / 2000';});
+    const issue=el('p',null,'auth-error req-issue');issue.hidden=true;details.append(issue);
+    const submit=el('button',busy?'Enviando…':'Solicitar atención','primary req-submit');submit.type='submit';submit.disabled=busy||!available.length||!context.symptoms.length;details.append(submit);
+    details.append(el('p','Enviar no crea un expediente ni una cita. Recepción revisará tu solicitud.','req-hint req-center'));
     form.append(details);if(!blocker)content.append(form);
     form.addEventListener('submit',event=>{
       event.preventDefault();if(busy)return;
@@ -314,14 +371,20 @@
         await loadAttention();
       });
     });
-    heading(content,'Mis solicitudes');
+    // Solo la solicitud más reciente; las anteriores siguen disponibles aparte, sin mezclarse con el formulario.
+    heading(content,'Tu solicitud reciente');
     if(!attention.rows.length&&!attention.error)content.append(row('Todavía no has enviado solicitudes de atención.'));
-    for(const request of attention.rows){
-      const card=row(request.specialty_name,request.reason,({pendiente:'Pendiente',en_revision:'En revisión',agendada:'Cita programada',rechazada:'Rechazada',cancelada:'Cancelada'})[request.status]||'Estado no disponible');
-      card.append(el('p',(request.symptoms||[]).join(' · ')),el('p','Preferencia: '+({manana:'Mañana',tarde:'Tarde',indiferente:'Indiferente'})[request.preferred_period]));
-      if(request.other_symptoms)card.append(el('p',request.other_symptoms));
-      if(request.appointment_id)card.append(button('Ver mi cita',()=>go('appointments'),'text-button'));content.append(card);
-    }
+    const summary=request=>{
+      const card=el('article',null,'attention-request');const head=el('div',null,'attention-request-head'),title=el('div');
+      title.append(el('strong',request.specialty_name),el('small','Enviada el '+(Number.isFinite(Date.parse(request.created_at))?new Intl.DateTimeFormat('es-SV',{timeZone:'America/El_Salvador',dateStyle:'long',timeStyle:'short'}).format(new Date(request.created_at)):'fecha no disponible')));
+      head.append(title,el('span',({pendiente:'Pendiente',en_revision:'En revisión',agendada:'Cita programada',rechazada:'Rechazada',cancelada:'Cancelada'})[request.status]||'Estado no disponible','attention-request-state is-'+request.status));card.append(head,el('p',request.reason));
+      if((request.symptoms||[]).length){const chips=el('div',null,'record-chips');for(const sym of request.symptoms)chips.append(el('span',sym,'record-chip'));card.append(chips);}
+      if(request.other_symptoms)card.append(el('p','Otros: '+request.other_symptoms));
+      card.append(el('small','🕒 Preferencia: '+(({manana:'Mañana',tarde:'Tarde',indiferente:'Indiferente'})[request.preferred_period]||'No disponible')));
+      if(request.appointment_id)card.append(button('Ver mi cita',()=>go('appointments'),'text-button'));return card;
+    };
+    if(attention.rows.length){content.append(summary(attention.rows[0]));
+      if(attention.rows.length>1){const older=el('details',null,'attention-older');older.append(el('summary','Ver solicitudes anteriores ('+(attention.rows.length-1)+')'));for(const request of attention.rows.slice(1))older.append(summary(request));content.append(older);}}
   }
   async function loadAttention(){
     attention.error=null;
@@ -457,7 +520,7 @@
     if(role==='patient'&&page==='appointments'){
       const demo=design;
       if(!demo)return appointmentFlow.renderLive(content,{items:modules.items,loading:busy,error:!busy&&!modules.data,period:formatConsultationTime,search,go,
-        hasMore:!!modules.data?.has_more,loadMore:()=>run(()=>modules.load('appointments',true)),
+        hasMore:!!modules.data?.has_more,loadMore:()=>run(()=>modules.load('appointments',true)),request:(attention.rows||[]).find(r=>['pendiente','en_revision'].includes(r.status))||null,
         cancel:(item,reason)=>run(()=>modules.mutation('cancelAppointment',{p_id:item.id,p_status:'cancelled',p_reason:reason,p_expected_version:item.row_version},'Cita cancelada.'))});
       return appointmentFlow.render(content,{appointments:appointmentFlow.appointments,demonstration:demo,loading:busy,error:false,renderConnected:null});
     }
@@ -754,7 +817,35 @@
       content.append(button('Cerrar sesión', logout, 'logout'));
     }
   }
+  function changeWeek(offset){
+    if(!offset||!doctorWeek){scheduleWeek=null;}else{const d=new Date(doctorWeek.week_start+'T12:00:00-06:00');d.setUTCDate(d.getUTCDate()+7*offset);scheduleWeek=new Intl.DateTimeFormat('en-CA',{timeZone:'America/El_Salvador'}).format(d);}
+    run(()=>load());
+  }
+  // Paridad con ContentView.schedule (iOS): semana en tarjetas verticales, sin columnas ni desplazamiento horizontal.
+  function weekView(content,week){
+    const zone='America/El_Salvador',day=k=>new Intl.DateTimeFormat('es-SV',{timeZone:zone,day:'numeric',month:'long'}).format(new Date(k+'T12:00:00-06:00'));
+    const hours=m=>m%60?Math.floor(m/60)+' h '+(m%60)+' min':Math.floor(m/60)+' h';
+    const hero=el('header',null,'directory-hero schedule-hero');hero.append(el('small','MI HORARIO'),el('h2',day(week.week_start)+' – '+day(week.week_end)),el('p',hours(week.total_minutes)+' de jornada · '+week.days.filter(d=>!d.free).length+' días con actividad'));
+    const nav=el('div',null,'schedule-nav');const prev=button('‹',()=>changeWeek(-1),'schedule-step');prev.setAttribute('aria-label','Semana anterior');const next=button('›',()=>changeWeek(1),'schedule-step');next.setAttribute('aria-label','Semana siguiente');
+    const now=button('Esta semana',()=>changeWeek(0),'schedule-now');now.disabled=!scheduleWeek;nav.append(prev,now,next);hero.append(nav);content.append(hero);
+    for(const d of week.days){
+      const card=el('article',null,'schedule-day'+(d.today?' is-today':''));const head=el('div',null,'schedule-day-head');const title=el('div');title.append(el('strong',d.weekday),el('small',day(d.date)));head.append(title);
+      if(d.today)head.append(el('span','Hoy','schedule-today'));if(d.minutes)head.append(el('span',hours(d.minutes),'schedule-hours'));card.append(head);
+      if(d.free&&!d.absences.length)card.append(el('p','☀ Día libre','schedule-free'));
+      const line=(icon,label,value,kind)=>{const r=el('div',null,'schedule-line is-'+kind);r.append(el('span',icon,'schedule-icon'),el('span',label),el('strong',value));card.append(r);};
+      for(const b of d.blocks)line(b.shift==='Tarde'?'🌇':'🌅',b.shift||'Jornada',b.start+' – '+b.end,'block');
+      for(const b of d.breaks)line(b.kind==='lunch'?'🍽':b.kind==='gap'?'⏸':'☕',b.label||'Descanso',b.start+' – '+b.end,b.kind==='gap'?'gap':'break');
+      for(const sh of d.shifts)line('🕒','Jornada asignada · '+sh.type,sh.start+' – '+sh.end,'shift');
+      for(const a of d.absences)line('⛔','Ausencia · '+a.reason,a.all_day?'Todo el día':a.start+' – '+a.end,'absence');
+      content.append(card);
+    }
+    content.append(el('p','Almuerzo y descansos según tu jornada registrada por administración. «Entre jornadas» es tiempo sin actividad asignada, no un almuerzo. Los cambios llegan a tus avisos.','scope-note'));
+  }
   function schedule(content) {
+    if(!design&&role==='doctor'&&doctorWeek){weekView(content,doctorWeek);
+      for (const shift of items.filter(item => item.status === 'pending')) content.append(button('Confirmar jornada · ' + formatPeriod(shift.period || `["${shift.starts_at}","${shift.ends_at}")`),() => run(async () => {
+        await api.operation('confirmShift',{p_id:shift.id,p_expected_version:shift.row_version}); await load(); message('Jornada confirmada.');}),'module-action'));
+      return;}
     heading(content, 'Próxima jornada');
     const demoRows = design ? fixtures.doctor.schedule : null;
     const rows = demoRows || [...items].sort((a,b) => periodTime(a.period,'start') - periodTime(b.period,'start')).map(item => [formatPeriod(item.period), '', statuses[item.status] || item.status]);
@@ -778,17 +869,43 @@
     try { return new Date(HospitalCore.periodBounds(period)[bound]).getTime(); }
     catch { return bound === 'end' ? -Infinity : Infinity; }
   }
+  // Pantalla original "Mi turno" (ruta turns; paridad con ContentView.swift `queue`). Sin pantallas ni navegación nuevas.
+  // El turno es appointments.queue_number, asignado por el servidor al programar la cita; la app solo lo lee y le da formato.
+  // Cada cita activa muestra su número dentro de su tarjeta; las finalizadas, canceladas o vencidas pasan a Turnos anteriores.
   function queueView(content) {
     heading(content, 'Turno de atención');
-    const entries = design ? [fixtures.patient.queue] : queue;
-    if (!entries.length && !busy) empty(content, 'No tienes un turno activo.');
-    for (const item of entries) {
-      const card = el('article', null, 'ticket-card'); card.append(el('p','Tu número'), el('strong', item.display_number || String(item.number)), badge(statuses[item.status] || item.status));
-      if (design) card.append(el('p','Medicina interna · Sala de espera 2'));
-      content.append(card); heading(content, 'Información de la fila');
-      content.append(row('Turno actual en atención', item.serving_number || 'Sin turno en atención'), row('Personas antes de ti', String(item.people_ahead)), row('Consultorio asignado', item.consultation_room?.name || 'Por asignar'));
+    const zone='America/El_Salvador',P=HospitalCore.patientAppointments,fmt=(value,options)=>{const d=new Date(value);return Number.isFinite(d.getTime())?new Intl.DateTimeFormat('es-SV',{timeZone:zone,...options}).format(d):'No disponible';};
+    const field=(item,label)=>{const v=(item.details||[]).find(f=>f.label.toLowerCase()===label.toLowerCase())?.value;return v&&v.trim()&&v!=='Sin registrar'?v.trim():'';};
+    const sample=()=>({id:'design',title:'Medicina general',status:'confirmed',event_at:new Date(Date.now()+86400000).toISOString(),ends_at:new Date(Date.now()+88200000).toISOString(),queue_number:fixtures?.patient?.queue?.number||24,details:[{label:'Médico',value:'Médico de ejemplo'},{label:'Especialidad',value:'Medicina general'},{label:'Consultorio',value:'C-3'}]});
+    const list=design?[sample()]:(modules.items||[]);
+    if(busy&&!list.length){content.append(el('p','Consultando tu turno…','scope-note'));return;}
+    const {active,past}=P.split(list,new Date());
+    if(!active.length)empty(content,'No tienes un turno activo.');
+    for(const item of active){
+      const turno=P.turn(item.queue_number),card=el('article',null,'ticket-card turn-card');
+      card.setAttribute('aria-label',turno?'Tu turno: '+turno:'Turno pendiente de asignación');
+      card.append(el('p','Tu número'),el('strong',turno||'—'),badge(HospitalCore.doctorClinical.statusLabel(item.status)));
+      if(!turno)card.append(el('small','El hospital asignará tu turno automáticamente.','turn-pending'));
+      const info=el('dl',null,'turn-details'),day=fmt(item.event_at,{weekday:'long',day:'numeric',month:'long'});
+      info.append(el('p','Información de la cita','turn-details-title'));
+      for(const [label,value] of [['Fecha',day.charAt(0).toUpperCase()+day.slice(1)],['Hora',fmt(item.event_at,{hour:'numeric',minute:'2-digit'})],['Médico',field(item,'Médico')||'Nombre del médico no disponible'],['Especialidad',field(item,'Especialidad')],['Consultorio',field(item,'Consultorio')||'Por asignar']]){
+        if(!value)continue;const line=el('div');line.append(el('dt',label),el('dd',value));info.append(line);
+      }
+      card.append(info);content.append(card);
     }
-    loadMore(content);
+    if(design)content.append(el('p','Turno de ejemplo · Sin cita real','scope-note'));
+    content.append(el('p','El hospital asigna el turno automáticamente al programar tu cita.','scope-note'));
+    // Historial: las citas que ya no están activas conservan su turno y su estado (Atendida, Cancelada, No atendida…).
+    const history=past.filter(item=>P.turn(item.queue_number));
+    if(history.length){
+      heading(content,'Turnos anteriores');
+      for(const item of history){
+        const line=el('article',null,'turn-history'),num=el('span',P.turn(item.queue_number),'turn-history-number'),text=el('div');
+        text.append(el('strong',field(item,'Especialidad')||item.title||'Cita médica'),el('small',fmt(item.event_at,{day:'numeric',month:'short',year:'numeric'})+' · '+fmt(item.event_at,{hour:'numeric',minute:'2-digit'})));
+        line.append(num,text,el('span',P.active(item)?'':HospitalCore.doctorClinical.statusLabel(item.status),'turn-history-state is-'+item.status));content.append(line);
+      }
+    }
+    content.append(button('Mis citas',()=>go('appointments'),'menu-row'));
   }
   function rooms(content) {
     heading(content, 'Habitaciones del hospital');
@@ -798,6 +915,36 @@
     content.append(el('p', 'El estado activo no indica disponibilidad de camas.', 'scope-note')); loadMore(content);
   }
   function loadMore(content) { if (more) content.append(button('Cargar más', () => run(() => load(true)), 'menu-row')); }
+  // Tarjeta «Seguridad» del Perfil (paciente y médico; paridad con PasswordChangeCard.swift). Verifica la contraseña actual y
+  // actualiza la contraseña en Supabase Auth (api.changePassword). En modo diseño no se llama a Supabase.
+  function passwordCard(content) {
+    const card=el('section',null,'sched-card password-card'),head=el('header',null,'password-card-head'),text=el('div');
+    text.append(el('h2','Seguridad'),el('p','Cambia la contraseña con la que inicias sesión.'));head.append(el('span','🔒','password-card-icon'),text);card.append(head);
+    const form=el('form',null,'password-form');form.noValidate=true;
+    const problem=()=>HospitalCore.validatePasswordChange(passwordDraft);
+    const hint=el('p',null,'password-issue');hint.hidden=true;
+    const refreshHint=()=>{const issue=(passwordDraft.current||passwordDraft.next||passwordDraft.confirm)?problem():null;hint.textContent=issue?issue.message:'';hint.hidden=!issue;submit.disabled=busy||!!problem();};
+    for(const [key,label,auto] of [['current','Contraseña actual','current-password'],['next','Nueva contraseña','new-password'],['confirm','Confirmar nueva contraseña','new-password']]){
+      const wrap=el('label',null,'password-field');wrap.append(el('span',label));
+      const input=el('input');input.type=passwordDraft.visible?'text':'password';input.autocomplete=auto;input.value=passwordDraft[key];input.disabled=busy;input.setAttribute('aria-label',label);
+      input.addEventListener('input',()=>{passwordDraft[key]=input.value;passwordDraft.error=null;passwordDraft.success=null;refreshHint();});wrap.append(input);form.append(wrap);
+    }
+    form.append(button(passwordDraft.visible?'Ocultar contraseñas':'Mostrar contraseñas',()=>{passwordDraft.visible=!passwordDraft.visible;render();},'text-button password-toggle'));
+    form.append(el('p','Mínimo 8 caracteres y distinta de la actual.','password-rule'),hint);
+    if(passwordDraft.error){const e=el('p',passwordDraft.error,'password-error');e.setAttribute('role','alert');form.append(e);}
+    if(passwordDraft.success){const ok=el('p',passwordDraft.success,'password-success');ok.setAttribute('role','status');form.append(ok);}
+    const submit=el('button',busy?'Actualizando…':'Actualizar contraseña','primary password-submit');submit.type='submit';form.append(submit);refreshHint();
+    form.addEventListener('submit',event=>{
+      event.preventDefault();if(busy||problem())return;
+      if(design){passwordDraft={current:'',next:'',confirm:'',visible:false,error:null,success:'Modo diseño · No se cambió ninguna contraseña real.'};render();return;}
+      const current=passwordDraft.current,next=passwordDraft.next;
+      run(async()=>{
+        try{await api.changePassword(current,next);passwordDraft={current:'',next:'',confirm:'',visible:false,error:null,success:'Contraseña actualizada. Úsala la próxima vez que inicies sesión.'};}
+        catch(error){passwordDraft.error=error.message||'No se pudo cambiar la contraseña. Inténtalo de nuevo.';passwordDraft.success=null;}
+      });
+    });
+    card.append(form);content.append(card);
+  }
   function profileView(content) {
     const clean = value => typeof value === 'string' && value.trim() ? value.trim() : 'No disponible';
     const given = clean(design ? fixtures[role].givenNames : profile?.person?.given_names);
@@ -806,7 +953,7 @@
       const name=[given,family].filter(value=>value!=='No disponible').join(' ')||'No disponible',email=clean(design?'maria.lopez@ejemplo.test':profile?.auth_email),phone=clean(design?'7123-4567':profile?.contacts?.find(item=>item.kind==='phone')?.value);
       const hero=el('article',null,'patient-profile-hero'),avatar=el('span',name==='No disponible'?'?':name.split(' ').slice(0,2).map(value=>value[0]).join(''),'patient-profile-avatar');avatar.setAttribute('aria-hidden','true');hero.append(avatar,el('h2',name),el('p','Paciente · Hospital Universitario'));if(design)hero.append(el('small','Perfil de ejemplo'));content.append(hero);
       const card=el('section',null,'sched-card patient-profile-contact');card.append(el('h2','Información personal','section-title'));
-      for(const[label,value,icon]of [['Nombre completo',name,'♙'],['Correo electrónico',email,'@'],['Teléfono',phone,'☎']]){const row=el('div',null,'profile-contact-row'),symbol=el('span',icon,'profile-contact-icon'),text=el('div');symbol.setAttribute('aria-hidden','true');text.append(el('span',label),el('strong',value));row.append(symbol,text);card.append(row);}content.append(card,el('p','Datos de tu registro','clinical-ticket-note'));return;
+      for(const[label,value,icon]of [['Nombre completo',name,'♙'],['Correo electrónico',email,'@'],['Teléfono',phone,'☎']]){const row=el('div',null,'profile-contact-row'),symbol=el('span',icon,'profile-contact-icon'),text=el('div');symbol.setAttribute('aria-hidden','true');text.append(el('span',label),el('strong',value));row.append(symbol,text);card.append(row);}content.append(card,el('p','Datos de tu registro','clinical-ticket-note'));passwordCard(content);return;
     }
     const intro = el('div',null,'identity-intro');
     const icon = el('span',[given,family].filter(value=>value!=='No disponible').map(value=>value[0]).join('') || '—','identity-icon'); icon.setAttribute('aria-hidden','true');
@@ -814,6 +961,7 @@
     for (const [label,value] of [['Nombre',given],['Apellido',family]]) {
       const card = el('article',null,'sched-card identity-field'); card.append(el('span',label),el('strong',value)); content.append(card);
     }
+    passwordCard(content);
   }
   function information(content) {
     const link=(label,url,className='info-action')=>{const a=el('a',label,className);a.href=url;if(url.startsWith('https:')){a.target='_blank';a.rel='noopener noreferrer';}return a;};
@@ -914,5 +1062,5 @@
   setInterval(async()=>{if(document.hidden||design||busy||role!=='doctor'||page!=='consultation'||!modules||modules.selected)return;
     let revision=null;try{revision=await api.planningRevision();}catch{return;}
     if(revision!==null&&planningRevision!==null&&revision===planningRevision)return;planningRevision=revision;if(!busy&&!modules.selected)run(()=>modules.load('consultation'));},30000);
-  setInterval(() => { if (!document.hidden && !design && !busy && ((role === 'patient' && ['turns','notifications'].includes(page)) || (role === 'doctor' && ['home','patients','notifications'].includes(page)))) run(() => load()); },30000);
+  setInterval(() => { if (!document.hidden && !design && !busy && ((role === 'patient' && ['turns','notifications'].includes(page)) || (role === 'doctor' && ['home','patients','notifications','turns'].includes(page)))) run(() => load()); },30000);
 })();

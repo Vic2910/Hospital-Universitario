@@ -45,17 +45,18 @@
       ticket.append(button('Volver a Mis citas',close,'consult-ticket-primary'));parent.append(ticket);
     }
     // Mis citas conectadas (paridad con PatientAppointmentsView.swift): todos los detalles a la vista, sin pantallas intermedias.
-    renderLive(parent,{items,loading=false,error=null,period,search='',cancel,go,hasMore=false,loadMore}){
+    // Mis citas: solo la cita activa (o las activas) y, si no hay ninguna, la solicitud de atención enviada.
+    // Las citas finalizadas, canceladas, no atendidas o vencidas no se muestran aquí (se conservan en Mi turno).
+    renderLive(parent,{items,loading=false,error=null,period,search='',cancel,go,hasMore=false,loadMore,request=null}){
       const{el,button,repaint}=this.ui,zone='America/El_Salvador';
       const when=item=>Date.parse(item.event_at)||0,value=(item,label)=>{const v=(item.details||[]).find(f=>f.label.toLowerCase()===label.toLowerCase())?.value;return v&&v.trim()&&v!=='Sin registrar'?v.trim():'';};
       const match=item=>!search||[item.title,...(item.details||[]).map(f=>f.value)].join(' ').toLowerCase().includes(search.toLowerCase());
-      const list=(items||[]).filter(match),soon=Date.now()-1800000;
-      const upcoming=list.filter(i=>i.status==='in_progress'||(['scheduled','confirmed'].includes(i.status)&&when(i)>=soon)).sort((a,b)=>when(a)-when(b));
-      const past=list.filter(i=>!upcoming.includes(i)).sort((a,b)=>when(b)-when(a));
-      const hero=el('header',null,'directory-hero');hero.append(el('small','MIS CITAS'),el('h2',upcoming.length?(upcoming.length===1?'Tienes 1 cita próxima':'Tienes '+upcoming.length+' citas próximas'):'No tienes citas próximas'),el('p','Recepción programa tus citas. Aquí ves la fecha, el médico, el consultorio y el motivo.'));parent.append(hero);
+      const list=(items||[]).filter(match);
+      const upcoming=root.HospitalCore.patientAppointments.split(list,new Date()).active;
+      const hero=el('header',null,'directory-hero');hero.append(el('small','MIS CITAS'),el('h2',upcoming.length?(upcoming.length===1?'Tienes 1 cita programada':'Tienes '+upcoming.length+' citas programadas'):request?'Tu solicitud está en revisión':'No tienes citas programadas'),el('p','Recepción programa tus citas. Aquí ves la fecha, el médico, el consultorio y el motivo.'));parent.append(hero);
       if(loading&&!list.length)parent.append(el('p','Cargando tus citas…','scope-note'));
       if(error)parent.append(el('p','No pudimos cargar tus citas. Intenta de nuevo.','auth-notice'));
-      const labels={scheduled:'Programada',confirmed:'Programada',in_progress:'En consulta',completed:'Finalizada',cancelled:'Cancelada',no_show:'No asistió'};
+      const labels={scheduled:'Pendiente',confirmed:'Pendiente',in_progress:'En consulta',completed:'Atendida',cancelled:'Cancelada',no_show:'No atendida'};
       const card=(item,featured)=>{
         const date=new Date(item.event_at),valid=Number.isFinite(date.getTime()),active=['scheduled','confirmed','in_progress'].includes(item.status);
         const node=el('article',null,'appointment-live'+(featured?' is-featured':'')+(item.status==='in_progress'?' is-active':''));
@@ -63,7 +64,7 @@
         badge.append(el('strong',valid?new Intl.DateTimeFormat('es-SV',{day:'numeric',timeZone:zone}).format(date):'--'),el('small',valid?new Intl.DateTimeFormat('es-SV',{month:'short',timeZone:zone}).format(date).toUpperCase():''));
         const text=el('div',null,'appointment-live-text');if(featured)text.append(el('small','PRÓXIMA CITA','appointment-live-kicker'));
         text.append(el('h3',item.title),el('p',valid?new Intl.DateTimeFormat('es-SV',{dateStyle:'full',timeZone:zone}).format(date):'Fecha no disponible'),el('strong','🕒 '+(period(value(item,'Horario'))||'Horario no disponible'),'appointment-live-time'));
-        top.append(badge,text,el('span',labels[item.status]||'Cita','appointment-live-state is-'+item.status));node.append(top);
+        top.append(badge,text,el('span',labels[item.status]||root.HospitalCore.doctorClinical.statusLabel(item.status),'appointment-live-state is-'+item.status));node.append(top);
         const rows=[['🩺','Médico',value(item,'Médico')],['✚','Especialidad',value(item,'Especialidad')],['🚪','Consultorio',value(item,'Consultorio')],['💬','Motivo',value(item,'Motivo de la consulta')],['✕','Motivo de cancelación',value(item,'Motivo de cancelación')]].filter(r=>r[2]);
         if(rows.length){const box=el('div',null,'appointment-live-details');for(const [icon,label,text] of rows){const row=el('div');row.append(el('span',icon,'appointment-live-icon'),el('small',label),el('p',text));box.append(row);}node.append(box);}
         if(featured&&item.status==='in_progress')node.append(el('p','Tu médico ya inició la consulta.','appointment-live-note'));
@@ -77,8 +78,18 @@
         return node;
       };
       if(upcoming.length){parent.append(card(upcoming[0],true));if(upcoming.length>1){parent.append(el('h2','Siguientes citas','section-title'));for(const item of upcoming.slice(1))parent.append(card(item,false));}}
+      else if(request){
+        // Solicitud enviada y pendiente de recepción (my_attention_requests): mismo diseño de tarjeta, sin cita todavía.
+        const node=el('article',null,'appointment-live is-featured is-request'),top=el('div',null,'appointment-live-top'),icon=el('div',null,'appointment-live-day');
+        icon.append(el('strong','⏳'),el('small','SOLICITUD'));const text=el('div',null,'appointment-live-text');
+        const sent=Number.isFinite(Date.parse(request.created_at))?new Intl.DateTimeFormat('es-SV',{dateStyle:'long',timeStyle:'short',timeZone:zone}).format(new Date(request.created_at)):'fecha no disponible';
+        text.append(el('small','SOLICITUD DE ATENCIÓN','appointment-live-kicker'),el('h3',request.specialty_name||'Solicitud de atención'),el('p','Enviada el '+sent));
+        top.append(icon,text,el('span',request.status==='en_revision'?'En revisión':'Pendiente','appointment-live-state is-scheduled'));node.append(top);
+        const rows=[['💬','Motivo',request.reason],['🩺','Síntomas',(request.symptoms||[]).join(', ')],['🕒','Preferencia',({manana:'Mañana',tarde:'Tarde',indiferente:'Indiferente'})[request.preferred_period]||'']].filter(r=>r[2]);
+        if(rows.length){const box=el('div',null,'appointment-live-details');for(const [ic,label,value] of rows){const row=el('div');row.append(el('span',ic,'appointment-live-icon'),el('small',label),el('p',value));box.append(row);}node.append(box);}
+        node.append(el('p','Recepción revisará tu solicitud y te asignará la cita. Mientras tanto no puedes enviar otra.','appointment-live-note'));parent.append(node);
+      }
       else if(!loading&&!error){const empty=el('article',null,'record-empty');empty.append(el('span','📅','record-empty-icon'),el('strong','Sin citas programadas'),el('p','Cuando recepción programe tu atención, verás aquí la fecha, la hora y el consultorio.','sched-hint'),button('Solicitar atención',()=>go('request'),'module-action'));parent.append(empty);}
-      if(past.length){parent.append(el('h2','Historial de citas','section-title'));for(const item of past)parent.append(card(item,false));}
       if(hasMore&&loadMore)parent.append(button('Cargar más citas',loadMore,'module-action'));
     }
     renderRequests(parent){

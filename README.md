@@ -51,6 +51,10 @@ iOS ofrece Activar recordatorios en este iPhone para citas ya sincronizadas. No 
 
 **Flujo de atención (iOS y web-preview):** Agenda (hoy y 13 días siguientes en hora de El Salvador, en orden cronológico, con secciones Hoy/Próximas/Finalizadas/Canceladas) → Ver detalle → **ABRIR CONSULTA MÉDICA** → tarjeta del paciente y datos de la cita automáticos → A Datos físicos (peso, altura, temperatura), B Evaluación médica (síntomas, diagnóstico, observaciones), C Servicios adicionales (**Solicitar exámenes** y **Recetar medicamentos**, opcionales) → Guardar consulta → **FINALIZAR CONSULTA** con confirmación. Estados para médico y paciente: Programada → En consulta → Finalizada. **El cierre requiere aplicar `supabase/doctor-consultation-six-fields.sql`** (preparada, no aplicada): el servidor actual todavía exige plan de tratamiento y la app lo avisa sin cerrar. [Flujo](docs/DOCTOR_FLUJO_CONSULTA_2026-11-19.md) · [Formulario de seis campos](docs/DOCTOR_FORMULARIO_SEIS_CAMPOS_2026-11-19.md).
 
+**Documento maestro (20 de noviembre):** el formulario de consulta tiene plan de tratamiento propio y finaliza con lo desplegado. Mi horario del médico muestra la jornada real de administración. Las citas no atendidas automáticas, el aviso de cancelación al médico, el turno único por hospital y los avisos de jornada requieren `supabase/citas-turnos-jornada.sql` (preparada, no aplicada). [Tabla de requisitos e instrucciones](docs/REQUISITOS_MAESTRO_2026-11-20.md).
+
+**Perfil (iOS y web-preview):** pacientes y médicos cambian su contraseña en Perfil → Seguridad. Se verifica la contraseña actual y la nueva se guarda en Supabase Auth; la siguiente vez se entra con la nueva.
+
 **Paciente (iOS y web-preview):** Mis citas muestra la próxima cita con todos sus detalles, las siguientes y el historial, sin pantallas intermedias. La campana muestra los avisos propios del paciente. Solo puede haber una solicitud de atención activa: con una pendiente o una cita programada se muestra un aviso en lugar del formulario. Los avisos de cita, receta y solicitud, y el bloqueo en el servidor, requieren `supabase/paciente-avisos-solicitud-unica.sql`. [Detalle](docs/PACIENTE_CITAS_AVISOS_SOLICITUD_2026-11-20.md).
 
 **Agenda de Consultas (iOS y web-preview):** dos filtros, **PENDIENTES** (por hora ascendente; hoy también las consultas en atención de días previos) y **FINALIZADAS** (por hora real de finalización, la última primero). Fecha inicial hoy, con día anterior y siguiente, calendario y botón Hoy, y búsqueda por nombre, apellido, código o expediente. Las canceladas no aparecen en ninguno de los dos. Sincronización cada 30 s mediante `planning_revision`, que solo vuelve a pedir la agenda si cambió. La hora real de finalización requiere `supabase/doctor-consultation-six-fields.sql`. [Análisis del módulo y de Supabase](docs/ANALISIS_MODULO_DOCTOR_SUPABASE.md).
@@ -82,6 +86,7 @@ node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-directory.
 node --preserve-symlinks --preserve-symlinks-main scripts/test-patient-record.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-agenda.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-patient-portal.mjs
+node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-schedule.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-doctor-admissions.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-applicant.mjs
 node --preserve-symlinks --preserve-symlinks-main scripts/test-clinical-labs.mjs

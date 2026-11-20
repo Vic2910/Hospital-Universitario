@@ -100,6 +100,30 @@ final class HospitalAPI {
     }
 
     func token() async throws -> String { try await client.auth.session.accessToken }
+
+    /// Cambio de contraseña desde Perfil (paciente y médico; paridad con web-preview/api.js changePassword).
+    /// 1) Verifica la contraseña actual iniciando sesión con el correo de la cuenta; 2) con esa sesión recién autenticada
+    /// actualiza la contraseña en Supabase Auth (auth.users). Nunca se guarda ni se registra ninguna contraseña.
+    func changePassword(current: String, new: String) async throws {
+        if let problem = PasswordChangeRules.validate(current: current, new: new, confirm: new) { throw HospitalError.message(problem) }
+        let email = try await client.auth.session.user.email ?? ""
+        guard !email.isEmpty else { throw HospitalError.message("Tu cuenta no tiene un correo asociado. Contacta al hospital.") }
+        do {
+            _ = try await client.auth.signIn(email: email, password: current)
+        } catch let error as AuthError {
+            let code = error.errorCode.rawValue
+            throw HospitalError.message(["invalid_credentials", "invalid_grant"].contains(code) ? "La contraseña actual no es correcta." : PasswordChangeRules.message(for: code))
+        } catch {
+            throw HospitalError.message("No se pudo conectar con el hospital. Revisa la conexión e inténtalo de nuevo.")
+        }
+        do {
+            _ = try await client.auth.update(user: UserAttributes(password: new))
+        } catch let error as AuthError {
+            throw HospitalError.message(PasswordChangeRules.message(for: error.errorCode.rawValue))
+        } catch {
+            throw HospitalError.message(PasswordChangeRules.message(for: nil))
+        }
+    }
     func doctorRPC<T: Decodable>(_ name: String, parameters: [String: Any] = [:]) async throws -> T {
         guard ["workspace", "chart", "start", "save", "lab", "prescribe", "finish", "patients", "patient_labs", "admissions", "admission_request", "lab_catalog", "lab_orders", "labs", "alerts"].contains(name) else {
             throw HospitalError.message("Operación médica no permitida.")
@@ -112,6 +136,10 @@ final class HospitalAPI {
     func planningRevision() async throws -> Int64? {
         let rows = try await request("/rest/v1/planning_revision?select=revision&limit=1") as? [[String: Any]]
         return (rows?.first?["revision"] as? NSNumber)?.int64Value
+    }
+    /// doctor_native_schedule (supabase/doctor-mi-horario.sql): jornada recurrente propia con descansos registrados.
+    func doctorSchedule(from: Date, until: Date) async throws -> Any {
+        try await request("/rest/v1/rpc/doctor_native_schedule", body: ["p_from": DoctorDate.timestamp(from), "p_until": DoctorDate.timestamp(until)], method: "POST")
     }
     func attentionRPC<T: Decodable>(_ name: String, parameters: [String: Any] = [:]) async throws -> T {
         guard ["my_attention_context", "my_attention_requests", "submit_my_attention_request"].contains(name) else {

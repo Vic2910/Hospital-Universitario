@@ -182,11 +182,6 @@ final class MobileModuleViewModel: ObservableObject {
         } catch { self.error = "No se pudo preparar la receta." }
     }
 
-    func changePassword(_ password: String) async {
-        guard password.count >= 12 else { error = "La contraseña debe tener al menos 12 caracteres."; return }
-        await mutate("Contraseña actualizada.", reload: false) { try await self.repository.changePassword(password) }
-    }
-
     func documentURL(_ id: UUID) async -> URL? {
         let scope = generation
         do {

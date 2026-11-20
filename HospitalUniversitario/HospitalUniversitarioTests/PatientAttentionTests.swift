@@ -104,3 +104,44 @@ struct AttentionSingleRequestTests {
         #expect(AttentionRules.blocker(requests: [], scheduled: nil) == nil)
     }
 }
+
+/// Turno del paciente: lo asigna el servidor (appointments.queue_number); la app solo lo presenta.
+struct PatientTurnTests {
+    @Test func turnIsShownWithThreeDigitsAndOnlyWhenTheServerAssignedIt() {
+        let base = ProximaCita(id: UUID(), starts_at: "2026-11-25T15:00:00Z", ends_at: "2026-11-25T15:30:00Z", status: "scheduled", doctor_name: nil)
+        #expect(base.turno == nil, "Sin queue_number no se inventa un turno")
+        var assigned = base; assigned.queue_number = 24
+        #expect(assigned.turno == "024")
+        assigned.queue_number = 1234
+        #expect(assigned.turno == "1234")
+    }
+
+    private func item(_ id: String, _ status: String, start: TimeInterval, end: TimeInterval?, queue: Int?) -> MobileItem {
+        let now = Date()
+        return MobileItem(id: UUID(uuidString: "00000000-0000-4000-8000-0000000000" + id)!, title: "Medicina general", subtitle: nil, status: status,
+            event_at: DoctorDate.timestamp(now.addingTimeInterval(start)), row_version: 0, details: [], action: nil, document_id: nil,
+            ends_at: end.map { DoctorDate.timestamp(now.addingTimeInterval($0)) }, queue_number: queue, queue_date: nil)
+    }
+
+    /// Misma regla que HospitalCore.patientAppointments: activa mientras no termine el horario reservado.
+    @Test func activeAppointmentsFollowTheReservedEndTime() {
+        let started = item("a1", "scheduled", start: -600, end: 1200, queue: 16)
+        let expired = item("a2", "scheduled", start: -18000, end: -16200, queue: 3)
+        let inConsultation = item("a3", "in_progress", start: -32400, end: -28800, queue: 1)
+        let cancelled = item("a4", "cancelled", start: 3600, end: 5400, queue: 9)
+        let completed = item("a5", "completed", start: -86400, end: -84600, queue: 4)
+        let future = item("a6", "confirmed", start: 86400, end: 88200, queue: 21)
+        #expect(PatientAppointmentRules.isActive(started), "Empezó pero su horario sigue vigente")
+        #expect(!PatientAppointmentRules.isActive(expired), "Vencida sin atención: deja de ser activa aunque el servidor no la haya marcado")
+        #expect(PatientAppointmentRules.isActive(inConsultation), "En consulta sigue activa aunque pase la hora")
+        #expect(!PatientAppointmentRules.isActive(cancelled) && !PatientAppointmentRules.isActive(completed))
+        let groups = PatientAppointmentRules.split([future, expired, started, cancelled, inConsultation, completed])
+        #expect(groups.active.map(\.queue_number) == [1, 16, 21], "Activas de la más antigua a la más lejana")
+        #expect(groups.past.map(\.queue_number) == [9, 3, 4], "Anteriores de la más reciente a la más antigua")
+    }
+
+    @Test func turnComesFromTheServerAndIsOnlyFormatted() {
+        #expect(PatientAppointmentRules.turn(16) == "016")
+        #expect(PatientAppointmentRules.turn(nil) == nil, "Sin queue_number no se inventa un turno")
+    }
+}

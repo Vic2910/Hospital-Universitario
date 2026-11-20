@@ -187,6 +187,10 @@
           if (state === 'finished') { const finishedAt = item.finished_at ? new Date(item.finished_at) : null; node.append(el('p',finishedAt && Number.isFinite(finishedAt.getTime()) ? '✓ Finalizada a las '+new Intl.DateTimeFormat('es-SV',{timeStyle:'short',timeZone:zone}).format(finishedAt) : '✓ Finalizada · hora de la cita','agenda-finished-at')); }
           listBox.append(node);
         }
+        // Canceladas y no atendidas: conservan su estado y su turno; nunca se cuentan como atendidas.
+        if (state === 'finished') { const closed = clinical.closedWithoutCare(data.appointments,data.day).filter(match);
+          if (closed.length) { const sub = el('div',null,'consult-section-head'); sub.append(el('h2','Canceladas y no atendidas','section-title')); listBox.append(sub);
+            for (const item of closed) listBox.append(this.card(item,{el,button,repaint,data,value,age,symptoms,time,dayText,ticketField,showDate:false,clinical})); } }
       };
       query.addEventListener('input',() => { this.query = query.value; paint(); });
       paint();

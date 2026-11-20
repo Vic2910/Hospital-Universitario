@@ -1,47 +1,15 @@
--- Formulario de consulta de seis campos (iOS y web-preview) — 19 de noviembre de 2026.
+-- Lecturas del médico: código de paciente, hora real de finalización y orden de la agenda — actualizado el 20 de noviembre de 2026.
 -- PREPARADO, NO APLICADO. Requiere autorización expresa antes de ejecutarlo en Hospital Móviles (uvebpsbbwofthucghccc).
 --
--- Cambio mínimo compatible:
---   1. doctor_native_finish deja de exigir `plan`. Sigue exigiendo subjective (Síntomas que presentaba),
---      assessment (Diagnóstico) y objective (Observaciones), la versión guardada y la consulta propia y abierta.
---      `plan` se conserva tal cual en consultas anteriores; no se borra ni se rellena.
---      private.native_complete_guard (disparador BEFORE UPDATE OF status en appointments) exigía también `plan`
---      al pasar la cita a `completada`; se ajusta a las mismas tres notas. Corrección del 20 de noviembre: sin este
---      cambio el cierre seguiría fallando aunque doctor_native_finish ya no exija `plan`.
---   2. doctor_native_workspace y doctor_native_chart publican patients.patient_code (código del paciente).
---      doctor_native_workspace publica además finished_at (clinical_encounters.ended_at, hora real de finalización)
---      y ordena por a.starts_at en lugar del texto del intervalo. Filtros y permisos no cambian.
--- No crea tablas, no cambia RLS ni GRANT (CREATE OR REPLACE conserva los privilegios), no modifica datos.
--- Definiciones base leídas del servidor el 19 de noviembre de 2026 (pg_get_functiondef).
+-- Historia: este archivo relajaba doctor_native_finish y native_complete_guard para no exigir `plan`. El 20 de noviembre
+-- el usuario pidió que el plan de tratamiento tenga su propio campo obligatorio, de modo que el cierre ya funciona con lo
+-- desplegado y esas dos funciones se retiraron de aquí (no deben aplicarse). Queda solo:
+--   * doctor_native_workspace: publica patients.patient_code y finished_at (clinical_encounters.ended_at) y ordena por
+--     a.starts_at en lugar del texto del intervalo.
+--   * doctor_native_chart: publica patient_code (expedientes-historial.sql contiene una versión más completa; si se
+--     aplican ambos, aplicar expedientes-historial.sql después).
+-- No cambia RLS, GRANT ni datos.
 BEGIN;
-
-CREATE OR REPLACE FUNCTION public.doctor_native_finish(p_encounter uuid, p_version integer)
- RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
-AS $function$
-DECLARE e public.clinical_encounters=private.native_doctor_encounter(p_encounter,false);
-BEGIN
- IF e.ended_at IS NOT NULL THEN RETURN; END IF;
- IF e.version IS DISTINCT FROM p_version OR e.version=0 THEN RAISE EXCEPTION 'Actualiza y guarda antes de finalizar' USING ERRCODE='40001'; END IF;
- IF nullif(trim(e.subjective),'') IS NULL OR nullif(trim(e.objective),'') IS NULL OR nullif(trim(e.assessment),'') IS NULL THEN
-  RAISE EXCEPTION 'Completa síntomas, diagnóstico y observaciones' USING ERRCODE='22023'; END IF;
- UPDATE public.clinical_encounters SET ended_at=now(),version=version+1 WHERE id=e.id;
- PERFORM public.update_appointment_status(e.appointment_id,'completada');
- INSERT INTO public.audit_logs(actor_id,action,entity_type,entity_id) VALUES(auth.uid(),'finalizar_consulta','clinical_encounters',e.id::text);
-END $function$;
-
-CREATE OR REPLACE FUNCTION private.native_complete_guard()
- RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
-AS $function$
-BEGIN
- IF private.has_role('doctor') AND NOT(private.has_role('admin') OR private.has_role('recepcionista'))
-  AND NOT EXISTS(SELECT 1 FROM public.clinical_encounters e WHERE e.appointment_id=NEW.id
-   AND e.doctor_id=private.native_doctor_id() AND e.ended_at IS NOT NULL AND e.version>0
-   AND nullif(trim(e.subjective),'') IS NOT NULL AND nullif(trim(e.objective),'') IS NOT NULL
-   AND nullif(trim(e.assessment),'') IS NOT NULL) THEN
-    RAISE EXCEPTION 'Finaliza y firma la consulta antes de marcar la cita atendida' USING ERRCODE='22023';
- END IF;
- RETURN NEW;
-END $function$;
 
 CREATE OR REPLACE FUNCTION public.doctor_native_workspace(p_from timestamp with time zone, p_to timestamp with time zone)
  RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO ''

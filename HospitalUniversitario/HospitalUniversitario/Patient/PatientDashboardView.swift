@@ -10,6 +10,12 @@ struct ProximaCita: Identifiable, Equatable, Decodable {
     let ends_at: String
     let status: String
     let doctor_name: String?
+    /// Turno asignado automáticamente por el servidor (appointments.queue_number) y datos para mostrarlo.
+    var queue_number: Int? = nil
+    var queue_date: String? = nil
+    var room: String? = nil
+    var specialty: String? = nil
+    var turno: String? { queue_number.map { String(format: "%03d", $0) } }
     private func formatted(_ format: String) -> String {
         let parser = ISO8601DateFormatter()
         parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

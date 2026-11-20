@@ -12,6 +12,9 @@ Hospital Universitario utiliza exclusivamente **Hospital Móviles** (`uvebpsbbwo
 - [Expedientes: búsqueda, expediente sin duplicados e historial por consulta — 20 de noviembre](EXPEDIENTES_2026-11-20.md).
 - [Análisis del módulo Doctor y su conexión con Supabase; agenda de dos filtros — 20 de noviembre](ANALISIS_MODULO_DOCTOR_SUPABASE.md).
 - [Paciente: citas a la vista, avisos propios y solicitud única — 20 de noviembre](PACIENTE_CITAS_AVISOS_SOLICITUD_2026-11-20.md).
+- [Documento maestro: tabla de requisitos, migraciones y pendientes — 20 de noviembre](REQUISITOS_MAESTRO_2026-11-20.md).
+- [Revisión técnica previa a las pruebas del sistema — 20 de noviembre](REVISION_TECNICA_2026-11-20.md).
+- [Migraciones pendientes: inventario definitivo — 20 de noviembre](MIGRACIONES_PENDIENTES_2026-11-20.md).
 
 - [Propuesta de integridad clínica — pendiente de autorización, no desplegada](INTEGRIDAD_CLINICA_PROPUESTA_2026-11-13.md).
 

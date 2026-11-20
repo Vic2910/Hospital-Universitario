@@ -27,12 +27,17 @@ assert.equal('doctor_id' in last,false,'El cliente no envía la identidad del m�
 const pending=order(['Abierta Ayer','Seis Confirmada','Siete En Atención','Ocho Programada','José Pérez']);
 assert.ok(pending.every((value,index)=>value>=0&&(index===0||value>pending[index-1])),'Pendientes por hora ascendente y en atención de ayer retomable');
 for(const absent of ['Cancelada Hoy','Ausente Hoy','Hecha Diez','Pendiente Ayer'])assert.equal(text().includes(absent),false,'No aparece en Pendientes: '+absent);
-assert.match(text(),/5PENDIENTES/);assert.match(text(),/3FINALIZADAS/);
+assert.match(text(),/5PENDIENTES/);assert.match(text(),/Pendiente/);{const t=text().split('Ocho Programada').join('');const m=t.match(/Programada|Atendida/);assert.equal(m,null,'PENDIENTES solo muestra Pendiente o En consulta: '+(m&&t.slice(Math.max(0,m.index-60),m.index+20)));}assert.match(text(),/3FINALIZADAS/);
 await ui.click('FINALIZADAS');assert.match(text(),/Consultas finalizadas/);
 const finished=order(['Hecha Diez','Hecha Nueve','Finalizada Tarde']);
 assert.ok(finished.every((value,index)=>value>=0&&(index===0||value>finished[index-1])),'Finalizadas por hora real de finalización, la última primero');
-for(const absent of ['Cancelada Hoy','Seis Confirmada','Siete En Atención','Hecha Ayer'])assert.equal(text().includes(absent),false,'No aparece en Finalizadas de hoy: '+absent);
+for(const absent of ['Seis Confirmada','Siete En Atención','Hecha Ayer'])assert.equal(text().includes(absent),false,'No aparece en Finalizadas de hoy: '+absent);
+// Canceladas y no atendidas: sección aparte, después de las atendidas, con su estado.
+const closedAt=text().indexOf('Canceladas y no atendidas');assert.ok(closedAt>text().indexOf('Finalizada Tarde'),'Sección aparte tras las atendidas');
+assert.ok(text().indexOf('Cancelada Hoy')>closedAt&&text().indexOf('Ausente Hoy')>closedAt);assert.match(text(),/No atendida/);assert.match(text(),/3FINALIZADAS/,'El contador solo cuenta consultas atendidas');
 assert.match(text(),/Finalizada a las/);
+// Etiquetas visibles: Atendida en finalizadas; Cancelada y No atendida en su sección; Pendiente en PENDIENTES.
+assert.match(text().slice(0,closedAt),/Atendida/);assert.match(text().slice(closedAt),/Cancelada/);assert.match(text().slice(closedAt),/No atendida/);
 // Búsqueda junto con filtro y fecha.
 await ui.input('Buscar consultas','nueve');assert.match(text(),/Hecha Nueve/);assert.equal(text().includes('Hecha Diez'),false);
 await ui.input('Buscar consultas','');await ui.click('PENDIENTES');

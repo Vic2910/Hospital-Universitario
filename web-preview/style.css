@@ -432,3 +432,99 @@ button.primary.admission-new{border-radius:16px;min-height:56px;font-size:14px;f
 .appointment-cancel{display:grid;gap:8px}.appointment-cancel textarea{border-radius:12px;border:1px solid var(--rose);padding:12px;min-height:70px;font-size:13px}
 .attention-blocked{border:1.5px solid var(--rose);margin-bottom:8px}.attention-blocked p{max-width:340px}
 .notification-icon{float:left;width:30px;height:30px;border-radius:50%;display:grid;place-content:center;background:#fff;margin-right:10px;font-size:14px}
+/* Mi horario del médico (paridad con ContentView.schedule) */
+.schedule-hero .schedule-nav{display:flex;gap:8px;margin-top:6px}.schedule-step{width:38px;height:38px;border-radius:50%;background:#fff;color:var(--wine);font-size:20px;font-weight:700}.schedule-now{padding:0 14px;min-height:38px;border-radius:999px;background:#fff;color:var(--wine);font-weight:700;font-size:12px}
+.schedule-day{display:grid;gap:10px;padding:16px;border-radius:18px;background:#fff;border:1px solid var(--rose)}.schedule-day.is-today{border:1.5px solid var(--wine)}
+.schedule-day-head{display:flex;align-items:center;gap:8px}.schedule-day-head>div{display:grid;flex:1}.schedule-day-head strong{font-size:15px}.schedule-day-head small{font-size:11px;color:var(--muted)}
+.schedule-today{padding:3px 10px;border-radius:999px;background:var(--wine);color:#fff;font-size:10px;font-weight:700}.schedule-hours{font-size:12px;font-weight:600;color:var(--wine)}.schedule-free{font-size:13px;font-weight:600;color:var(--muted)}
+.schedule-line{display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:10px;font-size:13px}.schedule-line strong{font-variant-numeric:tabular-nums;white-space:nowrap}
+.schedule-icon{width:34px;height:34px;border-radius:10px;display:grid;place-content:center;background:var(--rose)}.schedule-line.is-break .schedule-icon{background:#e3f6ea}.schedule-line.is-break strong{color:#21804d}.schedule-line.is-block strong{color:var(--wine)}.schedule-line.is-absence .schedule-icon{background:#fff2d9}.schedule-line.is-absence strong{color:#8a5a00}.schedule-line.is-shift .schedule-icon{background:var(--paper)}
+/* Solicitar atención (solo diseño; misma lógica) y solicitud reciente */
+.attention-form{display:grid;gap:14px}.attention-card{border-radius:20px!important;padding:18px!important;border:1px solid var(--rose);box-shadow:0 6px 18px #24293610;display:grid;gap:10px}
+.attention-card>h2{font-size:16px;color:#242936}.attention-card>p{font-size:12px;color:var(--muted)}
+.attention-personal{display:grid;gap:2px;padding:10px 12px;border-radius:12px;background:var(--paper)}.attention-personal small{font-size:10px;color:var(--muted)}.attention-personal strong{font-size:13px}
+.attention-symptoms{display:flex;flex-wrap:wrap;gap:8px}.attention-symptom{min-height:40px!important;padding:8px 14px!important;border-radius:999px!important;border:1px solid var(--rose)!important;background:var(--rose)!important;color:var(--wine)!important;font-weight:600}
+.attention-symptom[aria-pressed=true]{background:linear-gradient(135deg,var(--wine),#4d041a)!important;color:#fff!important;border-color:transparent!important}
+.attention-card select,.attention-card textarea{border-radius:12px!important;border:1.5px solid var(--rose)!important;padding:12px!important;background:#fff!important}
+.attention-card button.primary{border-radius:16px;min-height:52px;font-size:14px;font-weight:800;background:linear-gradient(135deg,var(--wine),#4d041a)}
+.attention-request{display:grid;gap:8px;padding:16px;border-radius:18px;background:#fff;border:1px solid var(--rose);box-shadow:0 4px 14px #24293608}
+.attention-request-head{display:flex;justify-content:space-between;gap:10px}.attention-request-head>div{display:grid;gap:2px}.attention-request-head small{font-size:11px;color:var(--muted)}
+.attention-request-state{align-self:start;padding:4px 10px;border-radius:999px;font-size:10px;font-weight:700;background:#fff2d9;color:#8a5a00}.attention-request-state.is-agendada{background:#e3f6ea;color:#21804d}.attention-request-state.is-rechazada,.attention-request-state.is-cancelada{background:var(--paper);color:var(--muted)}
+.attention-request>small{font-size:11px;color:var(--muted)}.attention-older summary{cursor:pointer;color:var(--wine);font-weight:700;padding:10px 0}.attention-older{display:grid;gap:10px}
+.schedule-line.is-gap .schedule-icon{background:var(--paper)}.schedule-line.is-gap strong{color:var(--muted)}
+/* Solicitar atención: tres pasos limpios (paridad con PatientAttentionLiveView.swift). */
+.req-hero{display:grid;gap:8px;padding:20px;border-radius:24px;color:#fff;background:linear-gradient(140deg,#8d0b31,#5b0420 70%,#43031a);box-shadow:0 14px 30px #77072733}
+.req-hero-top{display:flex;align-items:center;justify-content:space-between;gap:10px}.req-hero-top small{font-size:10px;font-weight:800;letter-spacing:1.4px;opacity:.85}
+.req-refresh{border:1px solid #ffffff55;background:#ffffff1f;color:#fff;border-radius:999px;padding:6px 12px;font-size:11px;font-weight:700;min-height:0;cursor:pointer}
+.req-hero h2{margin:0;font-size:22px;line-height:1.2;color:#fff}.req-hero>p{margin:0;font-size:13px;line-height:1.45;opacity:.9}
+.req-steps{list-style:none;margin:6px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.req-steps li{display:flex;align-items:center;gap:6px;padding:8px;border-radius:12px;background:#ffffff1a;min-width:0}
+.req-steps span{flex:none;width:20px;height:20px;border-radius:50%;background:#fff;color:var(--wine);font-size:11px;font-weight:800;display:grid;place-items:center}
+.req-steps em{font-style:normal;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.req-notice{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:16px;background:#fff7e8;border:1px solid #f3dfb5}
+.req-notice-icon{flex:none;width:22px;height:22px;border-radius:50%;background:#e2a33a;color:#fff;font-weight:800;font-size:13px;display:grid;place-items:center}
+.req-notice p{margin:0;font-size:12px;line-height:1.45;color:#6f5420}
+.req-confirmation{display:flex;gap:10px;align-items:center;padding:12px 14px;border-radius:16px;background:#e9f6ee;border:1px solid #bfe3cc;color:#1f6b3d}
+.req-confirmation span{flex:none;width:22px;height:22px;border-radius:50%;background:#2f8a52;color:#fff;font-weight:800;display:grid;place-items:center}.req-confirmation p{margin:0;font-size:12px;font-weight:600}
+.attention-card.req-card{gap:14px!important;padding:18px!important;border-radius:22px!important;border:1px solid #f1e3e8!important;background:#fff!important;box-shadow:0 6px 18px #3c192d0d!important}
+.req-step-head{display:flex;align-items:flex-start;gap:12px}.req-step-head>div{flex:1;min-width:0;display:grid;gap:3px}
+.req-step-head h2{margin:0;font-size:16px!important;color:#242936!important;line-height:1.25}.req-step-head p{margin:0;font-size:12px;color:var(--muted)}
+.req-step-number{flex:none;width:30px;height:30px;border-radius:10px;background:var(--rose);color:var(--wine);font-weight:800;font-size:14px;display:grid;place-items:center}
+.req-count{flex:none;align-self:center;padding:4px 10px;border-radius:999px;background:var(--paper);color:var(--muted);font-size:10px;font-weight:700;white-space:nowrap}.req-count.is-on{background:var(--rose);color:var(--wine)}
+.req-person-head{display:flex;align-items:center;gap:12px}.req-person-head>div{display:grid;gap:2px;min-width:0}
+.req-person-head h2{margin:0;font-size:11px!important;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--muted)!important}
+.req-person-head strong{font-size:16px;color:#242936}.req-person-head small{font-size:11px;color:var(--muted)}
+.req-avatar{flex:none;width:46px;height:46px;border-radius:50%;background:linear-gradient(140deg,#8d0b31,#5b0420);color:#fff;font-weight:800;font-size:16px;display:grid;place-items:center}
+.req-facts{margin:0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.req-fact{min-width:0;padding:10px 12px;border-radius:12px;background:var(--paper)}.req-fact.is-wide{grid-column:1/-1}
+.req-fact dt{font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}.req-fact dd{margin:2px 0 0;font-size:13px;font-weight:600;color:#242936;overflow-wrap:anywhere}
+.req-missing{display:grid;gap:10px;padding-top:4px}.req-missing-title{margin:0;font-size:12px;font-weight:700;color:var(--wine)}
+.req-chips{display:flex!important;flex-wrap:wrap;gap:8px!important}
+.attention-symptom.req-chip{min-height:38px!important;padding:8px 14px!important;border-radius:999px!important;border:1.5px solid #ecdde3!important;background:#fff!important;color:#3a3f4c!important;font-size:13px!important;font-weight:600!important;cursor:pointer}
+.attention-symptom.req-chip[aria-pressed=true]{background:var(--wine)!important;border-color:var(--wine)!important;color:#fff!important}
+.attention-symptom.req-chip[aria-pressed=true]::before{content:"✓ ";font-weight:800}
+.req-tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.req-tile{min-height:52px;padding:10px 12px;border-radius:14px;border:1.5px solid #ecdde3;background:#fff;color:#242936;font-size:13px;font-weight:700;text-align:left;cursor:pointer;line-height:1.25;overflow-wrap:anywhere}
+.req-tile.is-selected{border-color:var(--wine);background:var(--rose);color:var(--wine);box-shadow:inset 0 0 0 1px var(--wine)}
+.req-tile:disabled{background:var(--paper);color:#a3a9b6;font-weight:600;font-size:12px;cursor:not-allowed;border-style:dashed}
+.req-label{margin:0;font-size:12px;font-weight:700;color:#3a3f4c}
+.req-segment{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:14px;background:var(--paper)}
+.req-segment-option{min-height:40px;border:0;border-radius:10px;background:transparent;color:#5d6475;font-size:13px;font-weight:700;cursor:pointer}
+.req-segment-option.is-selected{background:#fff;color:var(--wine);box-shadow:0 2px 8px #3c192d1f}
+.req-card .module-field{display:grid;gap:6px}.req-card .module-field>span{font-size:12px;font-weight:700;color:#3a3f4c}
+.req-card textarea{min-height:104px;padding:12px 14px!important;border-radius:14px!important;border:1.5px solid #ecdde3!important;background:#fff;font:inherit;font-size:13px;line-height:1.45;resize:vertical}
+.req-card textarea:focus{outline:none;border-color:var(--wine)!important;box-shadow:0 0 0 3px #77072722}
+.req-counter{justify-self:end;margin-top:-8px;font-size:10px;color:var(--muted)}
+.req-issue{margin:0;padding:10px 12px;border-radius:12px;background:#fdecee;color:#a1122f;font-size:12px;font-weight:600}
+.req-submit{min-height:54px!important;border-radius:16px!important;font-size:15px!important;font-weight:800!important;background:linear-gradient(135deg,#8d0b31,#4d041a)!important;box-shadow:0 10px 22px #77072740}
+.req-submit:disabled{opacity:.55;box-shadow:none}
+.req-hint{margin:0;font-size:11px!important;line-height:1.45;color:var(--muted)!important}.req-center{text-align:center}
+@media(max-width:360px){.req-tiles,.req-facts{grid-template-columns:1fr}.req-steps em{font-size:10px}}
+.req-steps em{white-space:normal;overflow:visible;font-size:10.5px;line-height:1.15}.req-step-head .req-count{justify-self:start;margin-top:4px}
+/* Mi turno: el número integrado en la tarjeta de cada cita activa, con sus datos (misma tarjeta original). */
+.turn-card{gap:14px!important;border:1px solid #f1e3e8;box-shadow:0 6px 18px #3c192d0d}.turn-card>strong{font-size:42px;font-weight:600;color:var(--wine);font-variant-numeric:tabular-nums;line-height:1}
+.turn-pending{font-size:11px;color:var(--muted)}
+.turn-details{align-self:stretch;margin:4px 0 0;padding:12px 14px;border-radius:12px;background:var(--paper);display:grid;gap:8px}
+.turn-details-title{margin:0;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+.turn-details>div{display:flex;justify-content:space-between;gap:12px;font-size:12px}.turn-details dt{color:var(--muted)}.turn-details dd{margin:0;font-weight:600;color:#242936;text-align:right;overflow-wrap:anywhere}
+.turn-history{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#fff;border:1px solid #f1e3e8}
+.turn-history-number{flex:none;min-width:46px;padding:6px 8px;border-radius:10px;background:var(--paper);color:#5d6475;font-weight:800;font-size:14px;text-align:center;font-variant-numeric:tabular-nums}
+.turn-history>div{flex:1;min-width:0;display:grid;gap:2px}.turn-history strong{font-size:13px;color:#242936}.turn-history small{font-size:11px;color:var(--muted)}
+.turn-history-state{flex:none;padding:4px 10px;border-radius:999px;font-size:10px;font-weight:700;background:var(--paper);color:var(--muted)}
+.turn-history-state.is-completed{background:#e9f6ee;color:#1f6b3d}.turn-history-state.is-cancelled{background:#fdecee;color:#a1122f}.turn-history-state.is-no_show{background:#fff3e0;color:#8a5a12}
+.appointment-live.is-request .appointment-live-day strong{font-size:20px}
+.appointment-live.is-request .appointment-live-text p{text-transform:none}
+/* Perfil · Seguridad: cambio de contraseña (paciente y médico; paridad con PasswordChangeCard.swift). */
+.password-card{display:grid;gap:14px;padding:18px!important;border-radius:20px!important;border:1px solid #f1e3e8!important;background:#fff!important}
+.password-card-head{display:flex;align-items:center;gap:12px}.password-card-head>div{display:grid;gap:2px}
+.password-card-head h2{margin:0;font-size:16px;color:#242936}.password-card-head p{margin:0;font-size:12px;color:var(--muted)}
+.password-card-icon{flex:none;width:40px;height:40px;border-radius:12px;background:var(--rose);display:grid;place-items:center;font-size:18px}
+.password-form{display:grid;gap:12px}.password-field{display:grid;gap:5px}.password-field>span{font-size:12px;font-weight:700;color:#3a3f4c}
+.password-field input{min-height:44px;padding:10px 12px;border-radius:12px;border:1.5px solid #ecdde3;background:var(--paper);font:inherit;font-size:14px;width:100%;box-sizing:border-box}
+.password-field input:focus{outline:none;border-color:var(--wine);box-shadow:0 0 0 3px #77072722;background:#fff}
+.password-toggle{justify-self:start;font-size:12px!important;padding:0!important;min-height:0!important}
+.password-rule{margin:0;font-size:11px;color:var(--muted)}.password-issue{margin:0;font-size:12px;font-weight:600;color:var(--wine)}
+.password-error{margin:0;padding:10px 12px;border-radius:12px;background:#fdecee;color:#a1122f;font-size:12px;font-weight:600}
+.password-success{margin:0;padding:10px 12px;border-radius:12px;background:#e9f6ee;color:#1f6b3d;font-size:12px;font-weight:600}
+.password-submit{min-height:50px!important;border-radius:14px!important;font-weight:800!important;background:linear-gradient(135deg,#8d0b31,#4d041a)!important}
+.password-submit:disabled{opacity:.55}

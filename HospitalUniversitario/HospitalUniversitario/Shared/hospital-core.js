@@ -94,6 +94,25 @@
     if (input.confirm !== input.password) return { field: 'confirm', message: 'La confirmación de contraseña no coincide.' };
     return null;
   }
+  // Cambio de contraseña desde Perfil (paciente y médico; espejo de PasswordChangeRules.swift). Mínimo 8 como el registro;
+  // máximo 72 (límite de bcrypt en Supabase Auth). La contraseña actual se verifica en el servidor antes de cambiarla.
+  function validatePasswordChange(input) {
+    var current = String(input.current || ''), next = String(input.next || ''), confirm = String(input.confirm || '');
+    if (!current) return { field: 'current', message: 'Escribe tu contraseña actual.' };
+    if (next.length < 8) return { field: 'next', message: 'La nueva contraseña debe tener al menos 8 caracteres.' };
+    if (next.length > 72) return { field: 'next', message: 'La nueva contraseña admite como máximo 72 caracteres.' };
+    if (next === current) return { field: 'next', message: 'La nueva contraseña debe ser distinta de la actual.' };
+    if (confirm !== next) return { field: 'confirm', message: 'La confirmación no coincide con la nueva contraseña.' };
+    return null;
+  }
+  // Mensajes para las respuestas de Supabase Auth (error_code de GoTrue) al cambiar la contraseña.
+  function passwordChangeMessage(code) {
+    return ({ same_password: 'La nueva contraseña debe ser distinta de la actual.',
+      weak_password: 'Supabase rechazó la contraseña por ser poco segura. Combina letras, números y símbolos.',
+      reauthentication_needed: 'Por seguridad debes volver a iniciar sesión antes de cambiar la contraseña.',
+      reauthentication_not_valid: 'Por seguridad debes volver a iniciar sesión antes de cambiar la contraseña.',
+      over_request_rate_limit: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' })[code] || 'No se pudo cambiar la contraseña. Inténtalo de nuevo.';
+  }
   function validateAttentionRequest(input, today) {
     if (!input.specialty) return { field: 'specialty', message: 'Elige una especialidad.' };
     var reason = String(input.reason || '').trim();
@@ -112,7 +131,7 @@
   root.HospitalCore = { labels: labels, routes: routes, turnResource: turnResource, weekWindow: weekWindow, periodBounds: periodBounds,
     registrationAccount: registrationAccount, registrationReviewMessage: registrationReviewMessage,
     applicantDemoSpecialties: applicantDemoSpecialties, applicantPeriods: applicantPeriods, localIsoDay: localIsoDay, isIsoDay: isIsoDay,
-    formatDui: formatDui, applicantAge: applicantAge, validatePersonalData: validatePersonalData, validateApplicantProfile: validateApplicantProfile,
+    formatDui: formatDui, applicantAge: applicantAge, validatePersonalData: validatePersonalData, validateApplicantProfile: validateApplicantProfile, validatePasswordChange: validatePasswordChange, passwordChangeMessage: passwordChangeMessage,
     validateAttentionRequest: validateAttentionRequest, applicantStateView: applicantStateView };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 
@@ -150,11 +169,18 @@
     if (kind === 'profile' || kind === 'activity') return [];
     if (kind === 'patientDashboard') {
       if (!patient) return [];
-      return [query('appointments','id,patient_id,starts_at,ends_at,status,staff!appointments_doctor_id_fkey(employee_code,profiles!staff_profile_id_fkey(first_name,last_name))',
-        {patient_id:'eq.'+id(patient),status:'in.(programada,confirmada,en_atencion)',or:'(status.eq.en_atencion,starts_at.gte.'+(p.now || new Date().toISOString())+')'},'starts_at.asc,id.asc',1)];
+      return [query('appointments','id,patient_id,starts_at,ends_at,status,queue_number,queue_date,consulting_rooms(code),appointment_requests(specialties(name)),staff!appointments_doctor_id_fkey(employee_code,profiles!staff_profile_id_fkey(first_name,last_name))',
+        {patient_id:'eq.'+id(patient),status:'in.(programada,confirmada,en_atencion)',or:'(status.eq.en_atencion,ends_at.gt.'+(p.now || new Date().toISOString())+')'},'starts_at.asc,id.asc',1)];
     }
     if (kind === 'registerPatient') throw new Error('Solo el personal autorizado puede crear pacientes y expedientes.');
     if (kind === 'rooms') return [query('rooms','id,code,floor_id,kind,active',p.cursor ? {id:'gt.'+id(p.cursor.id)} : {},'id.asc')];
+    if (kind === 'doctorWeek') {
+      // Horario real asignado por administración (RLS: solo el propio médico): bloques semanales, jornadas y ausencias.
+      id(employee); var ws = p.week || root.HospitalCore.doctorWeekStart(), from = new Date(ws + 'T00:00:00-06:00'), to = new Date(from.getTime() + 7 * 86400000);
+      return [query('doctor_schedules','id,doctor_id,weekday,start_time,end_time,valid_from,valid_until,active',{doctor_id:'eq.'+employee,active:'eq.true'},'weekday.asc,start_time.asc',500),
+        query('staff_absences','id,staff_id,starts_at,ends_at,reason,active',{staff_id:'eq.'+employee,active:'eq.true',starts_at:'lt.'+to.toISOString(),ends_at:'gt.'+from.toISOString()},'starts_at.asc',100),
+        query('staff_shifts','id,staff_id,starts_at,ends_at,shift_type,status',{staff_id:'eq.'+employee,starts_at:'lt.'+to.toISOString(),ends_at:'gt.'+from.toISOString()},'starts_at.asc',100)];
+    }
     if (kind === 'shifts') {
       id(employee); var bounds = root.HospitalCore.periodBounds(p.window || root.HospitalCore.weekWindow());
       filters = {staff_id:'eq.'+employee,starts_at:'lt.'+bounds.end,ends_at:'gt.'+bounds.start};
@@ -201,13 +227,17 @@
   function present(kind, p, a, results) {
     p=p||{}; var rows=results[0] || [], row, data;
     if(kind==='patientDashboard') {
-      row=rows.find(function(r){return r.patient_id===a.patient_id && (r.status==='en_atencion' || (['programada','confirmada'].indexOf(r.status)>=0 && new Date(r.starts_at)>=new Date(p.now || new Date().toISOString())));});
+      row=rows.find(function(r){return r.patient_id===a.patient_id && (r.status==='en_atencion' || (['programada','confirmada'].indexOf(r.status)>=0 && new Date(r.ends_at)>new Date(p.now || new Date().toISOString())));});
       var doctor=row && row.staff && row.staff.profiles;
-      return {next_appointment:row ? {id:row.id,starts_at:row.starts_at,ends_at:row.ends_at,status:state(row.status),doctor_name:(doctor ? fullName(doctor) : '') || (row.staff && row.staff.employee_code ? 'Médico · '+row.staff.employee_code : null)} : null};
+      return {next_appointment:row ? {id:row.id,starts_at:row.starts_at,ends_at:row.ends_at,status:state(row.status),doctor_name:(doctor ? fullName(doctor) : '') || (row.staff && row.staff.employee_code ? 'Médico · '+row.staff.employee_code : null),
+        // Turno asignado por el servidor (assign_appointment_queue) al programar la cita.
+        queue_number:row.queue_number==null?null:row.queue_number,queue_date:row.queue_date||null,room:row.consulting_rooms?row.consulting_rooms.code:null,
+        specialty:(function(r){r=Array.isArray(r)?r[0]:r;return r&&r.specialties?r.specialties.name:null;})(row.appointment_requests)} : null};
     }
     if(kind==='profile') return {person:{given_names:a.identity.first_name,family_names:a.identity.last_name},auth_email:a.email,contacts:a.identity.phone ? [{kind:'phone',value:a.identity.phone}] : [],professional:null};
     if(kind==='activity') return {}; // No invented counters; modules retrieve their own authorized rows.
     if(kind==='overview') return {capacity:null,occupied:null,information:rows.filter(function(r){return !r.expires_at || new Date(r.expires_at)>new Date();}).map(function(r){return {id:r.id,title:r.title,body:r.content};}),on_duty:[]};
+    if(kind==='doctorWeek') return root.HospitalCore.doctorWeek(results[0]||[],results[1]||[],results[2]||[],p.week||root.HospitalCore.doctorWeekStart(),p.recurring||null);
     if(kind==='rooms' || kind==='shifts') { data=rows.slice(0,25);row=data[data.length-1];return {data:data,has_more:rows.length>25,next_cursor:rows.length>25 ? {id:row.id,value:kind==='shifts'?row.starts_at:null} : null}; }
     if(kind==='workspace') return {doctor_name:a.profile.preferred_name,facility_name:'Hospital Universitario',appointments:rows.map(function(r){return {id:r.id,patient_id:r.patient_id,patient_name:r.patients ? fullName(r.patients) : 'Paciente',record_number:r.patients ? r.patients.patient_code : '',phone:r.patients ? r.patients.phone : null,ticket_number:null,period:range(r),status:state(r.status),encounter_id:null};}),orders:[],tests:[],notifications:[],stats:{consultations:rows.length,completed_consultations:rows.filter(function(r){return r.status==='completada';}).length,issued_orders:0,pending_orders:0}};
     if(kind!=='module') return null;
@@ -229,7 +259,8 @@
         // Detalles de la cita en la misma tarjeta: médico, especialidad, consultorio y motivo cuando existen (sin campos vacíos).
         var doctor=r.staff&&r.staff.profiles?fullName(r.staff.profiles):'',request=Array.isArray(r.appointment_requests)?r.appointment_requests[0]:r.appointment_requests;
         var specialty=request&&request.specialties?request.specialties.name:null;
-        item.event_at=r.starts_at;item.title=specialty||'Cita médica';item.subtitle=r.consulting_rooms ? 'Consultorio '+r.consulting_rooms.code : null;item.details=[field('Horario',range(r))];
+        item.event_at=r.starts_at;item.ends_at=r.ends_at||null;item.queue_number=r.queue_number==null?null:r.queue_number;item.queue_date=r.queue_date||null;
+        item.title=specialty||'Cita médica';item.subtitle=r.consulting_rooms ? 'Consultorio '+r.consulting_rooms.code : null;item.details=[field('Horario',range(r))];
         if(doctor||(r.staff&&r.staff.employee_code))item.details.push(field('Médico',doctor||'Médico · '+r.staff.employee_code));
         if(specialty)item.details.push(field('Especialidad',specialty));
         if(r.consulting_rooms)item.details.push(field('Consultorio',r.consulting_rooms.code));
@@ -243,9 +274,11 @@
         var add=function(label,value){if(real(value))item.details.push({label:label,value:String(value).trim()});};
         item.details=[];
         add('Médico',r.doctor_name);add('Especialidad',r.specialty);add('Motivo de consulta',r.reason);
-        add('Síntomas que presentaba',r.subjective);add('Diagnóstico',r.assessment);
+        add('Síntomas reportados por el paciente',[].concat(r.reported_symptoms||[]).join(', '));add('Otros síntomas reportados',r.reported_other);
+        if(r.started_at&&r.ended_at)add('Atención',new Intl.DateTimeFormat('es-SV',{timeZone:'America/El_Salvador',hour:'numeric',minute:'2-digit'}).format(new Date(r.started_at))+' – '+new Intl.DateTimeFormat('es-SV',{timeZone:'America/El_Salvador',hour:'numeric',minute:'2-digit'}).format(new Date(r.ended_at)));
+        add('Síntomas actuales',r.subjective);add('Diagnóstico',r.assessment);
         (r.diagnoses||[]).forEach(function(d){add('Código diagnóstico',d.diagnosis_code);});
-        add('Observaciones',r.objective);add('Tratamiento',r.plan);
+        add('Exploración y observaciones',r.objective);add('Plan de tratamiento',r.plan);
         var vitals=(r.vital_signs||[]).slice().sort(function(a,b){return String(b.recorded_at).localeCompare(String(a.recorded_at));})[0]||{};
         [['weight_kg','Peso (kg)'],['height_cm','Altura (cm)'],['temperature_c','Temperatura (°C)'],['systolic','Presión sistólica (mmHg)'],['diastolic','Presión diastólica (mmHg)'],['heart_rate','Frecuencia cardíaca (lpm)']].forEach(function(pair){add(pair[1],vitals[pair[0]]);});
         // Recetas y exámenes por consulta: llegan cuando se aplica supabase/expedientes-historial.sql.
@@ -256,7 +289,10 @@
       if(module==='notifications'){item.title=r.title;item.subtitle=r.body;item.status=r.read_at?'read':'unread';item.action=r.read_at?null:'mark_read';}
       if(module==='laboratory'){
         item.title=r.lab_test_types?r.lab_test_types.name:'Examen';item.subtitle=r.reason;
-        var published=(r.lab_results||[]).filter(function(v){return !!v.published_to_patient_at && !!v.published_at && !!v.validated_at && !!v.validated_by;});
+        // lab_results.order_id es UNIQUE: PostgREST incrusta la relación uno a uno como objeto (o null), no como lista.
+        // Se normaliza a lista de 0 o 1 resultado para conservar la lógica de publicación al paciente.
+        var results=Array.isArray(r.lab_results)?r.lab_results:(r.lab_results&&typeof r.lab_results==='object'?[r.lab_results]:[]);
+        var published=results.filter(function(v){return !!v.published_to_patient_at && !!v.published_at && !!v.validated_at && !!v.validated_by;});
         item.status=published.length?'released':r.status==='completado'?'awaiting_release':state(r.status);
         item.details=published.map(function(v){return field('Resultado',v.summary);});
         published.forEach(function(v){(v.parameter_schema||[]).forEach(function(parameter){
@@ -285,7 +321,9 @@
 (function (root) {
   'use strict';
   var zone = 'America/El_Salvador';
-  var statusLabels = {scheduled:'Programada',confirmed:'Programada',checked_in:'En espera',in_progress:'En consulta',completed:'Finalizada',cancelled:'Cancelada',no_show:'No asistió',rejected:'Rechazada'};
+  // Etiquetas visibles de citas (solo texto; los estados internos de Supabase no cambian): programada/confirmada → Pendiente,
+  // en_atencion → En consulta, completada → Atendida, no_asistio → No atendida, cancelada → Cancelada.
+  var statusLabels = {scheduled:'Pendiente',confirmed:'Pendiente',checked_in:'En espera',in_progress:'En consulta',completed:'Atendida',cancelled:'Cancelada',no_show:'No atendida',rejected:'Rechazada'};
   // Datos físicos del formulario (columnas reales de public.vital_signs; rangos de doctor_native_save).
   var vitals = [
     {key:'weight_kg',label:'Peso',unit:'kg',integer:false,min:0,max:1000,lowerExclusive:true},
@@ -295,9 +333,10 @@
   var recordedVitals = vitals.concat([
     {key:'systolic',label:'Presión sistólica',unit:'mmHg'},{key:'diastolic',label:'Presión diastólica',unit:'mmHg'},{key:'heart_rate',label:'Frecuencia cardíaca',unit:'lpm'}]);
   // Las tres notas del formulario y su columna en clinical_encounters. `plan` ya no se captura: se conserva tal como esté guardado.
-  var sections = [['subjective','Síntomas que presentaba'],['assessment','Diagnóstico'],['objective','Observaciones']];
+  // Las cuatro notas que exigen doctor_native_finish y native_complete_guard desplegados; plan con campo propio.
+  var sections = [['subjective','Síntomas actuales'],['objective','Exploración y observaciones'],['assessment','Diagnóstico'],['plan','Plan de tratamiento']];
   var pendingFinishMigration = 'El servidor todavía exige el plan de tratamiento para finalizar. Falta aplicar supabase/doctor-consultation-six-fields.sql; lo guardado se conserva.';
-  function statusLabel(status) { return statusLabels[status] || 'Programada'; }
+  function statusLabel(status) { return statusLabels[status] || 'Pendiente'; }
   function dayKey(date) {
     var d = date instanceof Date ? date : new Date(date);
     if (!isFinite(d.getTime())) return '';
@@ -364,6 +403,10 @@
     return (list || []).filter(function (a) { var d = finishedAt(a); return a.status === 'completed' && d && dayKey(d) === key; })
       .sort(function (a, b) { var l = finishedAt(a).getTime(), r = finishedAt(b).getTime(); return l === r ? String(b.id).localeCompare(String(a.id)) : r - l; });
   }
+  // Canceladas y no atendidas del día: aparte en FINALIZADAS, sin mezclarse con las atendidas.
+  function closedWithoutCare(list, key) {
+    return chronological((list || []).filter(function (a) { var d = start(a); return ['cancelled','no_show'].indexOf(a.status) >= 0 && d && dayKey(d) === key; }));
+  }
   function sanitize(text, integer) {
     var out = '', separator = false;
     String(text == null ? '' : text).split('').forEach(function (c) {
@@ -419,7 +462,7 @@
   function finishError(message, note) {
     return /tratamiento/i.test(String(message || '')) && !String(note && note.plan || '').trim() ? pendingFinishMigration : message;
   }
-  root.HospitalCore.doctorClinical = {zone:zone,agendaDays:14,lookbackDays:lookbackDays,pending:pending,finished:finished,finishedAt:finishedAt,matches:matches,fold:fold,openingLeadMinutes:openingLeadMinutes,startError:startError,pendingStartMigration:pendingStartMigration,vitals:vitals,recordedVitals:recordedVitals,sections:sections,finishError:finishError,pendingFinishMigration:pendingFinishMigration,statusLabel:statusLabel,dayKey:dayKey,todayKey:todayKey,addDays:addDays,dayWindow:dayWindow,
+  root.HospitalCore.doctorClinical = {zone:zone,agendaDays:14,lookbackDays:lookbackDays,pending:pending,finished:finished,closedWithoutCare:closedWithoutCare,finishedAt:finishedAt,matches:matches,fold:fold,openingLeadMinutes:openingLeadMinutes,startError:startError,pendingStartMigration:pendingStartMigration,vitals:vitals,recordedVitals:recordedVitals,sections:sections,finishError:finishError,pendingFinishMigration:pendingFinishMigration,statusLabel:statusLabel,dayKey:dayKey,todayKey:todayKey,addDays:addDays,dayWindow:dayWindow,
     start:start,chronological:chronological,agenda:agenda,sanitize:sanitize,vitalIssues:vitalIssues,bmi:bmi,seedSubjective:seedSubjective,missingSections:missingSections,openingBlocker:openingBlocker};
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 
@@ -437,4 +480,84 @@
     return null;
   }
   root.HospitalCore.attentionBlocker = attentionBlocker;
+  // Citas del paciente (Mis citas y Mi turno; espejo exacto de PatientAppointmentRules.swift).
+  // Activa: en consulta, o programada/confirmada cuyo horario reservado aún no termina (ends_at > ahora, como el servidor).
+  // Las finalizadas, canceladas, no atendidas o vencidas dejan de ser activas sin que el cliente cambie su estado.
+  function appointmentActive(item, now) {
+    if (!item) return false;
+    if (item.status === 'in_progress') return true;
+    if (scheduled.indexOf(item.status) < 0) return false;
+    var end = Date.parse(item.ends_at || ''), start = Date.parse(item.event_at || '');
+    var limit = isFinite(end) ? end : (isFinite(start) ? start + 1800000 : NaN);
+    return isFinite(limit) && limit > (now instanceof Date ? now.getTime() : Date.now());
+  }
+  function appointmentSplit(items, now) {
+    var when = function (i) { return Date.parse(i.event_at) || 0; }, list = items || [];
+    return {active: list.filter(function (i) { return appointmentActive(i, now); }).sort(function (a, b) { return when(a) - when(b); }),
+      past: list.filter(function (i) { return !appointmentActive(i, now); }).sort(function (a, b) { return when(b) - when(a); })};
+  }
+  // El turno es appointments.queue_number asignado por el servidor; el cliente solo le da formato (016).
+  function appointmentTurn(value) { return value == null || value === '' || !isFinite(Number(value)) ? null : String(Number(value)).padStart(3, '0'); }
+  root.HospitalCore.patientAppointments = {active: appointmentActive, split: appointmentSplit, turn: appointmentTurn};
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+// Mi horario del médico (paridad iOS ContentView.schedule ↔ web schedule). Fuentes asignadas por administración:
+// doctor_schedules (weekday 0 = domingo, con vigencia), staff_shifts, staff_absences y, con supabase/doctor-mi-horario.sql,
+// la jornada recurrente (staff_recurring_journeys vía doctor_native_schedule) con sus descansos registrados.
+// Almuerzo y descanso solo salen de descansos REGISTRADOS (motivo «Almuerzo» → almuerzo; otro motivo → descanso).
+// Los huecos sin registro entre bloques son «Entre jornadas»: no se presentan como almuerzo ni generan recordatorio.
+(function (root) {
+  'use strict';
+  var zone = 'America/El_Salvador', names = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  function key(d) { return new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).format(d); }
+  function hm(d) { return new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit',hour12:false}).format(d); }
+  function minutes(t) { var p = String(t).split(':'); return Number(p[0]) * 60 + Number(p[1] || 0); }
+  function clock(m) { return String(Math.floor(m / 60)).padStart(2,'0') + ':' + String(m % 60).padStart(2,'0'); }
+  function weekStart(today) {
+    var d = new Date((today || key(new Date())) + 'T12:00:00-06:00'), offset = (d.getUTCDay() + 6) % 7;
+    return key(new Date(d.getTime() - offset * 86400000));
+  }
+  var lunchPattern = /almuerzo|comida|lunch/i;
+  function doctorWeek(schedules, absences, shifts, start, recurring) {
+    start = start || weekStart(); var days = [], total = 0;
+    for (var i = 0; i < 7; i++) {
+      var noon = new Date(new Date(start + 'T12:00:00-06:00').getTime() + i * 86400000), k = key(noon), weekday = noon.getUTCDay();
+      var dayStart = new Date(k + 'T00:00:00-06:00'), dayEnd = new Date(dayStart.getTime() + 86400000);
+      var blocks = (schedules || []).filter(function (s) {
+        return s.active !== false && Number(s.weekday) === weekday && (!s.valid_from || s.valid_from <= k) && (!s.valid_until || s.valid_until >= k);
+      }).map(function (s) { return {start:minutes(s.start_time), end:minutes(s.end_time)}; })
+        .sort(function (a, b) { return a.start - b.start || a.end - b.end; });
+      // Jornada recurrente (doctor_native_schedule): intervalos reales recortados al día.
+      ((recurring && recurring.work) || []).forEach(function (w) {
+        var a = new Date(w.starts_at), z = new Date(w.ends_at); if (!(a < dayEnd && z > dayStart)) return;
+        var from = a < dayStart ? 0 : minutes(hm(a)), to = z >= dayEnd ? 24 * 60 - 1 : minutes(hm(z));
+        if (to > from) blocks.push({start:from, end:to});
+      });
+      blocks.sort(function (a, b) { return a.start - b.start || a.end - b.end; });
+      var merged = [];
+      blocks.forEach(function (b) { var last = merged[merged.length - 1]; if (last && b.start <= last.end) last.end = Math.max(last.end, b.end); else merged.push({start:b.start, end:b.end}); });
+      // Descansos registrados (jornada recurrente) en este día: almuerzo si su motivo lo indica; si no, descanso.
+      var registered = ((recurring && recurring.breaks) || []).filter(function (b) { return new Date(b.starts_at) < dayEnd && new Date(b.ends_at) > dayStart; })
+        .map(function (b) { var reason = String(b.reason || '').replace(/^Descanso:\s*/i, '').trim(); var lunch = lunchPattern.test(reason);
+          return {start:hm(new Date(b.starts_at)), end:hm(new Date(b.ends_at)), kind:lunch ? 'lunch' : 'break', label:lunch ? 'Almuerzo' : (reason || 'Descanso')}; })
+        .sort(function (a, b) { return a.start.localeCompare(b.start); });
+      var breaks = registered.slice();
+      // Huecos sin registro entre bloques: tiempo entre jornadas (sin recordatorio).
+      for (var j = 1; j < merged.length; j++) {
+        var gs = clock(merged[j - 1].end), ge = clock(merged[j].start);
+        if (!registered.some(function (r) { return r.start < ge && r.end > gs; })) breaks.push({start:gs, end:ge, kind:'gap', label:'Entre jornadas'});
+      }
+      breaks.sort(function (a, b) { return a.start.localeCompare(b.start); });
+      var dayShifts = (shifts || []).filter(function (s) { return new Date(s.starts_at) < dayEnd && new Date(s.ends_at) > dayStart && ['cancelado','cancelled'].indexOf(s.status) < 0; })
+        .map(function (s) { return {start:hm(new Date(Math.max(new Date(s.starts_at), dayStart))), end:hm(new Date(Math.min(new Date(s.ends_at), dayEnd - 60000))), type:s.shift_type || 'ordinario', status:s.status || ''}; });
+      var dayAbsences = ((recurring && recurring.absences) || absences || []).filter(function (a) { return a.active !== false && new Date(a.starts_at) < dayEnd && new Date(a.ends_at) > dayStart; })
+        .map(function (a) { var full = new Date(a.starts_at) <= dayStart && new Date(a.ends_at) >= dayEnd; return {reason:a.reason || 'Ausencia', all_day:full, start:full ? null : hm(new Date(Math.max(new Date(a.starts_at), dayStart))), end:full ? null : hm(new Date(Math.min(new Date(a.ends_at), dayEnd - 60000)))}; });
+      var hours = merged.reduce(function (sum, b) { return sum + (b.end - b.start); }, 0); total += hours;
+      days.push({date:k, weekday:names[weekday], today:k === key(new Date()), blocks:merged.map(function (b) { return {start:clock(b.start), end:clock(b.end), shift:b.start < 12 * 60 ? 'Mañana' : 'Tarde'}; }),
+        breaks:breaks, shifts:dayShifts, absences:dayAbsences, minutes:hours, free:!merged.length && !dayShifts.length});
+    }
+    return {week_start:start, week_end:days[6].date, total_minutes:total, days:days};
+  }
+  root.HospitalCore.doctorWeek = doctorWeek;
+  root.HospitalCore.doctorWeekStart = weekStart;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

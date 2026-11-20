@@ -432,7 +432,7 @@ struct DoctorModuleView: View {
                     Text("Expediente: \(appointment.record_number)").font(.caption)
                     Text("Turno: \(appointment.ticket_number ?? "Sin turno asignado")").font(.caption)
                     Text(period(appointment.period)).font(.caption).foregroundStyle(HospitalTheme.secondary)
-                    HospitalBadge(text: status(appointment.status))
+                    HospitalBadge(text: DoctorClinicalRules.statusLabel(appointment.status))
                     HStack {
                         Button("Atender", systemImage: "cross.case") {
                             model.select(appointment.id); navigate("consultation")
@@ -643,18 +643,24 @@ struct DoctorModuleView: View {
     /// Bloque B. Síntomas → subjective, Diagnóstico → assessment (y public.diagnoses), Observaciones → objective.
     private func medicalEvaluationForm(_ appointment: DoctorAppointment) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            ConsultationBlockHeader(letter: "B", icon: "stethoscope", title: "Evaluación médica", subtitle: "Los tres campos son obligatorios para finalizar la consulta.")
-            ConsultationNoteField(icon: "list.bullet.clipboard", title: "Síntomas que presentaba",
-                placeholder: "Describe los síntomas, cuándo iniciaron y cómo han evolucionado", text: $model.draft.subjective,
-                hint: "Se precargó con lo que envió el paciente; revísalo y precísalo.") {
+            ConsultationBlockHeader(letter: "B", icon: "stethoscope", title: "Evaluación médica", subtitle: "Los cuatro campos son obligatorios para finalizar la consulta.")
+            // Síntomas que envió el paciente: referencia de solo lectura (appointment_requests); no se copian ni se editan.
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Reportados por el paciente · solo lectura", systemImage: "lock.fill").font(.caption.weight(.semibold)).foregroundStyle(HospitalTheme.secondary)
                 ConsultationReportedSymptoms(symptoms: ConsultationFormat.symptoms(appointment), other: appointment.other_symptoms?.trimmingCharacters(in: .whitespacesAndNewlines))
             }
+            ConsultationNoteField(icon: "list.bullet.clipboard", title: "Síntomas actuales",
+                placeholder: "Síntomas que encuentras en la consulta, cuándo iniciaron y cómo han evolucionado", text: $model.draft.subjective,
+                hint: "Lo que registras tú; los síntomas del paciente se conservan arriba sin cambios.")
+            Divider()
+            ConsultationNoteField(icon: "note.text", title: "Exploración y observaciones",
+                placeholder: "Hallazgos de la exploración física y observaciones clínicas", text: $model.draft.objective)
             Divider()
             ConsultationNoteField(icon: "cross.case", title: "Diagnóstico",
                 placeholder: "Diagnóstico principal y, si aplica, diagnósticos adicionales", text: $model.draft.assessment)
             Divider()
-            ConsultationNoteField(icon: "note.text", title: "Observaciones",
-                placeholder: "Hallazgos de la exploración, indicaciones y recomendaciones", text: $model.draft.objective)
+            ConsultationNoteField(icon: "cross.vial", title: "Plan de tratamiento",
+                placeholder: "Tratamiento, indicaciones y seguimiento", text: $model.draft.plan)
         }.modifier(ConsultationCardStyle())
     }
 
@@ -1111,11 +1117,11 @@ struct DoctorModuleView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(DoctorDate.display(record.started_at)).font(.subheadline.weight(.semibold))
             HospitalBadge(text: status(record.status))
-            detail("Síntomas que presentaba", record.subjective ?? "Sin registrar")
+            detail("Síntomas actuales", record.subjective ?? "Sin registrar")
             detail("Diagnóstico", record.assessment ?? "Sin registrar")
             if let code = record.diagnosis_code, !code.isEmpty { detail("Código diagnóstico", code) }
-            detail("Observaciones", record.objective ?? "Sin registrar")
-            if let plan = record.plan, !plan.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { detail("Plan de tratamiento (registro anterior)", plan) }
+            detail("Exploración y observaciones", record.objective ?? "Sin registrar")
+            if let plan = record.plan, !plan.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { detail("Plan de tratamiento", plan) }
             ForEach(DoctorClinicalRules.recordedVitals) { vital in
                 if let value = record.vitals?[vital.key] { detail("\(vital.label) (\(vital.unit))", value) }
             }
@@ -1183,7 +1189,7 @@ struct DoctorModuleView: View {
         ["open": "En consulta", "closed": "Finalizada", "draft": "Borrador", "ordered": "Emitida",
          "in_progress": "En consulta", "checked_in": "Registrado en recepción", "confirmed": "Programada",
          "scheduled": "Programada", "completed": "Finalizada", "cancelled": "Cancelada",
-         "pending": "Pendiente", "pendiente": "Pendiente", "en_proceso": "En proceso", "completado": "Completado", "entregada": "Entregada", "anulada": "Anulada", "no_show": "No se presentó"][value] ?? "Estado no disponible"
+         "pending": "Pendiente", "pendiente": "Pendiente", "en_proceso": "En proceso", "completado": "Completado", "entregada": "Entregada", "anulada": "Anulada", "no_show": "No atendida"][value] ?? "Estado no disponible"
     }
 
 }

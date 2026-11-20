@@ -24,28 +24,30 @@ await ui.login();assert.match(ui.app.textContent,/Médico autorizado/);assert.ma
 await ui.click('Agenda');
 const agendaText=ui.app.textContent;
 assert.ok(agendaText.indexOf('Paciente temprano')<agendaText.indexOf('Paciente autorizado'),'Orden cronológico ascendente');
-assert.match(agendaText,/Programada/);assert.match(agendaText,/Medicina general/);assert.match(agendaText,/Consultorio C-1/);assert.match(agendaText,/EXP-PRUEBA/);
-await ui.click('Ver detalle de Paciente autorizado, Programada');
+assert.match(agendaText,/Pendiente/);assert.match(agendaText,/Medicina general/);assert.match(agendaText,/Consultorio C-1/);assert.match(agendaText,/EXP-PRUEBA/);
+await ui.click('Ver detalle de Paciente autorizado, Pendiente');
 assert.match(ui.app.textContent,/Detalle de consulta/);assert.match(ui.app.textContent,/Fiebre/);
 await ui.click('ABRIR CONSULTA MÉDICA');
 assert.equal(started,true);assert.match(ui.app.textContent,/En consulta/);
 const field=label=>ui.app.all().find(node=>node.attributes['aria-label']===label);
-assert.match(field('Síntomas que presentaba').value,/Síntomas referidos por el paciente: Fiebre/,'Precarga los síntomas enviados por el paciente');
+assert.equal(field('Síntomas actuales').value,'','Los síntomas del paciente no se copian a la nota médica');
+assert.match(ui.app.textContent,/Reportados por el paciente · solo lectura/);assert.match(ui.app.textContent,/Fiebre/,'Síntomas originales visibles');
+assert.equal(ui.app.all().some(n=>['input','textarea'].includes(n.tagName)&&n.value==='Fiebre'),false,'Los síntomas originales no son editables');
 assert.match(ui.app.textContent,/Motivo original autorizado/,'Motivo de la solicitud visible');assert.match(ui.app.textContent,/Datos de la cita/);
-assert.match(ui.app.textContent,/Médico autorizado/);assert.match(ui.app.textContent,/Cambios pendientes/);assert.match(ui.app.textContent,/Consultorio/);assert.match(ui.app.textContent,/35 años/);
-// Solo seis campos: peso, altura, temperatura, síntomas, diagnóstico y observaciones.
-for(const label of ['Peso (kg)','Altura (cm)','Temperatura (°C)','Síntomas que presentaba','Diagnóstico','Observaciones'])assert.ok(field(label),'Campo '+label);
-for(const gone of ['Presión sistólica (mmHg)','Presión diastólica (mmHg)','Frecuencia cardíaca (lpm)','Plan de tratamiento y recomendaciones','Código del diagnóstico principal (opcional)'])assert.equal(field(gone),undefined,'Sin campo '+gone);
+assert.match(ui.app.textContent,/Médico autorizado/);assert.match(ui.app.textContent,/Sin cambios pendientes/,'Abrir no crea cambios: nada se precarga');assert.match(ui.app.textContent,/Consultorio/);assert.match(ui.app.textContent,/35 años/);
+// Datos físicos y las cuatro notas que exige el servidor (doctor_native_finish), con plan propio.
+for(const label of ['Peso (kg)','Altura (cm)','Temperatura (°C)','Síntomas actuales','Exploración y observaciones','Diagnóstico','Plan de tratamiento'])assert.ok(field(label),'Campo '+label);
+for(const gone of ['Presión sistólica (mmHg)','Presión diastólica (mmHg)','Frecuencia cardíaca (lpm)','Código del diagnóstico principal (opcional)'])assert.equal(field(gone),undefined,'Sin campo '+gone);
 assert.doesNotMatch(ui.app.textContent,/Frecuencia respiratoria|Saturación/);
-for(const [label,value] of [['Síntomas que presentaba','Fiebre de dos días'],['Diagnóstico','Faringitis aguda'],['Observaciones','Exploración registrada'],['Peso (kg)','7a0,5'],['Altura (cm)','170'],['Temperatura (°C)','38.2']])await ui.input(label,value);
+for(const [label,value] of [['Síntomas actuales','Fiebre de dos días'],['Diagnóstico','Faringitis aguda'],['Exploración y observaciones','Exploración registrada'],['Plan de tratamiento','Reposo e hidratación'],['Peso (kg)','7a0,5'],['Altura (cm)','170'],['Temperatura (°C)','38.2']])await ui.input(label,value);
 assert.equal(field('Peso (kg)').value,'70.5','Sin texto en campos numéricos');
 await ui.click('Guardar avances');assert.equal(version,1);assert.match(ui.app.textContent,/IMC calculado: 24.4 kg\/m²/);
 assert.deepEqual({...notes.vitals},{weight_kg:'70.5',height_cm:'170',temperature_c:'38.2',systolic:'118',diastolic:'76'},'Conserva las medidas antiguas sin mostrarlas');
-assert.equal(notes.subjective,'Fiebre de dos días');assert.equal(notes.assessment,'Faringitis aguda');assert.equal(notes.objective,'Exploración registrada');
+assert.equal(notes.subjective,'Fiebre de dos días');assert.equal(notes.assessment,'Faringitis aguda');assert.equal(notes.objective,'Exploración registrada');assert.equal(notes.plan,'Reposo e hidratación');
 await ui.input('Temperatura (°C)','60');assert.match(ui.app.textContent,/Valor fuera de rango/);await ui.input('Temperatura (°C)','38.2');
 // Conflicto de versión: se muestra la versión guardada y no se sobrescribe sin decisión.
-await ui.input('Observaciones','Exploración ampliada');conflictOnce=true;await ui.click('Guardar avances');
-assert.match(ui.app.textContent,/Otra sesión guardó esta consulta/);assert.equal(field('Observaciones').value,'Exploración ampliada');
+await ui.input('Exploración y observaciones','Exploración ampliada');conflictOnce=true;await ui.click('Guardar avances');
+assert.match(ui.app.textContent,/Otra sesión guardó esta consulta/);assert.equal(field('Exploración y observaciones').value,'Exploración ampliada');
 await ui.click('Conservar lo que escribí y guardar');assert.equal(notes.objective,'Exploración ampliada');assert.doesNotMatch(ui.app.textContent,/Otra sesión guardó/);
 await ui.click('Solicitar exámenes');await ui.click('Seleccionar Estudio de catálogo de prueba');await ui.input('Motivo e indicaciones clínicas','Motivo de orden');await ui.click('Revisar y enviar exámenes');await ui.click('Confirmar exámenes');assert.equal(orders.length,1);
 await ui.click('← Volver a la consulta');
@@ -66,23 +68,20 @@ await ui.click('FINALIZAR CONSULTA');assert.match(ui.app.textContent,/¿Estás s
 await ui.click('Volver a la consulta');assert.equal(finishCalls,0);assert.equal(closed,false);
 // Fallo de guardado: no finaliza y conserva lo escrito.
 failSave=true;await ui.click('FINALIZAR CONSULTA');await ui.click('Confirmar y finalizar');
-assert.equal(closed,false,'No finaliza si falla guardar');assert.equal(field('Observaciones').value,'Exploración ampliada');assert.match(ui.app.textContent,/Error al guardar/);
+assert.equal(closed,false,'No finaliza si falla guardar');assert.equal(field('Exploración y observaciones').value,'Exploración ampliada');assert.match(ui.app.textContent,/Error al guardar/);assert.match(ui.get('notice').textContent,/No se ha guardado la consulta\. Guarda los cambios antes de finalizar la atención\./);
 failSave=false;
-// Servidor sin migración: exige plan. Se explica sin cerrar, sin inventar un plan y sin perder datos.
+// El servidor desplegado exige las cuatro notas; con el plan propio el cierre funciona sin migración.
 await ui.click('FINALIZAR CONSULTA');await ui.click('Confirmar y finalizar');
-assert.equal(closed,false);assert.match(ui.get('notice').textContent,/doctor-consultation-six-fields\.sql/);assert.equal(String(notes.plan||''),'','No inventa plan');assert.equal(field('Diagnóstico').value,'Faringitis aguda');
-// Con la migración aplicada, el cierre funciona con los tres campos obligatorios.
-planRequired=false;await ui.click('FINALIZAR CONSULTA');await ui.click('Confirmar y finalizar');
-assert.equal(closed,true);assert.equal(finishCalls,2);assert.equal(notes.vitals.weight_kg,'70.5');assert.equal(notes.vitals.height_cm,'170');assert.equal(notes.vitals.temperature_c,'38.2');
+assert.equal(closed,true);assert.equal(finishCalls,1);assert.equal(notes.vitals.weight_kg,'70.5');assert.equal(notes.vitals.height_cm,'170');assert.equal(notes.vitals.temperature_c,'38.2');
 assert.match(ui.app.textContent,/Consultas pendientes/);assert.equal(ui.app.textContent.includes('Paciente autorizado'),false,'Al finalizar deja de estar en Pendientes');
-await ui.click('FINALIZADAS');assert.match(ui.app.textContent,/Consultas finalizadas/);assert.match(ui.app.textContent,/Paciente autorizado/);assert.match(ui.app.textContent,/Finalizada/);
-await ui.click('Ver detalle de Paciente autorizado, Finalizada');await ui.click('VER CONSULTA FINALIZADA');
+await ui.click('FINALIZADAS');assert.match(ui.app.textContent,/Consultas finalizadas/);assert.match(ui.app.textContent,/Paciente autorizado/);assert.match(ui.app.textContent,/Atendida/);
+await ui.click('Ver detalle de Paciente autorizado, Atendida');await ui.click('VER CONSULTA FINALIZADA');
 assert.match(ui.app.textContent,/Consulta finalizada/);
-for(const text of ['70.5','38.2','Fiebre de dos días','Faringitis aguda','Exploración ampliada','Síntomas que presentaba','Observaciones','Presión sistólica \\(mmHg\\)'])assert.match(ui.app.textContent,new RegExp(text));
+for(const text of ['70.5','38.2','Fiebre de dos días','Faringitis aguda','Exploración ampliada','Síntomas actuales','Exploración y observaciones','Reposo e hidratación','Presión sistólica \\(mmHg\\)'])assert.match(ui.app.textContent,new RegExp(text));
 assert.match(ui.app.textContent,/IMC \(calculado\)/);
 const lab=ui.calls.find(c=>c.url.endsWith('/doctor_native_labs')),rx=ui.calls.find(c=>c.url.endsWith('/doctor_native_prescribe'));
 assert.deepEqual(lab.params.p_tests,[1]);assert.equal(rx.params.p_lines.length,2);assert.equal(rx.params.p_lines[0].duration_days,3);
 assert.equal(ui.calls.filter(c=>c.url.endsWith('/doctor_native_start')).length,1,'Sin consultas duplicadas');
 for(const call of ui.calls.filter(c=>c.url.includes('/doctor_native_'))){assert.equal('doctor_id' in (call.params||{}),false);assert.equal('user_id' in (call.params||{}),false);}
 await ui.click('Más');await ui.click('Cerrar sesión');assert.ok(ui.get('password'));
-console.log('OK Réplica Doctor: agenda → detalle → ABRIR CONSULTA MÉDICA → seis campos (peso, altura, temperatura, síntomas, diagnóstico, observaciones) → medidas antiguas conservadas → guardado y conflicto → exámenes → receta de 2 medicamentos → cierre sin migración explicado → cierre confirmado; mismo contrato que iOS');
+console.log('OK Réplica Doctor: agenda → detalle → ABRIR CONSULTA MÉDICA → síntomas del paciente de solo lectura → datos físicos y cuatro notas con plan propio → medidas antiguas conservadas → guardado y conflicto → exámenes → receta de 2 medicamentos → fallo de guardado con mensaje y sin cierre → cierre confirmado; mismo contrato que iOS');

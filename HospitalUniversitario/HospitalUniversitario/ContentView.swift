@@ -62,7 +62,7 @@ struct ContentView: View {
         }
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
             if scenePhase == .active && store.attention?.saving != true && ((store.selectedRole == "patient" && ["home", "appointments", "request", "health", "schedule", "turns", "notifications"].contains(store.screenID)) ||
-                (store.selectedRole == "doctor" && ["home", "patients", "notifications"].contains(store.screenID))) {
+                (store.selectedRole == "doctor" && ["home", "patients", "notifications", "turns"].contains(store.screenID))) {
                 Task { await store.refreshScreen() }
             }
             // Avisos del paciente (resultados, citas, recetas): se actualizan cada 30 s en primer plano.
@@ -225,7 +225,8 @@ struct ContentView: View {
         } else if isDoctor, store.screenID == "prescriptions", let doctor = store.doctor {
             DoctorModuleView(model: doctor, screenID: "prescriptions", search: search, navigate: go, period: store.period)
         } else if !isDoctor, store.screenID == "appointments", let modules = store.modules {
-            PatientAppointmentsView(flow: appointmentFlow, modules: modules, profile: store.profile, patientID: store.access?.patient_id, search: search, period: store.period, navigate: go)
+            PatientAppointmentsView(flow: appointmentFlow, modules: modules, profile: store.profile, patientID: store.access?.patient_id, search: search, period: store.period, navigate: go,
+                openRequest: store.attention?.requests.first { AttentionRules.openStates.contains($0.status) })
         } else if !isDoctor, ["chart", "laboratory"].contains(store.screenID), let modules = store.modules, let laboratory = store.patientLaboratory {
             PatientClinicalView(model: modules, laboratory: laboratory, module: store.screenID, profile: store.profile, navigate: go)
         } else if !isDoctor, store.screenID == "prescriptions", let modules = store.modules {
@@ -329,30 +330,112 @@ struct ContentView: View {
         }
     }
 
+    /// Mi horario del médico (pantalla existente, ruta "turns"). Jornada real asignada por administración:
+    /// doctor_schedules, staff_shifts y staff_absences (HospitalCore.doctorWeek). Se actualiza cada 30 s en primer plano.
     private var schedule: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            heading("Próxima jornada")
-            if let next = store.nextShift {
-                HospitalCard { Text(store.period(next.period)).font(.subheadline.weight(.semibold)); HospitalBadge(text: HospitalLabels.status(next.status), warning: next.status != "confirmed") }
-            } else { empty("No tienes jornadas asignadas.") }
-            heading("Agenda semanal")
-            ForEach(store.orderedShifts.filter { matches(store.period($0.period)) }) { shift in
-                HospitalCard {
-                    Text(store.period(shift.period)).font(.system(size: 12, weight: .medium))
-                    HospitalBadge(text: HospitalLabels.status(shift.status), warning: shift.status != "confirmed")
-
-                }
+        VStack(alignment: .leading, spacing: 16) {
+            if let week = store.doctorWeek {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("MI HORARIO", systemImage: "calendar.badge.clock").font(.caption2.weight(.heavy)).tracking(1.2).opacity(0.85)
+                    Text(weekRange(week)).font(.title3.bold())
+                    Text("\(DoctorWeek.hours(week.total_minutes)) de jornada · \(week.days.filter { !$0.free }.count) días con actividad").font(.subheadline).opacity(0.9)
+                    HStack(spacing: 8) {
+                        weekButton("chevron.left", "Semana anterior") { Task { await store.changeScheduleWeek(-1) } }
+                        Button { Task { await store.changeScheduleWeek(0) } } label: {
+                            Text("Esta semana").font(.subheadline.bold()).foregroundStyle(HospitalTheme.wine).padding(.horizontal, 14).frame(minHeight: 38)
+                                .background(.white, in: Capsule())
+                        }.buttonStyle(.plain).disabled(store.scheduleWeek == nil)
+                        weekButton("chevron.right", "Semana siguiente") { Task { await store.changeScheduleWeek(1) } }
+                    }
+                }.foregroundStyle(.white).padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(LinearGradient.vinoDestacado, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                ForEach(week.days) { day in scheduleDay(day) }
+                Button { Task { await store.doctor?.enableReminders(); if let week = store.doctorWeek { await DoctorBreakReminders.schedule(week) } } } label: {
+                    Label("Activar recordatorios de almuerzo y descansos", systemImage: "bell.badge").font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 44)
+                }.buttonStyle(.bordered).tint(HospitalTheme.wine)
+                Text("Almuerzo y descansos según tu jornada registrada por administración. «Entre jornadas» es tiempo sin actividad asignada, no un almuerzo. Los cambios llegan a tus avisos.")
+                    .font(.caption).foregroundStyle(HospitalTheme.secondary).fixedSize(horizontal: false, vertical: true)
+            } else if store.busy {
+                ProgressView("Cargando tu horario…").frame(maxWidth: .infinity)
+            } else {
+                empty("No se pudo cargar tu horario. Actualiza para intentarlo de nuevo.")
             }
-            if store.shiftsMore { Button("Cargar más") { Task { await store.refreshScreen(more: true) } }.disabled(store.busy) }
             if let error = store.modules?.error { Text(error).font(.footnote).foregroundStyle(.red) }
         }
     }
 
+    private func weekRange(_ week: DoctorWeek) -> String {
+        let parser = DateFormatter(); parser.locale = Locale(identifier: "en_US_POSIX"); parser.timeZone = DoctorClinicalRules.timeZone; parser.dateFormat = "yyyy-MM-dd"
+        let out = DateFormatter(); out.locale = Locale(identifier: "es_SV"); out.timeZone = DoctorClinicalRules.timeZone; out.dateFormat = "d 'de' MMMM"
+        guard let start = parser.date(from: week.week_start), let end = parser.date(from: week.week_end) else { return "Semana" }
+        return "\(out.string(from: start)) – \(out.string(from: end))"
+    }
+
+    private func weekButton(_ icon: String, _ label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.subheadline.bold()).foregroundStyle(HospitalTheme.wine).frame(width: 38, height: 38).background(.white, in: Circle())
+        }.buttonStyle(.plain).accessibilityLabel(label)
+    }
+
+    private func scheduleDay(_ day: DoctorWeek.Day) -> some View {
+        let parser = DateFormatter(); parser.locale = Locale(identifier: "en_US_POSIX"); parser.timeZone = DoctorClinicalRules.timeZone; parser.dateFormat = "yyyy-MM-dd"
+        let out = DateFormatter(); out.locale = Locale(identifier: "es_SV"); out.timeZone = DoctorClinicalRules.timeZone; out.dateFormat = "d 'de' MMMM"
+        let dateText = parser.date(from: day.date).map { out.string(from: $0) } ?? day.date
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(day.weekday).font(.headline).foregroundStyle(HospitalTheme.ink)
+                    Text(dateText).font(.caption).foregroundStyle(HospitalTheme.secondary)
+                }
+                Spacer()
+                if day.today { Text("Hoy").font(.caption2.bold()).foregroundStyle(.white).padding(.horizontal, 10).padding(.vertical, 4).background(HospitalTheme.wine, in: Capsule()) }
+                if day.minutes > 0 { Text(DoctorWeek.hours(day.minutes)).font(.caption.weight(.semibold)).foregroundStyle(HospitalTheme.wine) }
+            }
+            if day.free && day.absences.isEmpty {
+                Label("Día libre", systemImage: "sun.max").font(.subheadline.weight(.semibold)).foregroundStyle(HospitalTheme.secondary)
+            }
+            ForEach(Array(day.blocks.enumerated()), id: \.offset) { _, block in
+                scheduleRow(icon: block.shift == "Tarde" ? "sunset" : "sunrise", title: block.shift ?? "Jornada", value: "\(block.start) – \(block.end)", tint: HospitalTheme.wine, fill: HospitalTheme.rose)
+            }
+            ForEach(Array(day.breaks.enumerated()), id: \.offset) { _, item in
+                if item.kind == "gap" {
+                    scheduleRow(icon: "pause.circle", title: item.label ?? "Entre jornadas", value: "\(item.start) – \(item.end)", tint: HospitalTheme.secondary, fill: HospitalTheme.background)
+                } else {
+                    scheduleRow(icon: item.kind == "lunch" ? "fork.knife" : "cup.and.saucer", title: item.label ?? "Descanso", value: "\(item.start) – \(item.end)", tint: Color(red: 0.13, green: 0.5, blue: 0.3), fill: HospitalTheme.green)
+                }
+            }
+            ForEach(Array(day.shifts.enumerated()), id: \.offset) { _, item in
+                scheduleRow(icon: "clock.badge.checkmark", title: "Jornada asignada · \(item.type.capitalized)", value: "\(item.start) – \(item.end)", tint: HospitalTheme.ink, fill: HospitalTheme.background)
+            }
+            ForEach(Array(day.absences.enumerated()), id: \.offset) { _, item in
+                scheduleRow(icon: "person.crop.circle.badge.xmark", title: "Ausencia · \(item.reason)", value: item.all_day ? "Todo el día" : "\(item.start ?? "") – \(item.end ?? "")", tint: Color(red: 0.6, green: 0.4, blue: 0.0), fill: Color(red: 1, green: 0.95, blue: 0.85))
+            }
+        }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+            .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(day.today ? HospitalTheme.wine : HospitalTheme.rose, lineWidth: day.today ? 1.5 : 1))
+    }
+
+    private func scheduleRow(icon: String, title: String, value: String, tint: Color, fill: Color) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon).font(.subheadline.weight(.semibold)).foregroundStyle(tint).frame(width: 34, height: 34).background(fill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            Text(title).font(.subheadline).foregroundStyle(HospitalTheme.ink).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Text(value).font(.subheadline.bold().monospacedDigit()).foregroundStyle(tint).lineLimit(1).minimumScaleFactor(0.8)
+        }
+    }
+
+    /// Pantalla original "Mi turno" (ruta "turns"; paridad con web `queueView`). Sin pantallas ni navegación nuevas.
+    /// El turno es appointments.queue_number, asignado por el servidor (assign_appointment_queue) al programar la cita;
+    /// la app solo lo lee. Cada cita activa muestra su número dentro de su tarjeta; las demás pasan a Turnos anteriores.
     private var queue: some View {
         VStack(alignment: .leading, spacing: 20) {
             heading("Turno de atención")
-            HospitalNotice(text: "Hospital Móviles no publica una fila numerada. Consulta tus citas para conocer la atención programada.")
-            Button("Mis citas") { store.screenID = "appointments" }
+            if let modules = store.modules, store.access?.patient_id != nil {
+                PatientQueueCards(modules: modules, busy: store.busy) { store.screenID = "appointments" }
+            } else {
+                empty("No tienes un turno activo.")
+                Button("Mis citas") { store.screenID = "appointments" }
+            }
         }
     }
 
@@ -373,7 +456,10 @@ struct ContentView: View {
         let family = store.profile?.person?.family_names.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return Group {
             if !isDoctor {
-                PatientProfileCardView(name: [given, family].filter { !$0.isEmpty }.joined(separator: " "), email: store.profile?.auth_email ?? "", phone: store.profile?.contacts.first { $0.kind == "phone" }?.value ?? "")
+                VStack(spacing: 18) {
+                    PatientProfileCardView(name: [given, family].filter { !$0.isEmpty }.joined(separator: " "), email: store.profile?.auth_email ?? "", phone: store.profile?.contacts.first { $0.kind == "phone" }?.value ?? "")
+                    PasswordChangeCard { current, new in try await store.changePassword(current: current, new: new) }
+                }
             } else {
                 VStack(alignment: .leading, spacing: 18) {
                     HStack(spacing: 14) {
@@ -382,6 +468,7 @@ struct ContentView: View {
                     }.padding(.vertical, 10)
                     HospitalCard { DoctorConsultationField(label: "Nombre", value: given.isEmpty ? "No disponible" : given) }
                     HospitalCard { DoctorConsultationField(label: "Apellido", value: family.isEmpty ? "No disponible" : family) }
+                    PasswordChangeCard { current, new in try await store.changePassword(current: current, new: new) }
                 }
             }
         }
@@ -547,5 +634,99 @@ private struct DoctorNotificationBell: View {
                     .background(.white).presentationCompactAdaptation(.popover)
                     .task { await model.refreshAlerts() }
             }
+    }
+}
+
+/// Contenido de la pantalla original Mi turno: observa las citas del paciente (módulo "appointments", RLS propia).
+/// Activas con su número, fecha, hora, médico, especialidad, consultorio y estado; después, Turnos anteriores.
+private struct PatientQueueCards: View {
+    @ObservedObject var modules: MobileModuleViewModel
+    let busy: Bool
+    let openAppointments: () -> Void
+
+    private func value(_ item: MobileItem, _ label: String) -> String? {
+        guard let text = item.details.first(where: { $0.label.localizedCaseInsensitiveCompare(label) == .orderedSame })?.value.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty, text != "Sin registrar" else { return nil }
+        return text
+    }
+    private func format(_ item: MobileItem, _ style: Date.FormatStyle) -> String {
+        DoctorDate.parse(item.event_at).map { $0.formatted(style) } ?? "No disponible"
+    }
+    private var dayStyle: Date.FormatStyle {
+        Date.FormatStyle(date: .complete, time: .omitted, locale: Locale(identifier: "es_SV"), calendar: DoctorClinicalRules.calendar, timeZone: DoctorClinicalRules.timeZone)
+    }
+    private var hourStyle: Date.FormatStyle {
+        Date.FormatStyle(date: .omitted, time: .shortened, locale: Locale(identifier: "es_SV"), calendar: DoctorClinicalRules.calendar, timeZone: DoctorClinicalRules.timeZone)
+    }
+
+    var body: some View {
+        let groups = PatientAppointmentRules.split(modules.items)
+        let history = groups.past.filter { $0.queue_number != nil }
+        VStack(alignment: .leading, spacing: 20) {
+            if (busy || modules.loading) && modules.items.isEmpty {
+                ProgressView("Consultando tu turno…").frame(maxWidth: .infinity)
+            } else if let error = modules.error {
+                HospitalNotice(text: error)
+            } else if groups.active.isEmpty {
+                HospitalCard { Text("No tienes un turno activo.").font(.system(size: 12)).foregroundStyle(HospitalTheme.secondary).padding(.vertical, 15) }
+            }
+            ForEach(groups.active) { item in activeCard(item) }
+            Text("El hospital asigna el turno automáticamente al programar tu cita.").font(.caption).foregroundStyle(HospitalTheme.secondary)
+            if !history.isEmpty {
+                Text("Turnos anteriores").font(.system(size: 16, weight: .bold)).foregroundStyle(HospitalTheme.ink)
+                ForEach(history) { item in historyRow(item) }
+            }
+            Button("Mis citas", action: openAppointments)
+        }
+    }
+
+    private func activeCard(_ item: MobileItem) -> some View {
+        let turno = PatientAppointmentRules.turn(item.queue_number)
+        let day = format(item, dayStyle)
+        let rows: [(String, String)] = [("Fecha", day.prefix(1).uppercased() + day.dropFirst()), ("Hora", format(item, hourStyle)),
+            ("Médico", value(item, "Médico") ?? "Nombre del médico no disponible"), ("Especialidad", value(item, "Especialidad") ?? ""),
+            ("Consultorio", value(item, "Consultorio") ?? "Por asignar")].filter { !$0.1.isEmpty }
+        return HospitalCard {
+            VStack(spacing: 14) {
+                Text("Tu número").font(.system(size: 12)).foregroundStyle(HospitalTheme.secondary)
+                Text(turno ?? "—").font(.system(size: 42, weight: .semibold)).monospacedDigit().foregroundStyle(HospitalTheme.wine)
+                    .accessibilityLabel(turno.map { "Tu turno: \($0)" } ?? "Turno pendiente de asignación")
+                HospitalBadge(text: DoctorClinicalRules.statusLabel(item.status))
+                if turno == nil { Text("El hospital asignará tu turno automáticamente.").font(.caption2).foregroundStyle(HospitalTheme.secondary) }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("INFORMACIÓN DE LA CITA").font(.caption2.weight(.heavy)).tracking(0.6).foregroundStyle(HospitalTheme.secondary)
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                        HStack(alignment: .top) {
+                            Text(row.0).font(.caption).foregroundStyle(HospitalTheme.secondary)
+                            Spacer(minLength: 12)
+                            Text(row.1).font(.caption.weight(.semibold)).foregroundStyle(HospitalTheme.ink).multilineTextAlignment(.trailing)
+                        }
+                    }
+                }
+                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                .background(HospitalTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }.frame(maxWidth: .infinity).padding(.vertical, 10)
+        }
+    }
+
+    private func historyRow(_ item: MobileItem) -> some View {
+        let state = item.status
+        let tint: Color = state == "completed" ? Color(red: 0.12, green: 0.42, blue: 0.24) : state == "cancelled" ? Color(red: 0.63, green: 0.07, blue: 0.18)
+            : state == "no_show" ? Color(red: 0.54, green: 0.35, blue: 0.07) : HospitalTheme.secondary
+        return HStack(spacing: 12) {
+            Text(PatientAppointmentRules.turn(item.queue_number) ?? "—").font(.subheadline.weight(.heavy)).monospacedDigit()
+                .foregroundStyle(HospitalTheme.secondary).frame(minWidth: 46).padding(.vertical, 6)
+                .background(HospitalTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value(item, "Especialidad") ?? item.title).font(.subheadline.weight(.semibold)).foregroundStyle(HospitalTheme.ink)
+                Text("\(format(item, Date.FormatStyle(date: .abbreviated, time: .shortened, locale: Locale(identifier: "es_SV"), calendar: DoctorClinicalRules.calendar, timeZone: DoctorClinicalRules.timeZone)))")
+                    .font(.caption).foregroundStyle(HospitalTheme.secondary)
+            }
+            Spacer(minLength: 0)
+            Text(DoctorClinicalRules.statusLabel(state)).font(.caption2.bold()).foregroundStyle(tint)
+                .padding(.horizontal, 10).padding(.vertical, 4).background(tint.opacity(0.1), in: Capsule())
+        }
+        .padding(12).background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 }

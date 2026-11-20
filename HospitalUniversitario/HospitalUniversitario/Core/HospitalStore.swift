@@ -7,6 +7,10 @@ final class HospitalStore: ObservableObject {
     @Published var selectedRole: String?
     @Published private(set) var rooms: [Room] = []
     @Published private(set) var shifts: [StaffShift] = []
+    /// Mi horario del médico: semana calculada por HospitalCore.doctorWeek con la jornada real de administración.
+    @Published private(set) var doctorWeek: DoctorWeek?
+    /// Lunes (yyyy-MM-dd, America/El_Salvador) de la semana mostrada; nil = semana actual.
+    @Published private(set) var scheduleWeek: String?
     @Published private(set) var busy = false
     @Published var message: String?
     @Published private(set) var registrationNotice: String?
@@ -45,6 +49,14 @@ final class HospitalStore: ObservableObject {
     }
     var name: String { access?.profile?.preferred_name ?? profile?.fullName ?? "Bienvenido" }
     var screens: [HospitalScreen] { catalog[selectedRole ?? ""] ?? [] }
+    /// Cambia la semana de Mi horario (offset en semanas; 0 = semana actual) y la vuelve a consultar.
+    func changeScheduleWeek(_ offset: Int) async {
+        guard offset != 0, let current = doctorWeek?.week_start else { scheduleWeek = nil; await refreshScreen(); return }
+        let parser = DateFormatter(); parser.locale = Locale(identifier: "en_US_POSIX"); parser.timeZone = DoctorClinicalRules.timeZone; parser.dateFormat = "yyyy-MM-dd"
+        guard let date = parser.date(from: current), let next = DoctorClinicalRules.calendar.date(byAdding: .day, value: 7 * offset, to: date) else { return }
+        scheduleWeek = parser.string(from: next)
+        await refreshScreen()
+    }
     var orderedShifts: [StaffShift] {
         shifts.sorted { (api?.core.interval($0.period)?.start ?? .distantFuture) < (api?.core.interval($1.period)?.start ?? .distantFuture) }
     }
@@ -149,7 +161,14 @@ final class HospitalStore: ObservableObject {
                 attention?.scheduledAppointment = fresh.patient_id == nil ? nil : nextAppointment
                 await attention?.load(); return
             }
+            if role == "patient" && screenID == "turns" {
+                // Mi turno: citas del paciente con su turno (appointments.queue_number), leídas de Supabase.
+                if fresh.patient_id != nil { await modules?.load("appointments") }
+                return
+            }
             if (role == "patient" && ["appointments", "request", "chart", "history", "prescriptions", "laboratory", "notifications"].contains(screenID)) || (role != "doctor" && screenID == "notifications") {
+                // Mis citas muestra la solicitud enviada mientras recepción no la programe (una sola activa).
+                if role == "patient" && screenID == "appointments" && !more { await attention?.load() }
                 await modules?.load(screenID, more: more)
                 if role == "patient" && screenID == "chart" && modules?.page != nil { await patientLaboratory?.load("laboratory") }
                 return
@@ -182,7 +201,26 @@ final class HospitalStore: ObservableObject {
                     let page = try await api.shifts(owner: owner, cursor: more ? shiftsCursor : nil)
                     shifts = more ? shifts + page.data : page.data
                     shiftsCursor = page.next_cursor; shiftsMore = page.has_more
-                } else { screenMessage = "Hospital Móviles no publica una fila numerada. Consulta Mis citas." }
+                    if !more {
+                        // Jornada recurrente con descansos registrados; si la RPC aún no está aplicada, horario básico.
+                        let parser = DateFormatter(); parser.locale = Locale(identifier: "en_US_POSIX"); parser.timeZone = DoctorClinicalRules.timeZone; parser.dateFormat = "yyyy-MM-dd"
+                        let today = DoctorClinicalRules.calendar.startOfDay(for: Date())
+                        let monday = DoctorClinicalRules.calendar.date(byAdding: .day, value: -((DoctorClinicalRules.calendar.component(.weekday, from: today) + 5) % 7), to: today) ?? today
+                        let from = scheduleWeek.flatMap { parser.date(from: $0) } ?? monday
+                        var parameters: [String: Any] = ["week": parser.string(from: from)]
+                        if let recurring = try? await api.doctorSchedule(from: from, until: from.addingTimeInterval(7 * 86400)) { parameters["recurring"] = recurring }
+                        let week: DoctorWeek = try await api.operation("doctorWeek", parameters: parameters)
+                        doctorWeek = week
+                        if scheduleWeek == nil { await DoctorBreakReminders.schedule(week) }
+                    }
+                } else if role == "patient" {
+                    // Turno de la próxima cita del paciente (lo asigna el servidor al programar la cita).
+                    screenMessage = nil
+                    if fresh.patient_id != nil {
+                        let dashboard: PatientDashboardData = try await api.operation("patientDashboard")
+                        nextAppointment = dashboard.next_appointment
+                    } else { nextAppointment = nil }
+                }
 
             case "information":
                 overview = nil
@@ -194,7 +232,7 @@ final class HospitalStore: ObservableObject {
         } catch {
             if role == "doctor" { doctor?.clear() }
             modules?.clear(); patientLaboratory?.clear(); patientNotifications?.clear()
-            rooms = []; shifts = []; summary = nil; overview = nil
+            rooms = []; shifts = []; doctorWeek = nil; scheduleWeek = nil; summary = nil; overview = nil
             nextAppointment = nil
             roomsMore = false; shiftsMore = false
             if let failure = error as? BackendFailure, failure.status == 401 { await api.clearLocal(); reset() }
@@ -202,6 +240,12 @@ final class HospitalStore: ObservableObject {
         }
     }
     func period(_ value: String) -> String { api?.core.period(value) ?? value }
+    /// Perfil (paciente y médico): cambia la contraseña de la cuenta en Supabase Auth tras verificar la actual.
+    func changePassword(current: String, new: String) async throws {
+        guard let api else { throw HospitalError.message("No se pudo cargar la configuración.") }
+        try await api.changePassword(current: current, new: new)
+    }
+
     func signOut() async {
         guard !busy, doctor?.saving != true, modules?.saving != true, attention?.saving != true else { return }
         busy = true
@@ -218,7 +262,7 @@ final class HospitalStore: ObservableObject {
         selectedRole = nil
         attention?.clear()
         nextAppointment = nil
-        rooms = []; shifts = []; message = nil
+        rooms = []; shifts = []; doctorWeek = nil; scheduleWeek = nil; message = nil
         roomsCursor = nil; shiftsCursor = nil; roomsMore = false; shiftsMore = false
         screenID = "home"; summary = nil; profile = nil; overview = nil; screenMessage = nil
     }
@@ -229,7 +273,7 @@ final class HospitalStore: ObservableObject {
         modules?.clear(); patientLaboratory?.clear(); patientNotifications?.clear()
         access = nil; roles = []; selectedRole = nil
         nextAppointment = nil
-        rooms = []; shifts = []; roomsCursor = nil; shiftsCursor = nil
+        rooms = []; shifts = []; doctorWeek = nil; scheduleWeek = nil; roomsCursor = nil; shiftsCursor = nil
         roomsMore = false; shiftsMore = false
         screenID = "home"; summary = nil; profile = nil; overview = nil
         screenMessage = nil

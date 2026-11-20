@@ -13,6 +13,10 @@ struct MobileItem: Codable, Identifiable {
     let details: [MobileField]
     let action: String?
     let document_id: UUID?
+    /// Solo en citas: hora de fin y turno asignado por el servidor (assign_appointment_queue). El cliente no los calcula.
+    var ends_at: String? = nil
+    var queue_number: Int? = nil
+    var queue_date: String? = nil
 }
 struct MobilePreference: Codable, Identifiable {
     let id: UUID
@@ -91,7 +95,7 @@ enum MobileFormatting {
         ["pending":"Pendiente", "scheduled":"Programada", "confirmed":"Programada", "checked_in":"Registrada en recepción",
          "in_progress":"En consulta", "completed":"Finalizada", "cancelled":"Cancelada", "rejected":"Rechazada",
          "open":"Abierta", "closed":"Cerrada", "issued":"Emitida", "draft":"Borrador", "released":"Publicado",
-         "unread":"No leída", "read":"Leída", "ordered":"Emitida", "no_show":"No se presentó",
+         "unread":"No leída", "read":"Leída", "ordered":"Emitida", "no_show":"No atendida",
          "active":"Vigente", "expired":"Tratamiento finalizado"][status] ?? "Estado no disponible"
     }
 }

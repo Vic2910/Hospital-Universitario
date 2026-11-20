@@ -46,6 +46,12 @@ struct DoctorConsultationAgendaView: View {
             LazyVStack(spacing: 10) {
                 ForEach(rows) { appointment in card(appointment, finished: showFinished) }
             }
+            // Canceladas y no atendidas: conservan su estado y su turno; nunca se cuentan como consultas atendidas.
+            let closed = showFinished ? visible(DoctorClinicalRules.closedWithoutCare(appointments, day: day)) : []
+            if !closed.isEmpty {
+                Text("Canceladas y no atendidas").font(.headline).padding(.top, 6).accessibilityAddTraits(.isHeader)
+                LazyVStack(spacing: 10) { ForEach(closed) { appointment in card(appointment, finished: false) } }
+            }
         }
         .foregroundStyle(HospitalTheme.ink)
         .onChange(of: day) { _, _ in ticket = nil }

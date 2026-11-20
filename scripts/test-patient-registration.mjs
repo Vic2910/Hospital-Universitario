@@ -51,10 +51,10 @@ assert.equal(invalid.calls.some(c=>c.url.endsWith('/signup')),false);
 console.log('OK Validación antes de Auth');
 
 const linked=createApp(['patient']);await linked.login();await linked.click('Salud');
-await linked.input('Especialidad','1','change');
+await linked.click('Medicina general');
 await linked.click('Fiebre');
 await linked.input('Motivo de solicitud','Consulta de seguimiento');
-await linked.input('Preferencia','manana','change');
+await linked.click('Mañana');
 await linked.submit('Solicitar atención');
 const request=linked.calls.find(c=>c.url.endsWith('/rpc/submit_my_attention_request'));
 assert.ok(request);assert.equal(request.params.p_specialty,1);assert.equal(request.params.p_period,'manana');

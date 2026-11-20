@@ -11,8 +11,6 @@ struct MobileModuleView: View {
     @Environment(\.openURL) private var openURL
     @State private var cancelling: MobileItem?
     @State private var cancellationReason = ""
-    @State private var password = ""
-    @State private var repeatedPassword = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -91,7 +89,6 @@ struct MobileModuleView: View {
             }.disabled(cancellationReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             Button("Conservar cita", role: .cancel) { cancelling = nil }
         }
-        .onDisappear { password = ""; repeatedPassword = "" }
     }
 
     private func ownChartValue(_ label: String) -> String {
@@ -136,14 +133,6 @@ struct MobileModuleView: View {
                 Toggle(preference.name, isOn: Binding(get: { preference.enabled }, set: { value in
                     Task { await model.setPreference(preference, enabled: value) }
                 }))
-            }
-            DisclosureGroup("Cambiar contraseña") {
-                SecureField("Nueva contraseña", text: $password).textContentType(.newPassword)
-                SecureField("Repetir contraseña", text: $repeatedPassword).textContentType(.newPassword)
-                Button("Actualizar contraseña", systemImage: "lock.rotation") {
-                    let value = password; password = ""; repeatedPassword = ""
-                    Task { await model.changePassword(value) }
-                }.disabled(password.count < 12 || password != repeatedPassword)
             }
         }
     }

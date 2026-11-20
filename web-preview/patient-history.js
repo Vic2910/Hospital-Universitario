@@ -3,7 +3,7 @@
   // Historial propio del paciente (my_consultation_history). Paridad con PatientHistoryView.swift.
   // Solo muestra campos con valor real; agrupa el detalle en datos físicos, evaluación, recetas y exámenes.
   const PHYSICAL=['Peso (kg)','Altura (cm)','Temperatura (°C)','Presión sistólica (mmHg)','Presión diastólica (mmHg)','Frecuencia cardíaca (lpm)'];
-  const EVALUATION=['Motivo de consulta','Síntomas que presentaba','Diagnóstico','Código diagnóstico','Observaciones','Tratamiento'];
+  const EVALUATION=['Atención','Motivo de consulta','Síntomas reportados por el paciente','Otros síntomas reportados','Síntomas actuales','Exploración y observaciones','Diagnóstico','Código diagnóstico','Plan de tratamiento'];
   const real=value=>typeof value==='string'&&value.trim()!=='';
   class HospitalPatientHistory {
     static examples=[

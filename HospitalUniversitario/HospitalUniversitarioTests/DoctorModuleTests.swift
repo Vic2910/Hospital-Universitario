@@ -132,7 +132,7 @@ struct DoctorModuleTests {
             appointment("Ocho", try at(8, 0), "scheduled"), appointment("Seis", try at(6, 0), "confirmed"),
             appointment("Siete", try at(7, 0), "in_progress"), appointment("Abierta ayer", try at(23, 30, -1), "in_progress"),
             appointment("Programada ayer", try at(9, 0, -1), "scheduled"), appointment("Cancelada", try at(9, 0), "cancelled"),
-            appointment("No asistió", try at(10, 0), "no_show"),
+            appointment("No atendida", try at(10, 0), "no_show"),
             appointment("Hecha 10", try at(6, 30), "completed", finished: try at(10, 0)),
             appointment("Hecha 9", try at(7, 30), "completed", finished: try at(9, 0)),
             appointment("Tarde", try at(23, 0, -1), "completed", finished: try at(0, 20)),
@@ -154,10 +154,12 @@ struct DoctorModuleTests {
     }
 
     @Test func statusesFollowOpeningAndClosing() {
-        #expect(DoctorClinicalRules.statusLabel("scheduled") == "Programada")
-        #expect(DoctorClinicalRules.statusLabel("confirmed") == "Programada")
+        #expect(DoctorClinicalRules.statusLabel("scheduled") == "Pendiente")
+        #expect(DoctorClinicalRules.statusLabel("confirmed") == "Pendiente")
         #expect(DoctorClinicalRules.statusLabel("in_progress") == "En consulta")
-        #expect(DoctorClinicalRules.statusLabel("completed") == "Finalizada")
+        #expect(DoctorClinicalRules.statusLabel("completed") == "Atendida")
+        #expect(DoctorClinicalRules.statusLabel("no_show") == "No atendida")
+        #expect(DoctorClinicalRules.statusLabel("cancelled") == "Cancelada")
         #expect(MobileFormatting.status("in_progress") == "En consulta")
     }
 
@@ -182,7 +184,8 @@ struct DoctorModuleTests {
         await model.refresh(); model.select(repository.appointmentID); await model.loadChart()
         model.draft.assessment = "  "
         #expect(model.finishBlockers.contains { $0.contains("Diagnóstico") })
-        #expect(!model.finishBlockers.contains { $0.contains("Plan") }, "El plan ya no es un campo del formulario")
+        model.draft.assessment = "Faringitis"; model.draft.plan = " "
+        #expect(model.finishBlockers.contains { $0.contains("Plan de tratamiento") }, "El plan tiene su propio campo obligatorio")
         #expect(await model.closeConsultation() == false)
         #expect(repository.closeCalls == 0 && repository.saveKeys.isEmpty)
     }
@@ -289,27 +292,33 @@ struct DoctorModuleTests {
         model.configure(facility: UUID(), identity: UUID())
         await model.refresh(); model.select(repository.appointmentID); await model.loadChart()
         model.draft.subjective = "Fiebre de dos días"; model.draft.assessment = "Faringitis aguda"; model.draft.objective = "Faringe eritematosa"
+        model.draft.plan = "Reposo"
         model.draft.vitals["weight_kg"] = "70.5"; model.draft.vitals["height_cm"] = "170"; model.draft.vitals["temperature_c"] = "38.2"
         #expect(model.finishBlockers.isEmpty)
         #expect(await model.saveConsultation())
         let saved = repository.savedDrafts.last
         #expect(saved?.subjective == "Fiebre de dos días" && saved?.assessment == "Faringitis aguda" && saved?.objective == "Faringe eritematosa")
         #expect(saved?.vitals == ["weight_kg": "70.5", "height_cm": "170", "temperature_c": "38.2", "systolic": "118", "diastolic": "76"])
-        #expect(saved?.plan == "", "No inventa un plan")
+        #expect(saved?.plan == "Reposo", "El plan se guarda en su propio campo")
     }
 
-    @Test @MainActor func finishExplainsPendingMigrationWithoutClosing() async {
+    @Test @MainActor func finishRequiresPlanAndExplainsFailedSave() async {
         let repository = DoctorRepositoryStub()
         repository.notePlan = nil
         repository.planRequired = true
         let model = DoctorViewModel(repository: repository)
         model.configure(facility: UUID(), identity: UUID())
         await model.refresh(); model.select(repository.appointmentID); await model.loadChart()
+        #expect(await model.closeConsultation() == false, "Sin plan no se llama al servidor")
+        #expect(repository.closeCalls == 0)
+        model.draft.plan = "Reposo"
+        repository.failSave = true
         #expect(await model.closeConsultation() == false)
-        #expect(model.error == DoctorClinicalRules.pendingFinishMigration)
-        #expect(model.selectedAppointmentID == repository.appointmentID, "Sigue en la consulta sin perder datos")
-        repository.planRequired = false
+        #expect(model.error == DoctorViewModel.unsavedFinishMessage, "Si el guardado falla, no se cierra")
+        #expect(repository.closeCalls == 0)
+        repository.failSave = false
         #expect(await model.closeConsultation())
+        #expect(repository.closeCalls == 1)
     }
 
     @Test @MainActor func patientDirectoryDoesNotDependOnAppointmentsDay() async {

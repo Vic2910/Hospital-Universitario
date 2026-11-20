@@ -290,6 +290,9 @@ struct DoctorConsultation: Codable, Identifiable, Sendable {
     var doctor_name: String? = nil
     var specialty: String? = nil
     var reason: String? = nil
+    /// Síntomas que envió el paciente en su solicitud (supabase/expedientes-historial.sql). Solo lectura.
+    var reported_symptoms: [String]? = nil
+    var reported_other: String? = nil
 }
 
 struct DoctorConsultationDraft: Equatable, Sendable {
@@ -301,10 +304,11 @@ struct DoctorConsultationDraft: Equatable, Sendable {
     var vitals: [String: String] = [:]
     var canSave: Bool { [subjective,objective,assessment,plan].allSatisfy { $0.count <= 10000 } && diagnosis_code.count <= 50 }
     var isValid: Bool { missingSections.isEmpty && canSave }
-    /// Las tres notas del formulario: Síntomas → subjective, Diagnóstico → assessment, Observaciones → objective.
-    /// `plan`, `diagnosis_code` y las medidas antiguas ya no se capturan; se reenvían tal como estaban guardados.
+    /// Las cuatro notas que exigen doctor_native_finish y native_complete_guard (Supabase desplegado):
+    /// subjective (síntomas actuales que registra el médico), objective (exploración y observaciones),
+    /// assessment (diagnóstico) y plan (plan de tratamiento). `diagnosis_code` y las medidas antiguas se reenvían intactos.
     var missingSections: [String] {
-        [(subjective, "Síntomas que presentaba"), (assessment, "Diagnóstico"), (objective, "Observaciones")]
+        [(subjective, "Síntomas actuales"), (objective, "Exploración y observaciones"), (assessment, "Diagnóstico"), (plan, "Plan de tratamiento")]
             .filter { $0.0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.map(\.1)
     }
     var values: [String: DoctorJSON] {
@@ -321,10 +325,12 @@ enum DoctorClinicalRules {
     static let timeZone = TimeZone(identifier: "America/El_Salvador") ?? .current
     static var calendar: Calendar { var value = Calendar(identifier: .gregorian); value.timeZone = timeZone; return value }
 
-    /// Estado visible para médico y paciente: Programada hasta abrir, En consulta mientras está abierta, Finalizada al cerrar.
+    /// Etiqueta visible de la cita (solo texto; los estados de Supabase no cambian): programada/confirmada → Pendiente,
+    /// en_atencion → En consulta, completada → Atendida, no_asistio → No atendida, cancelada → Cancelada.
+    /// Idéntica a HospitalCore.doctorClinical.statusLabel.
     static func statusLabel(_ status: String) -> String {
-        ["scheduled": "Programada", "confirmed": "Programada", "checked_in": "En espera", "in_progress": "En consulta",
-         "completed": "Finalizada", "cancelled": "Cancelada", "no_show": "No asistió", "rejected": "Rechazada"][status] ?? "Programada"
+        ["scheduled": "Pendiente", "confirmed": "Pendiente", "checked_in": "En espera", "in_progress": "En consulta",
+         "completed": "Atendida", "cancelled": "Cancelada", "no_show": "No atendida", "rejected": "Rechazada"][status] ?? "Pendiente"
     }
 
     struct Vital: Identifiable, Sendable {
@@ -440,6 +446,12 @@ enum DoctorClinicalRules {
                 let left = finishedAt($0) ?? .distantPast, right = finishedAt($1) ?? .distantPast
                 return left == right ? $0.id.uuidString > $1.id.uuidString : left > right
             }
+    }
+
+    /// Canceladas y no atendidas de la fecha elegida: se muestran aparte en FINALIZADAS, sin mezclarse con las atendidas.
+    static func closedWithoutCare(_ appointments: [DoctorAppointment], day: Date) -> [DoctorAppointment] {
+        appointments.filter { ["cancelled", "no_show"].contains($0.status) && ($0.startDate.map { calendar.isDate($0, inSameDayAs: day) } ?? false) }
+            .sorted { ($0.startDate ?? .distantPast) < ($1.startDate ?? .distantPast) }
     }
 
     /// Orden cronológico real (fecha y hora de inicio, después id) y secciones Hoy / Próximas / Finalizadas / Canceladas.

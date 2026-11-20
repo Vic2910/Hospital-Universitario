@@ -6,7 +6,7 @@
 --   1. doctor_native_patients: devuelve patients.patient_code y también busca por él. Autorización intacta: private.treats_patient.
 --   2. doctor_native_chart: añade patient_code (igual que doctor-consultation-six-fields.sql; aplicar ambos en cualquier orden
 --      deja el mismo resultado). En cada consulta añade ended_at, doctor_name, specialty y reason (motivo de la solicitud).
---      Cada receta incluye encounter_id. Sigue devolviendo solo consultas del médico autenticado (e.doctor_id = d).
+--      También reported_symptoms y reported_other (síntomas que envió el paciente). Cada receta incluye encounter_id. Sigue devolviendo solo consultas del médico autenticado (e.doctor_id = d).
 --   3. my_consultation_history: añade reason y, por consulta, recetas y exámenes. Los resultados de laboratorio solo aparecen
 --      si están validados y publicados al paciente. Sigue limitado a consultas finalizadas del propio paciente (auth.uid()).
 BEGIN;
@@ -54,6 +54,9 @@ BEGIN
    (SELECT concat_ws(' ',pr.first_name,pr.last_name) FROM public.staff s JOIN public.profiles pr ON pr.id=s.profile_id WHERE s.id=e.doctor_id) doctor_name,
    (SELECT sp.name FROM public.appointments a JOIN public.appointment_requests ar ON ar.id=a.request_id JOIN public.specialties sp ON sp.id=ar.specialty_id WHERE a.id=e.appointment_id) specialty,
    (SELECT ar.reason FROM public.appointments a JOIN public.appointment_requests ar ON ar.id=a.request_id WHERE a.id=e.appointment_id) reason,
+   (SELECT coalesce(jsonb_agg(sc.name ORDER BY sc.id),'[]') FROM public.appointments a JOIN public.appointment_request_symptoms rs ON rs.request_id=a.request_id
+     JOIN public.symptom_catalog sc ON sc.id=rs.symptom_id WHERE a.id=e.appointment_id) reported_symptoms,
+   (SELECT ar.other_symptoms FROM public.appointments a JOIN public.appointment_requests ar ON ar.id=a.request_id WHERE a.id=e.appointment_id) reported_other,
    (SELECT dg.diagnosis_code FROM public.diagnoses dg WHERE dg.encounter_id=e.id ORDER BY dg.created_at LIMIT 1) diagnosis_code,
    coalesce((SELECT jsonb_object_agg(k,v#>>'{}') FROM public.vital_signs vs,
     LATERAL jsonb_each(to_jsonb(vs)-ARRAY['id','encounter_id','recorded_by','recorded_at']) j(k,v)
@@ -81,7 +84,8 @@ BEGIN
  IF p_from IS NOT NULL AND p_to IS NOT NULL AND p_from>p_to THEN RAISE EXCEPTION 'Intervalo inválido' USING ERRCODE='22023'; END IF;
  SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY x.started_at DESC,x.id DESC),'[]') INTO result FROM (
  SELECT e.id,e.started_at,e.ended_at,e.subjective,e.objective,e.assessment,e.plan,
- concat_ws(' ',pr.first_name,pr.last_name) doctor_name,sp.name specialty,ar.reason,
+ concat_ws(' ',pr.first_name,pr.last_name) doctor_name,sp.name specialty,ar.reason,ar.other_symptoms reported_other,
+ (SELECT coalesce(jsonb_agg(sc.name ORDER BY sc.id),'[]') FROM public.appointment_request_symptoms rs JOIN public.symptom_catalog sc ON sc.id=rs.symptom_id WHERE rs.request_id=ar.id) reported_symptoms,
  (SELECT coalesce(jsonb_agg(jsonb_build_object('diagnosis_code',dg.diagnosis_code,'description',dg.description)),'[]') FROM public.diagnoses dg WHERE dg.encounter_id=e.id) diagnoses,
  (SELECT coalesce(jsonb_agg(to_jsonb(v)),'[]') FROM (SELECT weight_kg,height_cm,systolic,diastolic,temperature_c,heart_rate,recorded_at FROM public.vital_signs WHERE encounter_id=e.id ORDER BY recorded_at DESC,id LIMIT 1)v) vital_signs,
  (SELECT coalesce(jsonb_agg(jsonb_build_object('code',r.prescription_code,'issued_at',r.issued_at,'status',r.status,

@@ -35,7 +35,7 @@
       catch { throw new Error('No se pudo conectar con el hospital. Revisa la conexión e inténtalo de nuevo.'); }
       if (!response.ok) {
         let detail; try { detail = await response.json(); } catch { /* No clinical response bodies are surfaced. */ }
-        throw new APIError(response.status, detail?.code, detail?.message);
+        throw new APIError(response.status, detail?.error_code || detail?.code, detail?.message || detail?.msg);
       }
       if (response.status === 204) return null;
       const text = await response.text();
@@ -112,11 +112,23 @@
     // public.planning_revision: una fila que sube con cada cambio en appointments (RLS: admin, recepción o médico).
     async planningRevision() { const rows = await this.request('/rest/v1/planning_revision?select=revision&limit=1',undefined,await this.token(),'GET'); return Array.isArray(rows) && rows[0] ? Number(rows[0].revision) : null; }
     async doctorRPC(name,parameters={}) {
-      if(!['workspace','chart','start','save','finish','lab','prescribe','patients','patient_labs','admissions','admission_request','lab_catalog','lab_orders','labs','alerts'].includes(name))throw new Error('Operación médica no permitida.');
+      if(!['workspace','chart','start','save','finish','lab','prescribe','patients','patient_labs','admissions','admission_request','lab_catalog','lab_orders','labs','alerts','schedule'].includes(name))throw new Error('Operación médica no permitida.');
       return this.request('/rest/v1/rpc/doctor_native_'+name,parameters,await this.token());
     }
-    async changePassword(password) {
-      return this.request('/auth/v1/user', {password}, await this.token(), 'PUT');
+    // Cambio de contraseña desde Perfil (paciente y médico). 1) Se verifica la contraseña actual iniciando sesión con el
+    // correo de la cuenta; 2) con esa sesión recién autenticada se actualiza la contraseña en Supabase Auth (auth.users).
+    // La sesión nueva sustituye a la anterior. Nunca se guarda ni se registra ninguna contraseña.
+    async changePassword(current, next) {
+      const problem = root.HospitalCore.validatePasswordChange({current, next, confirm: next});
+      if (problem) throw new Error(problem.message);
+      const user = await this.request('/auth/v1/user', null, await this.token(), 'GET');
+      if (!user?.email) throw new Error('Tu cuenta no tiene un correo asociado. Contacta al hospital.');
+      let session;
+      try { session = await this.request('/auth/v1/token?grant_type=password', { email: user.email, password: current }); }
+      catch (error) { throw new Error(error.status === 400 ? 'La contraseña actual no es correcta.' : error.message); }
+      this.accept(session);
+      try { await this.request('/auth/v1/user', { password: next }, session.access_token, 'PUT'); }
+      catch (error) { throw new Error(root.HospitalCore.passwordChangeMessage(error.code)); }
     }
     async documentURL() { throw new Error('Los documentos todavía no están habilitados en Hospital Móviles.'); }
     async read(resource, cursor) {

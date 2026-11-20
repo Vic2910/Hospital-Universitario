@@ -31,8 +31,8 @@ assert.equal(c.matches({patient_name:'José Pérez'},'ana'),false);
 assert.equal(Array.from(c.agenda(two,'2026-11-20').day,a=>a.patient_name).includes('Ayer pendiente'),false,'Días previos no cuentan como citas del día');
 assert.throws(() => c.dayWindow('20-11-2026', 1));
 
-// Estados: Programada hasta abrir, En consulta abierta, Finalizada al cerrar.
-assert.deepEqual(['scheduled','confirmed','in_progress','completed','cancelled'].map(v => c.statusLabel(v)), ['Programada','Programada','En consulta','Finalizada','Cancelada']);
+// Etiquetas visibles (estados internos sin cambios): Pendiente, En consulta, Atendida, No atendida y Cancelada.
+assert.deepEqual(['scheduled','confirmed','in_progress','completed','no_show','cancelled'].map(v => c.statusLabel(v)), ['Pendiente','Pendiente','En consulta','Atendida','No atendida','Cancelada']);
 
 // Datos físicos: solo peso, altura y temperatura; sin texto, rangos de doctor_native_save e IMC calculado.
 assert.deepEqual(Array.from(c.vitals, v => v.key), ['weight_kg','height_cm','temperature_c']);
@@ -49,8 +49,9 @@ assert.equal(c.bmi({weight_kg:'70'}), null, 'No inventa IMC sin altura');
 assert.equal(c.vitals.some(v => ['respiratory_rate','oxygen_saturation'].includes(v.key)), false, 'Solo columnas existentes de vital_signs');
 
 // Tres campos obligatorios (síntomas, diagnóstico, observaciones); `plan` ya no se exige en el formulario.
-assert.deepEqual([...c.missingSections({subjective:'a', objective:' ', assessment:'', plan:''})], ['Diagnóstico','Observaciones']);
-assert.deepEqual([...c.missingSections({subjective:'a', objective:'b', assessment:'c', plan:''})], []);
+assert.deepEqual([...c.missingSections({subjective:'a', objective:' ', assessment:'', plan:''})], ['Exploración y observaciones','Diagnóstico','Plan de tratamiento']);
+assert.deepEqual([...c.missingSections({subjective:'a', objective:'b', assessment:'c', plan:'d'})], [], 'Las cuatro notas que exige doctor_native_finish');
+assert.equal(c.statusLabel('no_show'),'No atendida');
 assert.equal(c.seedSubjective({reason:'Dolor de garganta', symptoms:['Fiebre',' Tos '], other_symptoms:'Dolor al tragar'}), 'Síntomas referidos por el paciente: Fiebre, Tos\nOtros síntomas: Dolor al tragar', 'El motivo se muestra aparte');
 // Servidor sin la migración: se explica la causa sin inventar un plan.
 assert.match(c.finishError('Completa motivo, exploración, diagnóstico y tratamiento', {plan:''}), /doctor-consultation-six-fields\.sql/);
