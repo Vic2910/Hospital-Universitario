@@ -192,7 +192,10 @@
       if(p.cursor) filters.or='(starts_at.gt.'+p.cursor.value+',and(starts_at.eq.'+p.cursor.value+',id.gt.'+id(p.cursor.id)+'))';
       return [query('staff_shifts','id,staff_id,starts_at,ends_at,shift_type,status',filters,'starts_at.asc,id.asc')];
     }
-    if (kind === 'overview') return [query('announcements','id,title,content,published_at,expires_at',{is_public:'eq.true'},'published_at.desc',100)];
+    // Información pública: avisos vigentes, ocupación desde el estado de las camas (legible sin sesión) y médicos de turno
+    // (public_on_duty: solo nombre y especialidad; supabase/medicos-de-turno-publico.sql).
+    if (kind === 'overview') return [query('announcements','id,title,content,published_at,expires_at',{is_public:'eq.true'},'published_at.desc',100),
+      query('beds','state,active,rooms(active)',{},'code.asc',500),{path:'/rest/v1/rpc/public_on_duty',method:'POST',body:{}}];
     if (kind === 'workspace') {
       id(employee);
       return [query('appointments','*,patients(first_name,last_name,phone,patient_code)',{doctor_id:'eq.'+employee,starts_at:'gte.'+p.p_from,ends_at:'lte.'+p.p_to},'starts_at.asc,id.asc',1000)];
@@ -229,6 +232,12 @@
     return [query(table,select,filters,order+'.desc,id.desc')];
   }
   function field(label,value) { return {label:label,value:value == null || value === '' ? 'Sin registrar' : String(value)}; }
+  // Ocupación general: camas en servicio (cama y habitación activas) y cuántas están ocupadas. Sin datos de pacientes.
+  function overviewBeds(beds) {
+    if (!Array.isArray(beds) || !beds.length) return {capacity:null, occupied:null};
+    var usable = beds.filter(function (b) { return b.active !== false && !!b.rooms && b.rooms.active !== false; });
+    return {capacity:usable.length, occupied:usable.filter(function (b) { return b.state === 'ocupada'; }).length};
+  }
   function present(kind, p, a, results) {
     p=p||{}; var rows=results[0] || [], row, data;
     if(kind==='patientDashboard') {
@@ -242,7 +251,7 @@
     if(kind==='profile') return {person:{given_names:a.identity.first_name,family_names:a.identity.last_name},auth_email:a.email,contacts:a.identity.phone ? [{kind:'phone',value:a.identity.phone}] : [],professional:null};
     if(kind==='hospitalizations') return root.HospitalCore.hospitalizations.present(results[0]||[]);
     if(kind==='activity') return {}; // No invented counters; modules retrieve their own authorized rows.
-    if(kind==='overview') return {capacity:null,occupied:null,information:rows.filter(function(r){return !r.expires_at || new Date(r.expires_at)>new Date();}).map(function(r){return {id:r.id,title:r.title,body:r.content};}),on_duty:[]};
+    if(kind==='overview') return {capacity:overviewBeds(results[1]).capacity,occupied:overviewBeds(results[1]).occupied,on_duty:(Array.isArray(results[2])?results[2]:[]).filter(function(d){return d && d.name;}).map(function(d){return {name:String(d.name),specialty:String(d.specialty||'Medicina general')};}),information:rows.filter(function(r){return !r.expires_at || new Date(r.expires_at)>new Date();}).map(function(r){return {id:r.id,title:r.title,body:r.content};})};
     if(kind==='doctorWeek') return root.HospitalCore.doctorWeek(results[0]||[],results[1]||[],results[2]||[],p.week||root.HospitalCore.doctorWeekStart(),p.recurring||null);
     if(kind==='rooms' || kind==='shifts') { data=rows.slice(0,25);row=data[data.length-1];return {data:data,has_more:rows.length>25,next_cursor:rows.length>25 ? {id:row.id,value:kind==='shifts'?row.starts_at:null} : null}; }
     if(kind==='workspace') return {doctor_name:a.profile.preferred_name,facility_name:'Hospital Universitario',appointments:rows.map(function(r){return {id:r.id,patient_id:r.patient_id,patient_name:r.patients ? fullName(r.patients) : 'Paciente',record_number:r.patients ? r.patients.patient_code : '',phone:r.patients ? r.patients.phone : null,ticket_number:null,period:range(r),status:state(r.status),encounter_id:null};}),orders:[],tests:[],notifications:[],stats:{consultations:rows.length,completed_consultations:rows.filter(function(r){return r.status==='completada';}).length,issued_orders:0,pending_orders:0}};

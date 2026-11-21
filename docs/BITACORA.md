@@ -1,5 +1,13 @@
 # Bitácora de trabajo
 
+## 2026-11-20 — Información pública del paciente y avisos del paciente
+
+- **Objetivo:** cumplir «Información pública: estado general de ocupación, médicos de turno y avisos generales» y activar los avisos del paciente.
+- **Aplicado [Supabase]:** `paciente-avisos-solicitud-unica.sql` (avisos de cita programada/reprogramada/cancelada, receta entregada y solicitud rechazada; una sola solicitud activa también en el servidor) y `medicos-de-turno-publico.sql` (nuevo: `public.public_on_duty()`, solo nombre y especialidad de los médicos en jornada o turno ahora, sin ausencia activa; ejecutable por `anon` y `authenticated`).
+- **iOS y web-preview (núcleo compartido):** `hospital-core.js` `overview` consulta además `beds` (estado, sin pacientes) y `public_on_duty`; la ocupación cuenta camas activas de habitaciones activas. `ScreenCatalog.swift`: `OnDuty.department` opcional (la RPC no lo publica).
+- **Verificaciones:** `test-public-info` (nuevo), pruebas del paciente y del médico, test-preview, test-core, check-project.py y git diff --check. [Supabase] `public_on_duty` responde sin sesión (lista vacía a las 20:00, fuera de jornada) y con la misma lógica a las 10:00 devuelve 2 médicos con especialidades; un paciente real lee 17 camas (1 ocupada).
+- **Pendiente:** no hay avisos públicos publicados (0): publicarlos desde administración para la demo. Compilar en Mac.
+
 ## 2026-11-20 — Solicitud de ambulancia del médico (iOS y web-preview)
 
 - **Objetivo:** que el médico solicite el traslado en ambulancia de un paciente que atiende y siga su estado (requisito «Recurso crítico – Ambulancia» del enunciado).

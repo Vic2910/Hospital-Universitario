@@ -46,7 +46,7 @@ struct UserProfile: Decodable {
 
 struct HospitalOverview: Decodable {
     struct Notice: Decodable, Identifiable { let id: UUID; let title: String; let body: String }
-    struct OnDuty: Decodable { let name: String; let specialty: String; let department: String }
+    struct OnDuty: Decodable { let name: String; let specialty: String; var department: String? = nil }
     let capacity: Int?
     let occupied: Int?
     let information: [Notice]
