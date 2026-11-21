@@ -16,6 +16,8 @@
       this.ownLabOrders=[];this.ownLabPage=null;this.ownLabsError=null;
       this.admissions=[];this.admissionsPage=null;this.admissionsError=null;this.admissionForm=false;this.admissionReview=false;
       this.admission={category:'',priority:'normal',reason:'',observations:''};this.pendingAdmission=null;this.pendingAdmissionPatient=null;
+      this.transportBoard=null;this.transportsError=null;this.transportForm=false;this.transportReview=false;this.pendingTransport=null;this.pendingTransportPatient=null;
+      this.transport={contact:'',phone:'',origin:'',destination:'',reason:'',priority:'normal'};
       this.items = []; this.lines = []; this.documents = new Map(); this.filters = {from:'',to:'',query:''};
       this.day = localDay(new Date()); this.request = {specialty:'',reason:'',period:'manana',day:this.day,from:'08:00',to:'12:00'};
       this.consultation = {subjective:'',objective:'',assessment:'',plan:'',diagnosis_code:''}; this.vitals={}; this.stateFilter='pending'; this.seedDraft = true;
@@ -31,7 +33,7 @@
       this.role = role; this.access = access; this.facility = facility;
     }
     supports(role, page) {
-      return role === 'doctor' ? ['home','patients','consultation','chart','laboratory','prescriptions','notifications','profile','admissions'].includes(page)
+      return role === 'doctor' ? ['home','patients','consultation','chart','laboratory','prescriptions','notifications','profile','admissions','ambulance'].includes(page)
         : ['appointments','request','chart','history','prescriptions','laboratory','notifications','profile'].includes(page);
     }
     async loadAlerts(more=false) {
@@ -48,6 +50,11 @@
     async load(page, more = false) {
       if (!this.facility) throw new Error('No hay una sede autorizada.');
       if(this.role==='doctor'){await this.loadAlerts(page==='notifications'&&more);if(page==='notifications'){this.screen=page;return;}}
+      if(this.role==='doctor'&&page==='ambulance'){
+        this.screen=page;await this.loadTransports();
+        if(this.transportForm&&!this.directoryPage)await this.loadPatients();
+        return;
+      }
       if(this.role==='doctor'&&page==='admissions'){
         this.screen=page;await this.loadAdmissions(more);
         if(this.admissionForm&&!this.directoryPage)await this.loadPatients();
@@ -186,6 +193,42 @@
       this.pendingAdmission=null;this.admissionForm=false;this.admissionReview=false;this.admission={category:'',priority:'normal',reason:'',observations:''};
       await this.loadAdmissions();this.ui.message('Solicitud enviada a recepción. No se ha asignado habitación ni cama.');
     }
+    // Ambulancia (paridad con DoctorViewModel.loadTransports/requestTransport). Sin RPC nuevas.
+    async loadTransports(){
+      this.transportsError=null;
+      try{
+        const [units,items]=await Promise.all([this.api.doctorTransport('units'),this.api.doctorTransport('list')]);
+        if(!Array.isArray(units)||!Array.isArray(items))throw new Error('Respuesta de ambulancia inválida.');
+        this.transportBoard={units,items};
+      }catch(error){this.transportsError=error.message;if([401,403].includes(error.status))throw error;}
+    }
+    prefillTransportContact(){
+      const p=this.selectedPatient||this.appointment;if(!p)return;
+      if(!this.transport.contact)this.transport.contact=p.full_name||p.patient_name||'';
+      if(!this.transport.phone)this.transport.phone=p.phone||'';
+    }
+    transportComplete(){
+      const t=this.transport,ok=(v,max)=>!!v.trim()&&v.trim().length<=max;
+      return !!(this.selectedPatient?.id||this.appointment?.patient_id)&&['normal','urgente'].includes(t.priority)&&
+        ok(t.contact,200)&&ok(t.phone,50)&&ok(t.origin,1000)&&ok(t.destination,1000)&&ok(t.reason,4000);
+    }
+    resetTransportForm(){
+      this.transportForm=false;this.transportReview=false;this.pendingTransport=null;this.pendingTransportPatient=null;
+      this.transport={contact:'',phone:'',origin:'',destination:'',reason:'',priority:'normal'};
+    }
+    async sendTransport(){
+      if(!this.pendingTransport){
+        if(!this.transportComplete())throw new Error('Completa paciente autorizado, origen, destino, contacto, teléfono y motivo.');
+        const t=this.transport;
+        this.pendingTransport={p_patient:this.selectedPatient?.id||this.appointment?.patient_id,p_contact:t.contact.trim(),p_phone:t.phone.trim(),p_origin:t.origin.trim(),
+          p_destination:t.destination.trim(),p_reason:t.reason.trim(),p_priority:t.priority,p_key:root.crypto.randomUUID()};
+        this.pendingTransportPatient={...(this.selectedPatient||this.appointment)};
+      }
+      try{ await this.api.doctorTransport('request',this.pendingTransport); }
+      catch(error){ if([400,401,403,409,422].includes(error.status))this.pendingTransport=null; throw error; }
+      this.resetTransportForm();
+      await this.loadTransports();this.ui.message('Solicitud de ambulancia enviada. Administración la autoriza y asigna la unidad.');
+    }
     async mutation(name, parameters, success, after) {
       try { await this.api.operation(name,parameters); }
       catch (error) { const hint = name === 'startConsultation' ? clinical().startError(error.detail || '') : null; if (hint) throw new Error(hint); throw error; }
@@ -303,6 +346,7 @@
     }
     renderDoctor(parent,page) {
       if(page==='admissions'){this.admissionsView(parent);return;}
+      if(page==='ambulance'){this.ambulanceView(parent);return;}
       if (page === 'home' && this.workspace) { this.ui.doctorDashboard(parent,this); return; }
       if(['patients','chart'].includes(page)) {this.recordsView(parent);return;}
       if(page==='laboratory') {this.directoryView(parent,true);return;}
@@ -334,27 +378,16 @@
       if (page === 'laboratory') this.laboratoryForm(parent);
       if (page === 'prescriptions') this.prescriptionForm(parent);
     }
-    admissionsView(parent){
-      const category=value=>value==='vip'?'VIP':value==='semiprivada'?'Semiprivada':value;
-      const state=value=>({solicitado:'Pendiente de recepción',asignado:'Asignado',hospitalizado:'Ingresado',alta_medica:'Alta médica',cerrado:'Cerrado',cancelado:'Cancelado',rechazada:'Rechazada',cancelada:'Cancelada'}[value]||value);
-      const wrap=this.node('section',null,'doctor-directory admission-module'),hero=this.node('header',null,'directory-hero');
-      hero.append(this.node('small','INGRESOS HOSPITALARIOS'),this.node('h2','Solicita el cuidado que tu paciente necesita'),this.node('p','Tú indicas el motivo clínico. Recepción verifica disponibilidad y confirma la cama.'));wrap.append(hero);
-      if(this.admissionsError){wrap.append(this.ui.row('No se pudieron cargar las solicitudes',this.admissionsError));this.command(wrap,'Reintentar solicitudes',()=>this.loadAdmissions());}
-      if(!this.admissionForm){const open=this.command(wrap,'Nueva solicitud',async()=>{this.admissionForm=true;this.admissionReview=false;this.directoryQuery='';},true);open.className+=' admission-new';}
-      else{
-        const box=this.node('section',null,'admission-form-card admission-steps');box.append(this.node('h2','Nueva solicitud de ingreso'));
-        if(this.pendingAdmission)box.append(this.node('p','Envío sin confirmar. Reintenta la misma solicitud para evitar duplicados.','auth-notice'));
-        const patient=(this.pendingAdmission&&this.pendingAdmissionPatient)||this.selectedPatient||this.appointment;
-        const fields=this.node('fieldset');fields.disabled=!!this.pendingAdmission||this.ui.busy()||this.admissionReview;
-        // Paso 1 (paridad con DoctorModuleView.admissionPatientStep): sin texto no se muestra ningún listado.
-        const step1=this.block(fields,'1','Paciente a hospitalizar','Busca por nombre, apellido o DUI entre tus pacientes autorizados.','body');
+    // Paso 1 compartido por ingresos y ambulancia (paridad con DoctorModuleView.patientStep): sin texto no se muestra ningún listado.
+    patientStep(fields,title,patient,searchLabel){
+        const step1=this.block(fields,'1',title,'Busca por nombre, apellido o DUI entre tus pacientes autorizados.','body');
         if(patient){
           const chosen=this.node('div',null,'admission-patient');const info=this.node('div');
           info.append(this.node('strong',patient.full_name||patient.patient_name),this.node('small','Expediente '+(patient.record_number||'no disponible')+(patient.dui?' · DUI '+patient.dui:'')));
           chosen.append(this.node('span',this.initials(patient.full_name||patient.patient_name),'directory-avatar'),info,this.ui.button('Cambiar paciente',()=>{this.select('');this.directoryQuery='';this.ui.repaint();},'text-button'));step1.append(chosen);
         }else{
           const search=this.node('form',null,'record-search');search.setAttribute('role','search');
-          const input=this.node('input');input.type='search';input.value=this.directoryQuery||'';input.maxLength=120;input.placeholder='Nombre, apellido o DUI';input.autocomplete='off';input.setAttribute('aria-label','Buscar paciente para hospitalizar');
+          const input=this.node('input');input.type='search';input.value=this.directoryQuery||'';input.maxLength=120;input.placeholder='Nombre, apellido o DUI';input.autocomplete='off';input.setAttribute('aria-label',searchLabel);
           search.append(this.node('span','⌕','record-search-icon'),input);step1.append(search);
           const results=this.node('div',null,'record-results');step1.append(results);
           const paint=()=>{
@@ -376,6 +409,70 @@
           search.addEventListener('submit',event=>{event.preventDefault();clearTimeout(this.searchTimer);find();});
           paint();
         }
+    }
+    // Ambulancia del médico (paridad con DoctorModuleView.ambulanceView): unidad, solicitud y traslados visibles por RLS.
+    ambulanceView(parent){
+      const unitState=value=>({disponible:'Disponible',en_servicio:'En servicio',en_mantenimiento:'En mantenimiento'}[value]||value);
+      const state=value=>({pendiente:'Pendiente de autorización',autorizada:'Autorizada',despachada:'Ambulancia en camino',finalizada:'Finalizada',rechazada:'Rechazada',cancelada:'Cancelada'}[value]||value);
+      const wrap=this.node('section',null,'doctor-directory admission-module ambulance-module'),hero=this.node('header',null,'directory-hero');
+      hero.append(this.node('small','AMBULANCIA'),this.node('h2','Solicita el traslado de tu paciente'),this.node('p','Tú indicas origen, destino y motivo. Administración autoriza y despacha la unidad.'));wrap.append(hero);
+      for(const unit of this.transportBoard?.units||[]){
+        const card=this.ui.row('Unidad '+unit.code,unit.status==='disponible'?'Lista para despacho':'Las nuevas solicitudes quedan en espera',unitState(unit.status));card.className+=' ambulance-unit';wrap.append(card);
+      }
+      if(this.transportsError){wrap.append(this.ui.row('No se pudieron cargar los traslados',this.transportsError));this.command(wrap,'Reintentar traslados',()=>this.loadTransports());}
+      if(!this.transportForm){const open=this.command(wrap,'Solicitar ambulancia',async()=>{this.transportForm=true;this.transportReview=false;this.directoryQuery='';this.prefillTransportContact();},true);open.className+=' admission-new';}
+      else{
+        const box=this.node('section',null,'admission-form-card admission-steps');box.append(this.node('h2','Nueva solicitud de ambulancia'));
+        if(this.pendingTransport)box.append(this.node('p','Envío sin confirmar. Reintenta la misma solicitud para evitar duplicados.','auth-notice'));
+        const patient=(this.pendingTransport&&this.pendingTransportPatient)||this.selectedPatient||this.appointment;
+        if(patient)this.prefillTransportContact();
+        const fields=this.node('fieldset');fields.disabled=!!this.pendingTransport||this.ui.busy()||this.transportReview;
+        this.patientStep(fields,'Paciente a trasladar',patient,'Buscar paciente para trasladar');
+        const step2=this.block(fields,'2','Traslado','Indica dónde se recoge al paciente y a dónde se le lleva.','grid');
+        this.field(step2,'Origen (lugar de recogida)',this.transport,'origin','text').maxLength=1000;
+        this.field(step2,'Destino',this.transport,'destination','text').maxLength=1000;
+        this.field(step2,'Prioridad',this.transport,'priority','text',[['normal','Normal'],['urgente','Urgente']]);
+        const step3=this.block(fields,'3','Contacto y motivo','Persona a la que llamará el equipo de la ambulancia.','stethoscope');
+        this.field(step3,'Persona de contacto',this.transport,'contact','text').maxLength=200;
+        this.field(step3,'Teléfono de contacto',this.transport,'phone','tel').maxLength=50;
+        this.field(step3,'Motivo del traslado',this.transport,'reason','textarea').maxLength=4000;
+        box.append(fields);
+        if(this.transportReview||this.pendingTransport){
+          const p=this.pendingTransport||{p_origin:this.transport.origin,p_destination:this.transport.destination,p_priority:this.transport.priority,p_reason:this.transport.reason};
+          box.append(this.node('h3','Confirma la solicitud de ambulancia'),this.node('p',p.p_origin+' → '+p.p_destination+' · '+(p.p_priority==='urgente'?'Urgente':'Normal')),this.node('p',p.p_reason));
+          this.command(box,this.pendingTransport?'Reintentar el mismo envío':'Confirmar solicitud',()=>this.sendTransport(),true);
+          if(!this.pendingTransport)box.append(this.ui.button('Seguir editando',()=>{this.transportReview=false;this.ui.repaint();},'text-button'));
+        }else this.command(box,'Revisar y solicitar',async()=>{
+          if(!this.transportComplete())throw new Error('Completa paciente autorizado, origen, destino, contacto, teléfono y motivo.');
+          this.transportReview=true;
+        },true);
+        box.append(this.ui.button('Volver al listado',()=>{this.resetTransportForm();this.ui.repaint();},'text-button'));wrap.append(box);
+      }
+      const header=this.node('div',null,'admission-list-header');header.append(this.node('h2','Traslados de mis pacientes'));this.command(header,'Actualizar traslados',()=>this.loadTransports());wrap.append(header);
+      const items=this.transportBoard?.items||[];
+      if(!items.length&&!this.transportsError)wrap.append(this.ui.row('Sin traslados','Todavía no hay solicitudes de ambulancia para tus pacientes.'));
+      for(const item of items){
+        const name=[item.patient?.first_name,item.patient?.last_name].filter(Boolean).join(' ')||item.contact_name;
+        const card=this.ui.row(name,item.pickup_location+' → '+(item.destination||'Destino por confirmar')+' · '+dateTime(item.requested_at),state(item.status));card.className+=' admission-card'+(item.priority==='urgente'?' is-urgent':'');
+        const detail=this.node('details',null,'admission-detail');detail.append(this.node('summary','Ver detalle del traslado'));
+        for(const[label,value]of [['Motivo',item.reason],['Contacto',item.contact_name+' · '+item.contact_phone],['Prioridad',item.priority==='urgente'?'Urgente':'Normal'],['Respuesta de administración',item.decision_reason]])if(value)this.detail(detail,label,value);
+        card.append(detail);wrap.append(card);
+      }
+      parent.append(wrap);
+    }
+    admissionsView(parent){
+      const category=value=>value==='vip'?'VIP':value==='semiprivada'?'Semiprivada':value;
+      const state=value=>({solicitado:'Pendiente de recepción',asignado:'Asignado',hospitalizado:'Ingresado',alta_medica:'Alta médica',cerrado:'Cerrado',cancelado:'Cancelado',rechazada:'Rechazada',cancelada:'Cancelada'}[value]||value);
+      const wrap=this.node('section',null,'doctor-directory admission-module'),hero=this.node('header',null,'directory-hero');
+      hero.append(this.node('small','INGRESOS HOSPITALARIOS'),this.node('h2','Solicita el cuidado que tu paciente necesita'),this.node('p','Tú indicas el motivo clínico. Recepción verifica disponibilidad y confirma la cama.'));wrap.append(hero);
+      if(this.admissionsError){wrap.append(this.ui.row('No se pudieron cargar las solicitudes',this.admissionsError));this.command(wrap,'Reintentar solicitudes',()=>this.loadAdmissions());}
+      if(!this.admissionForm){const open=this.command(wrap,'Nueva solicitud',async()=>{this.admissionForm=true;this.admissionReview=false;this.directoryQuery='';},true);open.className+=' admission-new';}
+      else{
+        const box=this.node('section',null,'admission-form-card admission-steps');box.append(this.node('h2','Nueva solicitud de ingreso'));
+        if(this.pendingAdmission)box.append(this.node('p','Envío sin confirmar. Reintenta la misma solicitud para evitar duplicados.','auth-notice'));
+        const patient=(this.pendingAdmission&&this.pendingAdmissionPatient)||this.selectedPatient||this.appointment;
+        const fields=this.node('fieldset');fields.disabled=!!this.pendingAdmission||this.ui.busy()||this.admissionReview;
+        this.patientStep(fields,'Paciente a hospitalizar',patient,'Buscar paciente para hospitalizar');
         const step2=this.block(fields,'2','Cuidado requerido','La categoría no garantiza disponibilidad ni reserva habitación.','grid');
         this.field(step2,'Categoría de habitación',this.admission,'category','text',(this.admissionsPage?.categories||[]).map(c=>[c,category(c)]));
         if(!this.admissionsPage?.categories.length)step2.append(this.node('p','No hay categorías disponibles en el catálogo. Actualiza o contacta a recepción.','scope-note'));

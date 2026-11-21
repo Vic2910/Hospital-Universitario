@@ -11,6 +11,8 @@ protocol DoctorRepositoryProtocol {
     func patients(query: String, offset: Int) async throws -> DoctorPatientDirectoryPage
     func patientLabs(patient: UUID, offset: Int) async throws -> DoctorPatientLabPage
     func patientHospitalizations(patient: UUID) async throws -> PatientHospitalizations
+    func transports() async throws -> DoctorTransportBoard
+    func requestTransport(_ input: DoctorTransportInput) async throws
     func workspace(facility: UUID, from: Date, to: Date) async throws -> DoctorWorkspace
     func chart(patient: UUID, from: Date?, to: Date?, query: String) async throws -> DoctorPatientChart
     func start(appointment: UUID, requestKey: UUID) async throws
@@ -57,6 +59,17 @@ final class DoctorRepository: DoctorRepositoryProtocol {
     /// Hospitalizaciones del paciente (doctor_native_patient_hospitalizations, relación asistencial) vía HospitalCore.hospitalizations.
     func patientHospitalizations(patient: UUID) async throws -> PatientHospitalizations {
         try await api.operation("hospitalizations", parameters: ["patient": patient.uuidString])
+    }
+    /// Estado de la unidad y traslados visibles por RLS (sin RPC nuevas; ver HospitalAPI.doctorTransport).
+    func transports() async throws -> DoctorTransportBoard {
+        async let units: [DoctorAmbulanceUnit] = api.doctorTransport("units")
+        async let items: [DoctorTransportRequest] = api.doctorTransport("list")
+        return try await DoctorTransportBoard(units: units, items: items)
+    }
+    func requestTransport(_ input: DoctorTransportInput) async throws {
+        let _: DoctorJSON = try await api.doctorTransport("request", parameters: ["p_patient": input.patient.uuidString,
+            "p_contact": input.contact, "p_phone": input.phone, "p_origin": input.origin, "p_destination": input.destination,
+            "p_reason": input.reason, "p_priority": input.priority, "p_key": input.key.uuidString])
     }
 
     private func call<T: Decodable>(_ name: String, _ parameters: [String: DoctorJSON]) async throws -> T {
@@ -112,4 +125,7 @@ final class DoctorRepository: DoctorRepositoryProtocol {
 extension DoctorRepositoryProtocol {
     /// Implementación por defecto para repositorios de prueba sin hospitalizaciones.
     func patientHospitalizations(patient: UUID) async throws -> PatientHospitalizations { PatientHospitalizations(active: nil, previous: []) }
+    /// Repositorios de prueba sin ambulancia: tablero vacío; solicitar no está disponible.
+    func transports() async throws -> DoctorTransportBoard { DoctorTransportBoard(units: [], items: []) }
+    func requestTransport(_ input: DoctorTransportInput) async throws { throw HospitalError.message("La solicitud de ambulancia no está disponible.") }
 }

@@ -111,6 +111,14 @@
     }
     // public.planning_revision: una fila que sube con cada cambio en appointments (RLS: admin, recepción o médico).
     async planningRevision() { const rows = await this.request('/rest/v1/planning_revision?select=revision&limit=1',undefined,await this.token(),'GET'); return Array.isArray(rows) && rows[0] ? Number(rows[0].revision) : null; }
+    // Ambulancia del médico (paridad con HospitalAPI.doctorTransport): solicitud por RPC y lecturas protegidas por RLS.
+    async doctorTransport(kind,parameters={}) {
+      const token=await this.token();
+      if(kind==='request')return this.request('/rest/v1/rpc/request_medical_transport',parameters,token);
+      if(kind==='list')return this.request('/rest/v1/ambulance_requests?select=id,patient_id,contact_name,contact_phone,pickup_location,destination,reason,priority,status,requested_at,decision_reason,patient:patients(first_name,last_name)&order=requested_at.desc&limit=20',undefined,token,'GET');
+      if(kind==='units')return this.request('/rest/v1/ambulances?select=code,status,active&active=eq.true&order=id',undefined,token,'GET');
+      throw new Error('Operación de ambulancia no permitida.');
+    }
     async doctorRPC(name,parameters={}) {
       if(!['workspace','chart','start','save','finish','lab','prescribe','patients','patient_labs','admissions','admission_request','lab_catalog','lab_orders','labs','alerts','schedule','patient_hospitalizations'].includes(name))throw new Error('Operación médica no permitida.');
       return this.request('/rest/v1/rpc/doctor_native_'+name,parameters,await this.token());

@@ -170,7 +170,7 @@ struct ContentView: View {
             }
             .foregroundStyle(.white).padding(.horizontal, 24).padding(.top, 18).padding(.bottom, (store.screenID == "profile" || (isDoctor && store.screenID == "home") || (!isDoctor && ["chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) || (showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID))) ? 24 : 48)
             .frame(maxWidth: .infinity, alignment: .leading).background(HospitalTheme.wine.ignoresSafeArea(edges: .top))
-            if store.screenID != "profile" && !(isDoctor && ["home","patients","laboratory","admissions"].contains(store.screenID)) && !(!isDoctor && ["home", "chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) && !(showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID)) {
+            if store.screenID != "profile" && !(isDoctor && ["home","patients","laboratory","admissions","ambulance"].contains(store.screenID)) && !(!isDoctor && ["home", "chart", "laboratory", "appointments", "request", "schedule", "health", "information"].contains(store.screenID)) && !(showLabDesign && ["patients", "chart", "laboratory"].contains(store.screenID)) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").font(.system(size: 11))
                 TextField(isDoctor && ["agenda","consultation","patients"].contains(store.screenID) ? "Buscar paciente o expediente…" : screen?.search ?? "Buscar servicios…", text: $search).font(.system(size: 12)).autocorrectionDisabled()
@@ -243,7 +243,7 @@ struct ContentView: View {
            ((!isDoctor && ["appointments", "request", "chart", "history", "prescriptions", "laboratory"].contains(store.screenID)) || (!isDoctor && store.screenID == "notifications")) {
             MobileModuleView(model: modules, module: store.screenID, role: isDoctor ? "doctor" : "patient", search: search, period: store.period, navigate: go)
         } else if isDoctor, let doctor = store.doctor,
-           ["home", "agenda", "patients", "consultation", "chart", "laboratory", "notifications", "admissions"].contains(store.screenID) {
+           ["home", "agenda", "patients", "consultation", "chart", "laboratory", "notifications", "admissions", "ambulance"].contains(store.screenID) {
             DoctorModuleView(model: doctor, screenID: store.screenID, search: search, navigate: go, period: store.period)
         } else {
             switch store.screenID {

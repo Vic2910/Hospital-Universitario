@@ -178,11 +178,12 @@ final class HospitalStore: ObservableObject {
             }
             if role == "doctor", let identity = fresh.staff_id,
                let facility = fresh.roles.first(where: { $0.code == "doctor" })?.context_id,
-               ["home", "agenda", "patients", "consultation", "chart", "laboratory", "notifications", "prescriptions", "admissions"].contains(screenID) {
+               ["home", "agenda", "patients", "consultation", "chart", "laboratory", "notifications", "prescriptions", "admissions", "ambulance"].contains(screenID) {
                 doctor?.configure(facility: facility, identity: identity)
                 if screenID == "home" { doctor?.day = Date() }
                 await doctor?.refresh()
                 if screenID == "admissions" { await doctor?.loadAdmissions() }
+                if screenID == "ambulance" { await doctor?.loadTransports() }
                 return
             }
             if role == "patient" && screenID == "rooms" {

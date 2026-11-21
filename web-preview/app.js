@@ -443,7 +443,7 @@
     field.addEventListener('input', () => { search = field.value; const content = $('#screen-content'); if (content) renderContent(content); });
     searchbox.append(el('span', '⌕'), field);
     const content = el('div', null, 'screen-content'); content.id = 'screen-content'; content.setAttribute('aria-busy', String(busy)); renderContent(content);
-    const clinicalFlow = (['patients','chart','laboratory'].includes(page) && design)||(role==='doctor'&&['home','patients','laboratory','admissions'].includes(page));
+    const clinicalFlow = (['patients','chart','laboratory'].includes(page) && design)||(role==='doctor'&&['home','patients','laboratory','admissions','ambulance'].includes(page));
     if(clinicalFlow || page === 'profile' || (role === 'patient' && ['home','chart','laboratory','appointments','request','schedule','health','information'].includes(page))) { portal.className += ' clinical-flow'; portal.append(header,content,bottomBar()); }
     else portal.append(header,searchbox,content,bottomBar());
     if(role==='doctor'&&notificationsOpen)notificationPanel(portal);

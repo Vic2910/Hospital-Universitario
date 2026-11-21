@@ -10,6 +10,7 @@ struct DoctorModuleView: View {
     @State private var confirmFinish = false
     @State private var confirmLeave = false
     @State private var confirmAdmission = false
+    @State private var confirmTransport = false
     @State private var confirmLabs = false
     @State private var confirmSheetLabs = false
     @State private var confirmPrescription = false
@@ -38,7 +39,7 @@ struct DoctorModuleView: View {
                 }
             }
             if let workspace = model.workspace {
-                if !["home", "notifications", "consultation", "agenda", "patients", "chart", "laboratory", "admissions"].contains(screenID) { dayPicker }
+                if !["home", "notifications", "consultation", "agenda", "patients", "chart", "laboratory", "admissions", "ambulance"].contains(screenID) { dayPicker }
                 switch screenID {
                 case "home": dashboard(workspace)
                 // Expedientes: buscador y expediente sin selector desplegable (paridad con web-preview).
@@ -47,6 +48,7 @@ struct DoctorModuleView: View {
                 case "prescriptions": prescriptions(workspace)
                 case "laboratory": directory(workspace, laboratory: true)
                 case "admissions": admissionsView
+                case "ambulance": ambulanceView
                 case "notifications": notifications(model.alerts)
                 default: EmptyView()
                 }
@@ -79,6 +81,12 @@ struct DoctorModuleView: View {
             Button("Cancelar",role:.cancel) { }
         } message: {
             Text("Recepción verificará disponibilidad y confirmará la habitación y cama. Esta solicitud no ocupa una cama.")
+        }
+        .confirmationDialog("¿Solicitar la ambulancia para este paciente?", isPresented:$confirmTransport, titleVisibility:.visible) {
+            Button("Confirmar solicitud") { Task { await model.requestTransport() } }
+            Button("Cancelar",role:.cancel) { }
+        } message: {
+            Text("Administración autoriza el traslado y asigna la unidad y el conductor. Si la ambulancia está en servicio, la solicitud queda en espera.")
         }
         .confirmationDialog("¿Enviar los exámenes seleccionados al laboratorio?",isPresented:$confirmLabs,titleVisibility:.visible) {
             Button("Confirmar exámenes") { Task { await model.issueSelectedLabs() } }
@@ -188,16 +196,20 @@ struct DoctorModuleView: View {
         }.modifier(ConsultationCardStyle())
     }
     /// Paso 1: paciente elegido o buscador (nombre, apellido o DUI). Sin texto no se muestra ningún listado.
-    @ViewBuilder private var admissionPatientStep: some View {
+    private var admissionPatientStep: some View {
+        patientStep("Paciente a hospitalizar", searchLabel:"Buscar paciente para hospitalizar", pendingName:model.pendingAdmission?.patientName, pendingRecord:model.pendingAdmission?.recordNumber)
+    }
+    /// Buscador de pacientes autorizados compartido por ingresos y ambulancia.
+    @ViewBuilder private func patientStep(_ title:String, searchLabel:String, pendingName:String?, pendingRecord:String?) -> some View {
         VStack(alignment:.leading,spacing:12) {
-            ConsultationBlockHeader(letter:"1",icon:"person.crop.circle.badge.plus",title:"Paciente a hospitalizar",subtitle:"Busca por nombre, apellido o DUI entre tus pacientes autorizados.")
-            if let name=model.pendingAdmission?.patientName ?? model.selectedPatient?.full_name ?? model.selectedAppointment?.patient_name {
+            ConsultationBlockHeader(letter:"1",icon:"person.crop.circle.badge.plus",title:title,subtitle:"Busca por nombre, apellido o DUI entre tus pacientes autorizados.")
+            if let name=pendingName ?? model.selectedPatient?.full_name ?? model.selectedAppointment?.patient_name {
                 HStack(spacing:12) {
                     Text(DoctorAssignedPatient.initials(name)).font(.headline.bold()).foregroundStyle(HospitalTheme.wine)
                         .frame(width:48,height:48).background(HospitalTheme.rose,in:Circle())
                     VStack(alignment:.leading,spacing:3) {
                         Text(name).font(.headline)
-                        Text("Expediente \(model.pendingAdmission?.recordNumber ?? model.selectedPatient?.record_number ?? model.selectedAppointment?.record_number ?? "no disponible")").font(.caption.weight(.semibold)).foregroundStyle(HospitalTheme.wine)
+                        Text("Expediente \(pendingRecord ?? model.selectedPatient?.record_number ?? model.selectedAppointment?.record_number ?? "no disponible")").font(.caption.weight(.semibold)).foregroundStyle(HospitalTheme.wine)
                         if let dui=model.selectedPatient?.dui { Text("DUI \(dui)").font(.caption).foregroundStyle(HospitalTheme.secondary) }
                     }
                     Spacer(minLength:0)
@@ -208,7 +220,7 @@ struct DoctorModuleView: View {
                 HStack(spacing:10) {
                     Image(systemName:"magnifyingglass").foregroundStyle(HospitalTheme.wine)
                     TextField("Nombre, apellido o DUI",text:$model.patientQuery).textInputAutocapitalization(.never).autocorrectionDisabled()
-                        .accessibilityLabel("Buscar paciente para hospitalizar")
+                        .accessibilityLabel(searchLabel)
                     if model.directoryLoading { ProgressView().controlSize(.small) }
                     else if !model.patientQuery.isEmpty {
                         Button { model.patientQuery="" } label: { Image(systemName:"xmark.circle.fill").foregroundStyle(HospitalTheme.secondary) }.accessibilityLabel("Borrar búsqueda")
@@ -283,6 +295,144 @@ struct DoctorModuleView: View {
                     ForEach(Array(admission.history.enumerated()),id:\.offset) { _,event in
                         Label("\(DoctorAdmissionLabels.status(event.decision ?? event.status)) · \(DoctorDate.display(event.at))",systemImage:"circle.fill").font(.caption).foregroundStyle(HospitalTheme.secondary)
                     }
+                }.padding(.top,10)
+            }.font(.subheadline.weight(.semibold)).tint(HospitalTheme.wine)
+        }.modifier(ConsultationCardStyle())
+    }
+    /// Ambulancia: estado público de la unidad, solicitud de traslado (request_medical_transport) y traslados visibles por RLS.
+    private var ambulanceView: some View {
+        VStack(alignment:.leading,spacing:16) {
+            VStack(alignment:.leading,spacing:10) {
+                Label("AMBULANCIA",systemImage:"cross.case.fill").font(.caption2.weight(.heavy)).tracking(1.2).opacity(0.85)
+                Text("Solicita el traslado de tu paciente").font(.title2.bold())
+                Text("Tú indicas origen, destino y motivo. Administración autoriza y despacha la unidad.").font(.subheadline).opacity(0.9)
+            }.foregroundStyle(.white).padding(20).frame(maxWidth:.infinity,alignment:.leading)
+                .background(LinearGradient.vinoDestacado,in:RoundedRectangle(cornerRadius:24,style:.continuous))
+                .shadow(color:HospitalTheme.wine.opacity(0.18),radius:12,y:5)
+            ForEach(Array((model.transportBoard?.units ?? []).enumerated()),id:\.offset) { _,unit in unitCard(unit) }
+            if let error=model.transportsError {
+                HospitalNotice(text:error)
+                Button("Actualizar traslados",systemImage:"arrow.clockwise") { Task { await model.loadTransports() } }.tint(HospitalTheme.wine)
+            }
+            if !model.transportForm {
+                Button { model.patientQuery = ""; model.transportForm=true; model.prefillTransportContact() } label: {
+                    Label("Solicitar ambulancia",systemImage:"plus.circle.fill").font(.headline).foregroundStyle(.white)
+                        .frame(maxWidth:.infinity,minHeight:56)
+                        .background(LinearGradient.vinoDestacado,in:RoundedRectangle(cornerRadius:16,style:.continuous))
+                }.buttonStyle(.plain)
+            } else {
+                transportFormView
+            }
+            HStack {
+                Label("Traslados de mis pacientes",systemImage:"list.bullet.clipboard").font(.headline).foregroundStyle(HospitalTheme.ink)
+                Spacer()
+                if model.transportsLoading { ProgressView().controlSize(.small) }
+                Button { Task { await model.loadTransports() } } label: {
+                    Image(systemName:"arrow.clockwise").font(.subheadline.bold()).foregroundStyle(HospitalTheme.wine)
+                        .frame(width:36,height:36).background(HospitalTheme.rose,in:Circle())
+                }.buttonStyle(.plain).accessibilityLabel("Actualizar traslados")
+            }.padding(.top,4)
+            if (model.transportBoard?.items ?? []).isEmpty && !model.transportsLoading && model.transportsError == nil {
+                doctorEmpty(icon:"cross.case",title:"Sin traslados",text:"Todavía no hay solicitudes de ambulancia para tus pacientes.")
+            }
+            ForEach(model.transportBoard?.items ?? []) { item in transportCard(item) }
+        }.task { await model.loadTransports() }
+            // Búsqueda del paciente con espera breve, igual que en ingresos.
+            .task(id:model.patientQuery) {
+                let query=model.patientQuery.trimmingCharacters(in:.whitespacesAndNewlines)
+                if model.transportForm && model.selectedPatient == nil && model.selectedAppointment == nil && query.count >= 2 { await model.searchPatients() }
+            }
+            .onChange(of:model.selectedPatient?.id) { _,_ in if model.transportForm { model.prefillTransportContact() } }
+    }
+    private func unitCard(_ unit:DoctorAmbulanceUnit) -> some View {
+        let available=unit.status == "disponible"
+        return HStack(spacing:12) {
+            Image(systemName:"car.side.fill").font(.headline).foregroundStyle(HospitalTheme.wine)
+                .frame(width:42,height:42).background(HospitalTheme.rose,in:RoundedRectangle(cornerRadius:12,style:.continuous))
+            VStack(alignment:.leading,spacing:3) {
+                Text("Unidad \(unit.code)").font(.headline)
+                Text(available ? "Lista para despacho" : "Las nuevas solicitudes quedan en espera").font(.caption).foregroundStyle(HospitalTheme.secondary)
+            }
+            Spacer(minLength:0)
+            Text(DoctorTransportLabels.unit(unit.status)).font(.caption2.bold()).padding(.horizontal,8).padding(.vertical,4)
+                .foregroundStyle(available ? Color(red:0.13,green:0.5,blue:0.3) : HospitalTheme.wine)
+                .background(available ? HospitalTheme.green : HospitalTheme.rose,in:Capsule())
+        }.modifier(ConsultationCardStyle()).accessibilityElement(children:.combine)
+    }
+    private var transportFormView: some View {
+        VStack(alignment:.leading,spacing:18) {
+            HStack {
+                Text("Nueva solicitud de ambulancia").font(.title3.bold())
+                Spacer()
+                Button("Cancelar") { model.resetTransportForm() }.font(.subheadline.weight(.semibold)).tint(HospitalTheme.wine)
+            }
+            if let pending=model.pendingTransport {
+                VStack(alignment:.leading,spacing:8) {
+                    Label("Envío sin confirmar",systemImage:"exclamationmark.arrow.triangle.2.circlepath").font(.subheadline.bold())
+                    Text("Reintenta la misma solicitud para evitar duplicados.").font(.footnote)
+                    Text("\(pending.patientName) · \(pending.origin) → \(pending.destination)").font(.caption.weight(.semibold))
+                }.foregroundStyle(HospitalTheme.wine).padding(14).frame(maxWidth:.infinity,alignment:.leading)
+                    .background(HospitalTheme.rose,in:RoundedRectangle(cornerRadius:14,style:.continuous))
+            }
+            Group {
+                patientStep("Paciente a trasladar", searchLabel:"Buscar paciente para trasladar", pendingName:model.pendingTransport?.patientName, pendingRecord:nil)
+                Divider()
+                VStack(alignment:.leading,spacing:14) {
+                    ConsultationBlockHeader(letter:"2",icon:"map",title:"Traslado",subtitle:"Indica dónde se recoge al paciente y a dónde se le lleva.")
+                    transportField("Origen (lugar de recogida)",text:$model.transportOrigin,placeholder:"Dirección o servicio de origen")
+                    transportField("Destino",text:$model.transportDestination,placeholder:"Hospital, servicio o dirección de destino")
+                    Text("Prioridad").font(.subheadline.weight(.semibold))
+                    Picker("Prioridad",selection:$model.transportPriority) {
+                        Text("Normal").tag("normal")
+                        Text("Urgente").tag("urgente")
+                    }.pickerStyle(.segmented)
+                }
+                Divider()
+                VStack(alignment:.leading,spacing:14) {
+                    ConsultationBlockHeader(letter:"3",icon:"phone",title:"Contacto y motivo",subtitle:"Persona a la que llamará el equipo de la ambulancia.")
+                    transportField("Persona de contacto",text:$model.transportContact,placeholder:"Nombre del contacto")
+                    transportField("Teléfono de contacto",text:$model.transportPhone,placeholder:"Teléfono",keyboard:.phonePad)
+                    ConsultationNoteField(icon:"cross.case",title:"Motivo del traslado",placeholder:"Describe por qué el paciente necesita la ambulancia",text:$model.transportReason)
+                }
+            }.disabled(model.pendingTransport != nil)
+            Button { confirmTransport=true } label: {
+                Label(model.pendingTransport == nil ? "Revisar y solicitar" : "Reintentar el mismo envío",systemImage:"paperplane.fill").font(.headline).foregroundStyle(.white)
+                    .frame(maxWidth:.infinity,minHeight:54)
+                    .background(model.canRequestTransport ? AnyShapeStyle(LinearGradient.vinoDestacado) : AnyShapeStyle(HospitalTheme.secondary),in:RoundedRectangle(cornerRadius:16,style:.continuous))
+            }.buttonStyle(.plain).disabled(!model.canRequestTransport)
+        }.modifier(ConsultationCardStyle())
+    }
+    private func transportField(_ title:String,text:Binding<String>,placeholder:String,keyboard:UIKeyboardType = .default) -> some View {
+        VStack(alignment:.leading,spacing:6) {
+            Text(title).font(.subheadline.weight(.semibold))
+            TextField(placeholder,text:text).keyboardType(keyboard).accessibilityLabel(title)
+                .padding(14).background(HospitalTheme.background,in:RoundedRectangle(cornerRadius:12,style:.continuous))
+        }
+    }
+    private func transportCard(_ item:DoctorTransportRequest) -> some View {
+        let done=["despachada","finalizada"].contains(item.status), closed=["rechazada","cancelada"].contains(item.status)
+        return VStack(alignment:.leading,spacing:10) {
+            HStack(alignment:.top,spacing:12) {
+                Image(systemName:"cross.case.fill").font(.headline).foregroundStyle(HospitalTheme.wine)
+                    .frame(width:42,height:42).background(HospitalTheme.rose,in:RoundedRectangle(cornerRadius:12,style:.continuous))
+                VStack(alignment:.leading,spacing:4) {
+                    Text(item.patientName ?? item.contact_name).font(.headline)
+                    Text(DoctorDate.display(item.requested_at)).font(.caption).foregroundStyle(HospitalTheme.secondary)
+                }
+                Spacer(minLength:0)
+                Text(DoctorTransportLabels.status(item.status)).font(.caption2.bold()).padding(.horizontal,8).padding(.vertical,4)
+                    .foregroundStyle(done ? Color(red:0.13,green:0.5,blue:0.3) : closed ? HospitalTheme.secondary : HospitalTheme.wine)
+                    .background(done ? HospitalTheme.green : closed ? HospitalTheme.background : HospitalTheme.rose,in:Capsule())
+            }
+            Label("\(item.pickup_location) → \(item.destination ?? "Destino por confirmar")",systemImage:"map").font(.subheadline)
+            if item.priority == "urgente" {
+                choiceChip("Urgente",icon:"exclamationmark.triangle.fill",selected:true) {}.allowsHitTesting(false)
+            }
+            DisclosureGroup("Ver detalle del traslado") {
+                VStack(alignment:.leading,spacing:12) {
+                    detail("Motivo",item.reason)
+                    detail("Contacto","\(item.contact_name) · \(item.contact_phone)")
+                    if let reason=item.decision_reason { detail("Respuesta de administración",reason) }
                 }.padding(.top,10)
             }.font(.subheadline.weight(.semibold)).tint(HospitalTheme.wine)
         }.modifier(ConsultationCardStyle())

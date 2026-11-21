@@ -132,6 +132,23 @@ final class HospitalAPI {
         let data = try JSONSerialization.data(withJSONObject: value, options: .fragmentsAllowed)
         return try JSONDecoder().decode(T.self, from: data)
     }
+    /// Ambulancia del médico. "request" → request_medical_transport (exige que el médico trate al paciente);
+    /// "list" → traslados visibles por RLS (los propios y los de sus pacientes); "units" → estado público de la unidad.
+    func doctorTransport<T: Decodable>(_ kind: String, parameters: [String: Any] = [:]) async throws -> T {
+        let value: Any
+        switch kind {
+        case "request":
+            value = try await request("/rest/v1/rpc/request_medical_transport", body: parameters, method: "POST")
+        case "list":
+            value = try await request("/rest/v1/ambulance_requests?select=id,patient_id,contact_name,contact_phone,pickup_location,destination,reason,priority,status,requested_at,decision_reason,patient:patients(first_name,last_name)&order=requested_at.desc&limit=20")
+        case "units":
+            value = try await request("/rest/v1/ambulances?select=code,status,active&active=eq.true&order=id")
+        default:
+            throw HospitalError.message("Operación de ambulancia no permitida.")
+        }
+        let data = try JSONSerialization.data(withJSONObject: value, options: .fragmentsAllowed)
+        return try JSONDecoder().decode(T.self, from: data)
+    }
     /// Lectura de una sola fila (RLS: admin, recepción o médico); sirve para saber si la agenda cambió sin pedirla entera.
     func planningRevision() async throws -> Int64? {
         let rows = try await request("/rest/v1/planning_revision?select=revision&limit=1") as? [[String: Any]]

@@ -1,5 +1,14 @@
 # Bitácora de trabajo
 
+## 2026-11-20 — Solicitud de ambulancia del médico (iOS y web-preview)
+
+- **Objetivo:** que el médico solicite el traslado en ambulancia de un paciente que atiende y siga su estado (requisito «Recurso crítico – Ambulancia» del enunciado).
+- **Backend:** sin SQL nuevo. Reutiliza `request_medical_transport` (exige `treats_patient`; clave `p_key` idempotente), la RLS de `ambulance_requests` (solicitudes propias y de sus pacientes) y `ambulances` (legible por usuarios autenticados).
+- **iOS:** pantalla nueva `ambulance` en «Más» (`Shared/screens.json`). `HospitalAPI.doctorTransport`, `DoctorRepository.transports/requestTransport`, `DoctorViewModel` (estado, validación, reintento con la misma clave), `DoctorModuleView.ambulanceView` y el buscador de pacientes compartido `patientStep` (ingresos y ambulancia). Rutas en `ContentView.swift` y `HospitalStore.swift`.
+- **web-preview:** `api.js doctorTransport`, `modules.js ambulanceView/loadTransports/sendTransport` y `patientStep` compartido; `app.js` con la pantalla en flujo clínico.
+- **Verificaciones:** `test-doctor-ambulance` (nuevo: unidad, paciente autorizado, contacto propuesto, confirmación explícita, reintento con la misma clave y sin duplicados), test-preview (22 pantallas), test-doctor-admissions, test-doctor-preview-live, test-doctor-directory, test-core, check-project.py (22 pantallas) y git diff --check. [Supabase, transacción revertida] un médico real ve la unidad, crea la solicitud para su paciente y la lee con el nombre del paciente; un paciente ajeno se rechaza con 42501.
+- **Pendiente:** compilar y revisar en Mac (⌘B, ⌘U); probar con una cuenta real de médico.
+
 ## 2026-11-20 — Aplicado hospitalizaciones-paciente.sql en Hospital Móviles
 
 - **Autorización:** el usuario revisó el SQL y pidió aplicarlo.

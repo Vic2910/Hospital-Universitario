@@ -47,6 +47,59 @@ struct DoctorAdmissionInput: Sendable {
     let key: UUID
 }
 
+/// Traslado en ambulancia visible para el médico (RLS de public.ambulance_requests: los que solicitó y los de sus pacientes).
+struct DoctorTransportRequest: Decodable, Identifiable, Sendable {
+    struct Patient: Decodable, Sendable { let first_name: String?; let last_name: String? }
+    let id: UUID
+    let patient_id: UUID?
+    let contact_name: String
+    let contact_phone: String
+    let pickup_location: String
+    let destination: String?
+    let reason: String
+    let priority: String
+    let status: String
+    let requested_at: String
+    let decision_reason: String?
+    var patient: Patient? = nil
+    var patientName: String? {
+        let name = [patient?.first_name, patient?.last_name].compactMap { $0 }.joined(separator: " ")
+        return name.isEmpty ? nil : name
+    }
+}
+/// Estado público de la unidad (public.ambulances es legible por cualquier usuario autenticado).
+struct DoctorAmbulanceUnit: Decodable, Sendable {
+    let code: String
+    let status: String
+    let active: Bool
+}
+struct DoctorTransportBoard: Sendable {
+    let units: [DoctorAmbulanceUnit]
+    let items: [DoctorTransportRequest]
+}
+/// request_medical_transport: el servidor exige que el médico trate al paciente (private.treats_patient).
+/// La misma clave reintenta el mismo envío sin duplicar la solicitud.
+struct DoctorTransportInput: Sendable {
+    let patient: UUID
+    let patientName: String
+    let contact: String
+    let phone: String
+    let origin: String
+    let destination: String
+    let reason: String
+    let priority: String
+    let key: UUID
+}
+enum DoctorTransportLabels {
+    static func status(_ value: String) -> String {
+        ["pendiente": "Pendiente de autorización", "autorizada": "Autorizada", "despachada": "Ambulancia en camino",
+         "finalizada": "Finalizada", "rechazada": "Rechazada", "cancelada": "Cancelada"][value] ?? value
+    }
+    static func unit(_ value: String) -> String {
+        ["disponible": "Disponible", "en_servicio": "En servicio", "en_mantenimiento": "En mantenimiento"][value] ?? value
+    }
+}
+
 enum DoctorJSON: Codable, Sendable, Equatable {
     case string(String), number(Int), decimal(Decimal), bool(Bool), object([String: DoctorJSON]), array([DoctorJSON]), null
 

@@ -123,8 +123,8 @@ for (const role of ['patient','doctor']) {
   ui.get('live-mode').listeners.click(); await settle(); assert.ok(ui.get('password'));
   console.log(`OK Diseño ${role}: todas las pantallas navegables; cero llamadas a Supabase`);
 }
-assert.equal(catalog.patient.length + catalog.doctor.length,21);
-console.log('Recorridos actuales aprobados; 21 pantallas comprobadas.');
+assert.equal(catalog.patient.length + catalog.doctor.length,22);
+console.log('Recorridos actuales aprobados; 22 pantallas comprobadas.');
 
 // Agendamiento local: comportamiento completo sin escrituras al servidor.
 for (const mode of ['design']) {

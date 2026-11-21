@@ -36,6 +36,19 @@ final class DoctorViewModel: ObservableObject {
     @Published var admissionObservations = ""
     @Published private(set) var pendingAdmission: DoctorAdmissionInput?
     private var admissionsGeneration = UUID()
+    // Ambulancia: estado de la unidad, traslados visibles y formulario de solicitud (request_medical_transport).
+    @Published private(set) var transportBoard: DoctorTransportBoard?
+    @Published private(set) var transportsLoading = false
+    @Published private(set) var transportsError: String?
+    @Published var transportForm = false
+    @Published var transportContact = ""
+    @Published var transportPhone = ""
+    @Published var transportOrigin = ""
+    @Published var transportDestination = ""
+    @Published var transportReason = ""
+    @Published var transportPriority = "normal"
+    @Published private(set) var pendingTransport: DoctorTransportInput?
+    private var transportsGeneration = UUID()
     @Published private(set) var patientDirectory: [DoctorAssignedPatient] = []
     @Published private(set) var directoryPage: DoctorPatientDirectoryPage?
     @Published private(set) var directoryLoading = false
@@ -142,6 +155,7 @@ final class DoctorViewModel: ObservableObject {
         pendingLabs = nil; selectedLabIDs = []; labQuery = ""; labCategory = "all"
         admissionsGeneration = UUID(); admissions = []; admissionsPage = nil; admissionsLoading = false; admissionsError = nil
         admissionForm = false; admissionCategory = ""; admissionPriority = "normal"; admissionReason = ""; admissionObservations = ""; pendingAdmission = nil
+        transportsGeneration = UUID(); transportBoard = nil; transportsLoading = false; transportsError = nil; resetTransportForm()
         directoryGeneration = UUID(); patientDirectory = []; directoryPage = nil; directoryLoading = false
         directoryError = nil; patientQuery = ""; lastDirectoryQuery = nil; selectedPatient = nil; patientLabs = []; patientLabPage = nil
         patientLabsLoading = false; patientLabsError = nil
@@ -406,6 +420,60 @@ final class DoctorViewModel: ObservableObject {
             if let failure = error as? BackendFailure, [400,401,403,409,422].contains(failure.status) { pendingAdmission = nil }
             if error is HospitalError { pendingAdmission = nil }
         }
+    }
+
+    func loadTransports() async {
+        guard facility != nil, !saving else { return }
+        let scope = generation, request = UUID(); transportsGeneration = request
+        transportsLoading = true; transportsError = nil
+        defer { if scope == generation && request == transportsGeneration { transportsLoading = false } }
+        do {
+            let board = try await repository.transports()
+            guard scope == generation, request == transportsGeneration, !Task.isCancelled else { return }
+            transportBoard = board
+        } catch {
+            if scope == generation && request == transportsGeneration { transportsError = Self.describe(error) }
+        }
+    }
+    /// Contacto y teléfono se proponen desde el paciente elegido; el médico puede corregirlos.
+    func prefillTransportContact() {
+        if transportContact.isEmpty, let name = selectedPatient?.full_name ?? selectedAppointment?.patient_name { transportContact = name }
+        if transportPhone.isEmpty, let phone = selectedPatient?.phone ?? selectedAppointment?.phone { transportPhone = phone }
+    }
+    var canRequestTransport: Bool {
+        if pendingTransport != nil { return true }
+        func filled(_ value: String, _ limit: Int) -> Bool { let text = value.trimmingCharacters(in: .whitespacesAndNewlines); return !text.isEmpty && text.count <= limit }
+        return (selectedPatient?.id ?? selectedAppointment?.patient_id) != nil && ["normal", "urgente"].contains(transportPriority) &&
+            filled(transportContact, 200) && filled(transportPhone, 50) && filled(transportOrigin, 1000) &&
+            filled(transportDestination, 1000) && filled(transportReason, 4000)
+    }
+    func requestTransport() async {
+        guard canRequestTransport, !saving, !loadingChart else { return }
+        if pendingTransport == nil, let patient = selectedPatient?.id ?? selectedAppointment?.patient_id {
+            let clean = { (value: String) in value.trimmingCharacters(in: .whitespacesAndNewlines) }
+            pendingTransport = DoctorTransportInput(patient: patient, patientName: selectedPatient?.full_name ?? selectedAppointment?.patient_name ?? "",
+                contact: clean(transportContact), phone: clean(transportPhone), origin: clean(transportOrigin),
+                destination: clean(transportDestination), reason: clean(transportReason), priority: transportPriority, key: UUID())
+        }
+        guard let input = pendingTransport else { return }
+        let scope = generation; saving = true; transportsError = nil; confirmation = nil
+        do {
+            try await repository.requestTransport(input)
+            guard scope == generation else { return }
+            resetTransportForm()
+            saving = false; confirmation = "Solicitud de ambulancia enviada. Administración la autoriza y asigna la unidad."
+            await loadTransports()
+        } catch {
+            guard scope == generation else { return }
+            saving = false; transportsError = Self.describe(error)
+            // Igual que en ingresos: un rechazo conocido descarta el envío; un fallo de red conserva datos y clave para reintentar sin duplicar.
+            if let failure = error as? BackendFailure, [400,401,403,409,422].contains(failure.status) { pendingTransport = nil }
+            if error is HospitalError { pendingTransport = nil }
+        }
+    }
+    func resetTransportForm() {
+        transportForm = false; pendingTransport = nil; transportPriority = "normal"
+        transportContact = ""; transportPhone = ""; transportOrigin = ""; transportDestination = ""; transportReason = ""
     }
 
     func startConsultation() async {
