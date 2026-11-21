@@ -8,9 +8,11 @@
     ];
     static fromItems(items){return items.map(item=>{
       const fields=item.details||[],state=(fields.find(field=>field.label.toLocaleLowerCase('es')==='estado de retiro')?.value||item.status||'').trim().toLowerCase();
-      const pickup=['retirada','dispensed','collected','withdrawn'].includes(state)?'Retirada':['pendiente','pickup_pending','pending'].includes(state)?'Pendiente':'Retiro por confirmar';
+      const pickup=['retirada','entregada','dispensed','collected','withdrawn'].includes(state)?'Retirada':['pendiente','pickup_pending','pending'].includes(state)?'Pendiente':'Retiro por confirmar';
       const date=new Date(item.event_at),dateLabel=Number.isFinite(date.getTime())?new Intl.DateTimeFormat('es-GT',{timeZone:'America/Guatemala',day:'numeric',month:'short',year:'numeric'}).format(date):missing;
-      const medicines=fields.filter(field=>field.label.toLocaleLowerCase('es')!=='estado de retiro').map(field=>({name:field.label,dose:missing,frequency:missing,route:missing,duration:missing,quantity:missing,observations:field.value||missing}));
+      // Paridad con PatientPrescriptionsView.from (Swift): campos separados cuando el núcleo los publica.
+      const structured=(item.medicines||[]).map(m=>({name:m.name,dose:m.dose||missing,frequency:m.frequency||missing,route:m.route||missing,duration:m.duration||missing,quantity:m.quantity||missing,observations:m.observations||missing}));
+      const medicines=structured.length?structured:fields.filter(field=>field.label.toLocaleLowerCase('es')!=='estado de retiro').map(field=>({name:field.label,dose:missing,frequency:missing,route:missing,duration:missing,quantity:missing,observations:field.value||missing}));
       return{id:item.id,issuedAt:item.event_at,dateLabel,pickup,medicines:medicines.length?medicines:[{name:item.title,dose:missing,frequency:missing,route:missing,duration:missing,quantity:missing,observations:item.subtitle||missing}]};
     });}
     constructor(ui){this.ui=ui;}

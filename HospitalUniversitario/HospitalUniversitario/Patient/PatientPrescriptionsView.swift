@@ -25,9 +25,13 @@ struct PatientPrescriptionRecord: Identifiable, Codable {
     static func from(_ item: MobileItem) -> Self {
         let state = item.details.first { $0.label.localizedCaseInsensitiveCompare("Estado de retiro") == .orderedSame }?.value.lowercased() ?? item.status.lowercased()
         let normalized = state.trimmingCharacters(in: .whitespacesAndNewlines)
-        let pickup = ["retirada", "dispensed", "collected", "withdrawn"].contains(normalized) ? "Retirada" : ["pendiente", "pickup_pending", "pending"].contains(normalized) ? "Pendiente" : "Retiro por confirmar"
+        let pickup = ["retirada", "entregada", "dispensed", "collected", "withdrawn"].contains(normalized) ? "Retirada" : ["pendiente", "pickup_pending", "pending"].contains(normalized) ? "Pendiente" : "Retiro por confirmar"
         let format = DateFormatter(); format.locale = Locale(identifier: "es_GT"); format.timeZone = TimeZone(identifier: "America/Guatemala"); format.dateFormat = "d MMM yyyy"
-        let rows = item.details.filter { $0.label.localizedCaseInsensitiveCompare("Estado de retiro") != .orderedSame }.map {
+        let structured = (item.medicines ?? []).map {
+            PatientPrescriptionMedicine(name: $0.name, dose: $0.dose ?? missing, frequency: $0.frequency ?? missing, route: $0.route ?? missing,
+                duration: $0.duration ?? missing, quantity: $0.quantity ?? missing, observations: $0.observations ?? missing)
+        }
+        let rows = !structured.isEmpty ? structured : item.details.filter { $0.label.localizedCaseInsensitiveCompare("Estado de retiro") != .orderedSame }.map {
             PatientPrescriptionMedicine(name: $0.label, dose: missing, frequency: missing, route: missing, duration: missing, quantity: missing, observations: $0.value.isEmpty ? missing : $0.value)
         }
         return .init(id: item.id.uuidString, issuedAt: item.event_at, dateLabel: DoctorDate.parse(item.event_at).map { format.string(from: $0) } ?? missing,

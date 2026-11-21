@@ -1,5 +1,15 @@
 # Bitácora de trabajo
 
+## 2026-11-21 — Correcciones del flujo Doctor → Paciente → Farmacia
+
+- **Recetas del paciente [hallazgo en Supabase]:** la receta se guardaba bien (dosis, unidad, frecuencia, vía, duración, cantidad y observaciones en `prescription_items`), pero `hospital-core.js` las unía en un solo texto y «Mis recetas» lo mostraba como observación. Ahora el núcleo publica `medicines` con cada campo y `PatientPrescriptionsView` (Swift) y `patient-prescriptions.js` los usan; también pide `duration_days` y «entregada» se muestra como retirada.
+- **Exámenes no enviados [hallazgo en registros]:** durante la consulta se abrió el catálogo pero nunca se llamó a `doctor_native_labs`; al finalizar se perdían los exámenes elegidos sin confirmar. Ahora finalizar se bloquea con «Confirma el envío de los exámenes seleccionados o quítalos» (`finishBlockers` en Swift y web-preview).
+- **Unidad de dosis:** selector con `DoctorClinicalRules.doseUnits` ↔ `HospitalCore.doctorClinical.doseUnits`.
+- **web-preview:** la barra «Guardar avances» deja de ser fija (`position:sticky`) y ya no tapa el formulario.
+- **Inventario [Supabase, panel web]:** `pharmacy_set_prescription_status` descuenta stock al entregar y lo devuelve al volver a pendiente, con movimientos; sin stock suficiente no se entrega (migración `20261121050000_pharmacy_stock_discount` en AdminHospital).
+- **Verificaciones:** `test-patient-prescriptions` (nuevo), las pruebas del doctor y del paciente, test-preview, test-core, check-project.py y git diff --check. [Supabase, transacción revertida] entregar/devolver la receta REC-7AAB1D12DDE2 ajusta el stock 100→110→100 sin doble descuento y rechaza con stock insuficiente.
+- **Pendiente:** compilar en Mac; la receta REC-7AAB1D12DDE2 se entregó antes de la corrección y su stock (100) no se descontó.
+
 ## 2026-11-20 — Información pública del paciente y avisos del paciente
 
 - **Objetivo:** cumplir «Información pública: estado general de ocupación, médicos de turno y avisos generales» y activar los avisos del paciente.

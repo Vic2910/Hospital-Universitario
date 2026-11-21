@@ -541,6 +541,8 @@ final class DoctorViewModel: ObservableObject {
         var values = draft.missingSections.map { "Completa: \($0)" }
         if !vitalIssues.isEmpty { values.append("Corrige los datos físicos marcados") }
         if !rxLines.isEmpty { values.append("Emite o retira los medicamentos de la receta en preparación") }
+        // Exámenes elegidos pero sin confirmar el envío: finalizar los perdería sin aviso.
+        if !selectedLabIDs.isEmpty || pendingLabs != nil { values.append("Confirma el envío de los exámenes seleccionados o quítalos") }
         if conflictNote != nil { values.append("Resuelve la diferencia con la versión guardada") }
         return values
     }

@@ -397,6 +397,8 @@ enum DoctorClinicalRules {
     /// Minutos de anticipación con que puede abrirse una consulta. `nil` = sin límite (modo de pruebas pedido el 20 de noviembre).
     /// Para restaurar la regla original usa 30 aquí y en HospitalCore.doctorClinical, y aplica supabase/doctor-start-restore-30min.sql.
     static let openingLeadMinutes: Double? = nil
+    /// Unidades de dosis de la receta (selector). Idéntica a HospitalCore.doctorClinical.doseUnits.
+    static let doseUnits = ["tableta", "cápsula", "mg", "g", "mcg", "ml", "gotas", "UI", "sobre", "aplicación", "inhalación"]
     static let pendingStartMigration = "El servidor todavía solo permite abrir la consulta desde 30 minutos antes. Para pruebas a cualquier hora falta aplicar supabase/doctor-start-anytime.sql."
     /// El servidor rechazó la apertura por la regla de 30 minutos que el cliente ya no aplica.
     static func startError(_ message: String) -> String? {

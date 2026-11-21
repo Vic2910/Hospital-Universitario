@@ -708,6 +708,8 @@
       const values=clinical().missingSections(this.consultation).map(name=>'Completa: '+name);
       if(Object.keys(clinical().vitalIssues(this.vitals)).length)values.push('Corrige los datos físicos marcados');
       if(this.lines.length)values.push('Emite o retira los medicamentos de la receta en preparación');
+      // Exámenes elegidos pero sin «Confirmar exámenes»: finalizar los perdería sin aviso.
+      if(this.labSelected.size||this.pendingLabs)values.push('Confirma el envío de los exámenes seleccionados o quítalos');
       if(this.conflict)values.push('Resuelve la diferencia con la versión guardada');
       return values;
     }
@@ -1018,7 +1020,7 @@
         if(!medications.length)form.append(this.node('p','No hay medicamentos activos publicados.'));
         this.stepHead(form,'2','Indicación','Dosis, vía, frecuencia, duración e instrucciones.','list');
         const grid=this.node('div',null,'rx-grid');form.append(grid);
-        this.field(grid,'Unidad de dosis',this.rx,'unit');
+        this.field(grid,'Unidad de dosis',this.rx,'unit','text',clinical().doseUnits.map(unit=>[unit,unit]));
         this.field(grid,'Vía de administración',this.rx,'route','text',[['oral','Oral'],['inyectable','Inyectable']]);
         for(const [label,key,type] of [['Dosis','dose','number'],['Cada cuántas horas','interval','number'],['Duración en días','days','number'],['Cantidad total','quantity','number']])this.field(grid,label,this.rx,key,type);
         this.field(form,'Instrucciones para el paciente',this.rx,'instructions','textarea');

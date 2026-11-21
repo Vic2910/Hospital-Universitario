@@ -1,6 +1,16 @@
 import Foundation
 
 struct MobileField: Codable, Hashable { let label: String; let value: String }
+/// Medicamento de una receta con cada campo de prescription_items por separado (HospitalCore, módulo prescriptions).
+struct MobileMedicine: Codable, Hashable {
+    let name: String
+    var dose: String? = nil
+    var frequency: String? = nil
+    var route: String? = nil
+    var duration: String? = nil
+    var quantity: String? = nil
+    var observations: String? = nil
+}
 struct MobileSection: Codable { let title: String; let fields: [MobileField] }
 struct MobileOption: Codable, Identifiable { let id: UUID; let name: String; let kind: String }
 struct MobileItem: Codable, Identifiable {
@@ -17,6 +27,8 @@ struct MobileItem: Codable, Identifiable {
     var ends_at: String? = nil
     var queue_number: Int? = nil
     var queue_date: String? = nil
+    /// Solo en recetas: medicamentos con dosis, frecuencia, vía, duración, cantidad y observaciones separadas.
+    var medicines: [MobileMedicine]? = nil
 }
 struct MobilePreference: Codable, Identifiable {
     let id: UUID

@@ -53,7 +53,7 @@ await ui.click('Solicitar exámenes');await ui.click('Seleccionar Estudio de cat
 await ui.click('← Volver a la consulta');
 await ui.click('Recetar medicamentos');
 for(const round of [1,2]){
-  for(const [label,value,event] of [['Medicamento y concentración',id,'change'],['Unidad de dosis','tableta'],['Vía de administración','oral','change'],['Dosis',String(round)],['Cada cuántas horas','8'],['Duración en días','3'],['Cantidad total','9'],['Instrucciones para el paciente','Tomar con agua']])await ui.input(label,value,event||'input');
+  for(const [label,value,event] of [['Medicamento y concentración',id,'change'],['Unidad de dosis','tableta','change'],['Vía de administración','oral','change'],['Dosis',String(round)],['Cada cuántas horas','8'],['Duración en días','3'],['Cantidad total','9'],['Instrucciones para el paciente','Tomar con agua']])await ui.input(label,value,event||'input');
   await ui.submit('Añadir medicamento');
 }
 assert.match(ui.app.textContent,/Revisión de la receta · 2 medicamento/);

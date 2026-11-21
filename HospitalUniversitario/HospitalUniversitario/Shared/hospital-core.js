@@ -224,7 +224,7 @@
     }
     else if (module === 'history') { return [{path:'/rest/v1/rpc/my_consultation_history',method:'POST',body:{p_from:p.p_from||null,p_to:p.p_to||null,p_cursor:p.p_cursor||null}}]; }
     else if (module === 'laboratory') { table='lab_orders';select='*,lab_test_types(name),clinical_encounters!inner(medical_records!inner(patient_id)),lab_results(summary,published_to_patient_at,published_at,validated_at,validated_by,parameter_schema,result_values)';filters['clinical_encounters.medical_records.patient_id']='eq.'+id(patient);order='ordered_at'; }
-    else if (module === 'prescriptions') { table='prescriptions';select='*,clinical_encounters!inner(medical_records!inner(patient_id)),prescription_items(dose,dose_unit,frequency_hours,route,quantity,observations,medications(name))';filters['clinical_encounters.medical_records.patient_id']='eq.'+id(patient);order='issued_at'; }
+    else if (module === 'prescriptions') { table='prescriptions';select='*,clinical_encounters!inner(medical_records!inner(patient_id)),prescription_items(dose,dose_unit,frequency_hours,route,duration_days,quantity,observations,medications(name,strength))';filters['clinical_encounters.medical_records.patient_id']='eq.'+id(patient);order='issued_at'; }
     else throw new Error('Módulo no disponible.');
     if (p.p_from) filters[order]='gte.'+p.p_from;
     if (p.p_to) filters.and='('+order+'.lte.'+p.p_to+')';
@@ -319,7 +319,13 @@
         });});
         if(r.reason)item.details.push(field('Indicaciones',r.reason));
       }
-      if(module==='prescriptions'){item.title=r.prescription_code;item.details=(r.prescription_items||[]).map(function(v){return field(v.medications?v.medications.name:'Medicamento',v.dose+' '+v.dose_unit+' · cada '+v.frequency_hours+' horas · '+v.route+' · '+(v.observations||''));});}
+      if(module==='prescriptions'){item.title=r.prescription_code;
+        // Cada campo de prescription_items por separado (dosis, frecuencia, vía, duración, cantidad, observaciones).
+        item.medicines=(r.prescription_items||[]).map(function(v){var med=v.medications||{},text=function(x){return x==null||x===''?null:String(x);};
+          return {name:[med.name||'Medicamento',med.strength].filter(Boolean).join(' '),dose:text(v.dose)&&[text(v.dose),text(v.dose_unit)].filter(Boolean).join(' '),
+            frequency:text(v.frequency_hours)&&('Cada '+v.frequency_hours+' horas'),route:text(v.route),duration:text(v.duration_days)&&(v.duration_days+' días'),
+            quantity:text(v.quantity),observations:text(v.observations)};});
+        item.details=item.medicines.map(function(m){return field(m.name,[m.dose,m.frequency,m.route,m.observations].filter(Boolean).join(' · '));});}
       return item;
     });
     if(module!=='request' && rows.length>25){row=visible[24];page.has_more=true;page.next_cursor={id:row.id,value:row.started_at||row.created_at||row.starts_at||row.ordered_at||row.issued_at};}
@@ -461,6 +467,8 @@
   // Minutos de anticipación para abrir una consulta; null = sin límite (modo de pruebas pedido el 20 de noviembre).
   // Para restaurar: 30 aquí y en DoctorClinicalRules.openingLeadMinutes, y aplicar supabase/doctor-start-restore-30min.sql.
   var openingLeadMinutes = null;
+  // Unidades de dosis de la receta (selector). Idéntica a DoctorClinicalRules.doseUnits (Swift).
+  var doseUnits = ['tableta', 'cápsula', 'mg', 'g', 'mcg', 'ml', 'gotas', 'UI', 'sobre', 'aplicación', 'inhalación'];
   // El servidor conserva la regla de 30 minutos: falta aplicar supabase/doctor-start-anytime.sql.
   var pendingStartMigration = 'El servidor todavía solo permite abrir la consulta desde 30 minutos antes. Para pruebas a cualquier hora falta aplicar supabase/doctor-start-anytime.sql.';
   function startError(message) { return openingLeadMinutes == null && /todavía no puede iniciarse/i.test(String(message || '')) ? pendingStartMigration : null; }
@@ -477,7 +485,7 @@
   function finishError(message, note) {
     return /tratamiento/i.test(String(message || '')) && !String(note && note.plan || '').trim() ? pendingFinishMigration : message;
   }
-  root.HospitalCore.doctorClinical = {zone:zone,agendaDays:14,lookbackDays:lookbackDays,pending:pending,finished:finished,closedWithoutCare:closedWithoutCare,finishedAt:finishedAt,matches:matches,fold:fold,openingLeadMinutes:openingLeadMinutes,startError:startError,pendingStartMigration:pendingStartMigration,vitals:vitals,recordedVitals:recordedVitals,sections:sections,finishError:finishError,pendingFinishMigration:pendingFinishMigration,statusLabel:statusLabel,dayKey:dayKey,todayKey:todayKey,addDays:addDays,dayWindow:dayWindow,
+  root.HospitalCore.doctorClinical = {zone:zone,doseUnits:doseUnits,agendaDays:14,lookbackDays:lookbackDays,pending:pending,finished:finished,closedWithoutCare:closedWithoutCare,finishedAt:finishedAt,matches:matches,fold:fold,openingLeadMinutes:openingLeadMinutes,startError:startError,pendingStartMigration:pendingStartMigration,vitals:vitals,recordedVitals:recordedVitals,sections:sections,finishError:finishError,pendingFinishMigration:pendingFinishMigration,statusLabel:statusLabel,dayKey:dayKey,todayKey:todayKey,addDays:addDays,dayWindow:dayWindow,
     start:start,chronological:chronological,agenda:agenda,sanitize:sanitize,vitalIssues:vitalIssues,bmi:bmi,seedSubjective:seedSubjective,missingSections:missingSections,openingBlocker:openingBlocker};
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 

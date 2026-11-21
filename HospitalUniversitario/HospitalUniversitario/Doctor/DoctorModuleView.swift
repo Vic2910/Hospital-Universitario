@@ -1161,7 +1161,15 @@ struct DoctorModuleView: View {
                     ConsultationBlockHeader(letter: "2", icon: "list.bullet.rectangle", title: "Indicación", subtitle: "Dosis, vía, frecuencia, duración e instrucciones.")
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 10, alignment: .top)], spacing: 10) {
                         rxField("Dosis", $model.rxDose, placeholder: "Ej. 500", keyboard: .decimalPad)
-                        rxField("Unidad (mg, ml…)", $model.rxUnit, placeholder: "mg, ml, tableta")
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Unidad de dosis").font(.caption.weight(.semibold)).foregroundStyle(HospitalTheme.secondary)
+                            Picker("Unidad de dosis", selection: $model.rxUnit) {
+                                Text("Seleccionar").tag("")
+                                ForEach(DoctorClinicalRules.doseUnits, id: \.self) { Text($0).tag($0) }
+                            }.pickerStyle(.menu).tint(HospitalTheme.wine)
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).padding(.horizontal, 8)
+                                .background(HospitalTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
                         rxField("Cada cuántas horas", $model.rxFrequency, placeholder: "Ej. 8", keyboard: .numberPad, unit: "h")
                         rxField("Duración (días)", $model.rxDays, placeholder: "Ej. 5", keyboard: .numberPad, unit: "días")
                         rxField("Cantidad total", $model.rxQuantity, placeholder: "Ej. 15", keyboard: .numberPad, unit: "u.")
