@@ -796,3 +796,9 @@ Acceso Paciente → schedule, jerarquía visual vino/rojo, resumen, validación 
 - Rutas: `Shared/hospital-core.js` (`formatPhone`, `registrationCities`: 14 cabeceras departamentales), `Applicant/ApplicantRules.swift`, `Auth/RegisterView.swift` (Picker de menú), `web-preview/app.js` (select equivalente).
 - Verificaciones: test-preview, check-project, test-core y test-patient-registration en OK. Pendiente: compilar y revisar visualmente en Mac.
 - Corrección: el `select` de ciudad en web-preview usa el mismo estilo que los campos (`.auth-field select` en `web-preview/style.css`), con flecha propia y texto gris mientras no hay ciudad elegida. test-preview y check-project en OK; revisión visual por el usuario.
+
+## 2026-11-21 — Corrección «Missing argument label 'title:'»
+
+- Ruta: `HospitalUniversitario/HospitalUniversitario/Design/HospitalTheme.swift`.
+- Cambio: `HospitalLink` recibe `init(_ title:action:)`, que coincide con sus llamadas sin etiqueta en `ContentView.swift` y `RegisterView.swift`.
+- Verificaciones: `check-project.py` y `git diff --check`. Pendiente: compilar en Mac.
