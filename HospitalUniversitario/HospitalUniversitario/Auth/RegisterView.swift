@@ -41,7 +41,7 @@ struct RegisterView: View {
                             birthDateField
                             HospitalInputField(label: "DUI", placeholder: "00000000-0", text: $dui, keyboard: .numberPad)
                             HospitalInputField(label: "Teléfono", placeholder: "0000-0000", text: $phone, keyboard: .phonePad)
-                            HospitalInputField(label: "Ciudad (opcional)", placeholder: "Tu ciudad", text: $city)
+                            cityField
                             HospitalInputField(label: "Correo electrónico", placeholder: "nombre@correo.com", text: $email,
                                                keyboard: .emailAddress, contentType: .username, autocapitalization: .never)
                             HospitalSecureField(label: "Contraseña", placeholder: "Contraseña", text: $password,
@@ -70,9 +70,26 @@ struct RegisterView: View {
             }
             .scrollDismissesKeyboard(.interactively)
         }
+        .onChange(of: phone) { _, value in
+            let formatted = rules.formatPhone(value)
+            if formatted != value { phone = formatted }
+        }
         .onChange(of: dui) { _, value in
             let formatted = rules.formatDUI(value)
             if formatted != value { dui = formatted }
+        }
+    }
+
+    private var cityField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Ciudad (opcional)").font(.subheadline.weight(.semibold))
+            Picker("Ciudad (opcional)", selection: $city) {
+                Text("Selecciona tu ciudad").tag("")
+                ForEach(rules.cities, id: \.self) { Text($0).tag($0) }
+            }
+            .pickerStyle(.menu)
+            .tint(HospitalTheme.wine)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -113,7 +130,7 @@ struct RegisterView: View {
             "first_name": givenNames.trimmingCharacters(in: .whitespacesAndNewlines),
             "last_name": familyNames.trimmingCharacters(in: .whitespacesAndNewlines),
             "birth_date": ApplicantRules.isoDay(birthDate), "city": city.trimmingCharacters(in: .whitespacesAndNewlines),
-            "dui": rules.formatDUI(dui), "phone": phone.trimmingCharacters(in: .whitespacesAndNewlines)
+            "dui": rules.formatDUI(dui), "phone": rules.formatPhone(phone)
         ])
         password = ""; confirmPassword = ""
     }

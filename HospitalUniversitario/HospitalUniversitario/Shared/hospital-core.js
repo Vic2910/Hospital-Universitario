@@ -69,6 +69,12 @@
     var digits = String(value == null ? '' : value).replace(/\D/g, '').slice(0, 9);
     return digits.length > 8 ? digits.slice(0, 8) + '-' + digits.slice(8) : digits;
   }
+  function formatPhone(value) {
+    var digits = String(value == null ? '' : value).replace(/\D/g, '').slice(0, 8);
+    return digits.length > 4 ? digits.slice(0, 4) + '-' + digits.slice(4) : digits;
+  }
+  var registrationCities = ['Ahuachapán', 'Chalatenango', 'Cojutepeque', 'La Unión', 'San Francisco Gotera', 'San Miguel',
+    'San Salvador', 'San Vicente', 'Santa Ana', 'Santa Tecla', 'Sensuntepeque', 'Sonsonate', 'Usulután', 'Zacatecoluca'];
   function applicantAge(birthDate, today) {
     if (!isIsoDay(birthDate)) return null;
     var now = isIsoDay(today) ? today : localIsoDay(new Date());
@@ -131,7 +137,7 @@
   root.HospitalCore = { labels: labels, routes: routes, turnResource: turnResource, weekWindow: weekWindow, periodBounds: periodBounds,
     registrationAccount: registrationAccount, registrationReviewMessage: registrationReviewMessage,
     applicantDemoSpecialties: applicantDemoSpecialties, applicantPeriods: applicantPeriods, localIsoDay: localIsoDay, isIsoDay: isIsoDay,
-    formatDui: formatDui, applicantAge: applicantAge, validatePersonalData: validatePersonalData, validateApplicantProfile: validateApplicantProfile, validatePasswordChange: validatePasswordChange, passwordChangeMessage: passwordChangeMessage,
+    formatDui: formatDui, formatPhone: formatPhone, registrationCities: registrationCities, applicantAge: applicantAge, validatePersonalData: validatePersonalData, validateApplicantProfile: validateApplicantProfile, validatePasswordChange: validatePasswordChange, passwordChangeMessage: passwordChangeMessage,
     validateAttentionRequest: validateAttentionRequest, applicantStateView: applicantStateView };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 

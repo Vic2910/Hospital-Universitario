@@ -218,7 +218,16 @@
         event.target.value = HospitalCore.formatDui(event.target.value);
       });
       if (registrationDraft[id]) field.querySelector('input').value = registrationDraft[id];
-      if(id==='reg-city') field.querySelector('input').required=false;
+      if (id === 'reg-phone') field.querySelector('input').addEventListener('input', event => {
+        event.target.value = HospitalCore.formatPhone(event.target.value);
+      });
+      if(id==='reg-city'){
+        const input=field.querySelector('input'), select=document.createElement('select');
+        select.id=input.id; select.name=input.name||input.id; select.required=false; select.className=input.className; select.autocomplete='address-level2';
+        select.append(new Option('Selecciona tu ciudad',''));
+        for(const city of HospitalCore.registrationCities) select.append(new Option(city,city));
+        select.value=registrationDraft[id]||''; const mark=()=>select.classList.toggle('empty',!select.value); mark(); select.addEventListener('change',mark); input.replaceWith(select);
+      }
       form.append(field);
     }
     form.append(authField('reg-password', 'Contraseña', 'password', 'Contraseña', 'new-password', revealButton('reg-password')));

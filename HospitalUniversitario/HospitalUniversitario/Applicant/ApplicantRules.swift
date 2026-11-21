@@ -52,6 +52,14 @@ final class ApplicantRules {
         call("formatDui", [value])?.toString() ?? value
     }
 
+    func formatPhone(_ value: String) -> String {
+        call("formatPhone", [value])?.toString() ?? value
+    }
+
+    var cities: [String] {
+        context?.objectForKeyedSubscript("HospitalCore")?.objectForKeyedSubscript("registrationCities")?.toArray() as? [String] ?? []
+    }
+
     private func personalDictionary(_ data: ApplicantPersonalData) -> [String: Any] {
         let birth: Any = data.birthDate.map { Self.isoDay($0) as Any } ?? NSNull()
         return ["given": data.given, "family": data.family, "dui": data.dui, "phone": data.phone, "birthDate": birth]

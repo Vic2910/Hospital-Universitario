@@ -17,6 +17,9 @@
 .auth-field{display:grid;gap:8px;min-width:0}
 .auth-field label{font-size:13px;font-weight:600}
 .auth-field input{width:100%;min-width:0;padding:14px;border:0;border-radius:12px;background:var(--paper);color:#242936;font-size:13px}
+.auth-field select{width:100%;min-width:0;min-height:48px;padding:14px 40px 14px 14px;border:0;border-radius:12px;background:var(--paper) url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27%3E%3Cpath d=%27M1 1l5 5 5-5%27 fill=%27none%27 stroke=%27%23770727%27 stroke-width=%272%27/%3E%3C/svg%3E") no-repeat right 16px center;color:#242936;font:inherit;font-size:13px;appearance:none;-webkit-appearance:none;cursor:pointer}
+.auth-field select:invalid,.auth-field select.empty{color:#8a8590}
+.auth-field select:focus-visible{outline:2px solid var(--wine);outline-offset:2px}
 .auth-input{display:flex;gap:6px;align-items:center;background:var(--paper);border-radius:12px;min-width:0}
 .auth-input input{background:none;border-radius:12px}
 .field-reveal{background:none;color:var(--muted);font-size:11px;font-weight:600;padding:0 10px;white-space:nowrap}

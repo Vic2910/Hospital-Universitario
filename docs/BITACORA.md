@@ -781,3 +781,10 @@ Acceso Paciente → schedule, jerarquía visual vino/rojo, resumen, validación 
 - **Réplica web-preview (misma fecha):** `web-preview/care-services.js` (nuevo, `HospitalCareServices`) con Ambulancia del paciente y Habitaciones del médico; `api.js` (`careRPC` con lista permitida), `app.js` (ruta `ambulance`, accesos en Inicio/Más/Salud, Habitaciones del médico), `index.html`, `style.css`; `scripts/test-preview.mjs` carga el módulo y simula `doctor_native_rooms`.
 - **Verificaciones web:** `node --check` de los tres JS; test-preview (22 pantallas), test-patient-dashboard, test-hospitalizations, test-patient-portal, test-core, test-doctor-ambulance y test-public-info aprobados; check-project.py y git diff --check aprobados. Transporte simulado; sin prueba en navegador contra Supabase.
 - **Pendientes:** compilación y prueba en Xcode; prueba real en navegador con cuentas de paciente/médico; textos Android sin mover a `strings.xml`.
+
+## 2026-11-21 — Registro: teléfono con guion y selector de ciudad
+
+- Objetivo: formatear el teléfono como 0000-0000 al escribir y cambiar «Ciudad» por un selector en el registro.
+- Rutas: `Shared/hospital-core.js` (`formatPhone`, `registrationCities`: 14 cabeceras departamentales), `Applicant/ApplicantRules.swift`, `Auth/RegisterView.swift` (Picker de menú), `web-preview/app.js` (select equivalente).
+- Verificaciones: test-preview, check-project, test-core y test-patient-registration en OK. Pendiente: compilar y revisar visualmente en Mac.
+- Corrección: el `select` de ciudad en web-preview usa el mismo estilo que los campos (`.auth-field select` en `web-preview/style.css`), con flecha propia y texto gris mientras no hay ciudad elegida. test-preview y check-project en OK; revisión visual por el usuario.
