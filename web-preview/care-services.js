@@ -72,8 +72,9 @@
       try { await this.rpc('patient_cancel_ambulance', { p_request: id }); s.notice = 'Solicitud cancelada.'; } catch (e) { s.error = describe(e); }
       s.saving = false; await this.loadAmbulance(); this.repaint();
     }
-    renderAmbulance(content, { linked }) {
+    renderAmbulance(content, { linked, patientName = '' }) {
       const s = this.amb, el = this.el, button = this.button;
+      if (!s.form.contact.trim()) s.form.contact = patientName.trim();
       const hero = el('header', null, 'care-hero');
       hero.append(el('small', 'AMBULANCIA'), el('h2', 'Solicitar traslado'));
       if (s.board) hero.append(el('p', s.board.units_available > 0 ? `${s.board.units_available} unidad(es) disponible(s) en este momento` : 'Todas las unidades están en servicio; tu solicitud quedará en cola'));
@@ -96,7 +97,7 @@
         const c = this.card(content); c.append(el('h3', 'Datos del traslado'));
         const f = s.form, refresh = () => { submit.disabled = s.saving || !!this.ambulanceProblem(); hint.textContent = this.ambulanceProblem() || ''; };
         this.field(c, 'Nombre de contacto', f.contact, v => { f.contact = v; refresh(); });
-        this.field(c, 'Teléfono', f.phone, v => { f.phone = v; refresh(); }, { type: 'tel' });
+        const phoneInput = this.field(c, 'Teléfono', f.phone, v => { f.phone = root.HospitalCore.formatPhone(v); phoneInput.value = f.phone; refresh(); }, { type: 'tel' });
         this.field(c, 'Ubicación de recogida (dirección y referencias)', f.origin, v => { f.origin = v; refresh(); }, { multiline: true });
         this.field(c, 'Destino', f.destination, v => { f.destination = v; });
         this.field(c, 'Motivo (síntomas, estado del paciente)', f.reason, v => { f.reason = v; refresh(); }, { multiline: true });

@@ -571,7 +571,7 @@
     }
     if (page === 'schedule' && role === 'patient') return scheduleView(content);
     if (page === 'more' || page === 'health') return menu(content);
-    if (page === 'ambulance' && role === 'patient') return design||!careServices ? empty(content, design ? 'La ambulancia requiere una sesión real.' : 'No se pudo cargar el módulo de ambulancia. Recarga la página.') : careServices.renderAmbulance(content,{linked:!!access?.patient_id});
+    if (page === 'ambulance' && role === 'patient') return design||!careServices ? empty(content, design ? 'La ambulancia requiere una sesión real.' : 'No se pudo cargar el módulo de ambulancia. Recarga la página.') : careServices.renderAmbulance(content,{linked:!!access?.patient_id,patientName:access?.profile?.preferred_name||(profile?.person ? `${profile.person.given_names} ${profile.person.family_names}` : '')});
     if (page === 'rooms') return rooms(content);
     if (page === 'turns') return role === 'doctor' ? schedule(content) : queueView(content);
     if (page === 'profile') return profileView(content);

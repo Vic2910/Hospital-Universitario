@@ -43,7 +43,10 @@ final class PatientAmbulanceModel: ObservableObject {
     private var requestKey = UUID()
     private let api: HospitalAPI
 
-    init(api: HospitalAPI) { self.api = api }
+    init(api: HospitalAPI, patientName: String) {
+        self.api = api
+        contact = patientName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var active: PatientAmbulanceRequest? { board?.requests.first { $0.isActive } }
     var formProblem: String? {
@@ -109,8 +112,8 @@ struct PatientAmbulanceView: View {
     @State private var confirm = false
     let linked: Bool
 
-    init(api: HospitalAPI, linked: Bool) {
-        _model = StateObject(wrappedValue: PatientAmbulanceModel(api: api))
+    init(api: HospitalAPI, linked: Bool, patientName: String) {
+        _model = StateObject(wrappedValue: PatientAmbulanceModel(api: api, patientName: patientName))
         self.linked = linked
     }
 
@@ -150,7 +153,7 @@ struct PatientAmbulanceView: View {
         card {
             Text("Datos del traslado").font(.headline)
             field("Nombre de contacto", text: $model.contact, icon: "person")
-            field("Teléfono", text: $model.phone, icon: "phone").keyboardType(.phonePad)
+            field("Teléfono", text: Binding(get: { model.phone }, set: { model.phone = ApplicantRules.shared.formatPhone($0) }), icon: "phone").keyboardType(.phonePad)
             field("Ubicación de recogida (dirección y referencias)", text: $model.origin, icon: "mappin.and.ellipse")
             field("Destino", text: $model.destination, icon: "building.2")
             field("Motivo (síntomas, estado del paciente)", text: $model.reason, icon: "text.bubble")

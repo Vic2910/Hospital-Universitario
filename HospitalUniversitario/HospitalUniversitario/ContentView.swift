@@ -253,7 +253,7 @@ struct ContentView: View {
             case "turns": if isDoctor { schedule } else { queue }
             case "rooms": rooms
             case "ambulance":
-                if !isDoctor, let api = store.api { PatientAmbulanceView(api: api, linked: store.access?.patient_id != nil) } else { menu }
+                if !isDoctor, let api = store.api { PatientAmbulanceView(api: api, linked: store.access?.patient_id != nil, patientName: store.access?.profile?.preferred_name ?? store.profile?.fullName ?? "") } else { menu }
             case "profile": profile
             case "information": information
             default: menu

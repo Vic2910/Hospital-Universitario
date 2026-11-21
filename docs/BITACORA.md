@@ -1,5 +1,13 @@
 # Bitácora de trabajo
 
+## 2026-11-21 — Contacto automático y formato de teléfono en Ambulancia
+
+- **Objetivo:** completar el contacto con el nombre del paciente solicitante y agregar automáticamente el guion al teléfono en el formulario de Ambulancia.
+- **Cambios:** `PatientAmbulanceView.swift` recibe el nombre del perfil autenticado desde `ContentView.swift`; `care-services.js` lo recibe desde `app.js`. Ambos conservan la posibilidad de editar el contacto. El teléfono usa la regla compartida `HospitalCore.formatPhone` (`ApplicantRules.shared` en Swift), con formato `0000-0000`. No cambió la RPC ni el envío de solicitudes.
+- **Rutas:** `HospitalUniversitario/HospitalUniversitario/{ContentView.swift,Patient/PatientAmbulanceView.swift}`, `web-preview/{app.js,care-services.js}`, `README.md`, `docs/BITACORA.md`.
+- **Verificaciones:** `scripts/test-preview.mjs` (22 pantallas), `scripts/check-project.py` y `git diff --check` aprobados. No se hicieron escrituras en Supabase.
+- **Pendiente:** compilar y revisar el formulario nativo en Xcode/Mac.
+
 ## 2026-11-20 — Recetas «No hay datos reales», selector de unidad y barra de guardado
 
 - **Recetas:** cuando el registro no trae `medicines` estructurados, el texto «1 Tabletas · cada 8 horas · oral · …» se separa en Dosis, Cada, Vía, Durante y Cantidad (`PatientPrescriptionRecord.parseLine` ↔ `HospitalPatientPrescriptions.parseLine`); el resto queda en Observaciones. Durante/Cantidad siguen como «No hay datos reales» si el texto no los incluye.
