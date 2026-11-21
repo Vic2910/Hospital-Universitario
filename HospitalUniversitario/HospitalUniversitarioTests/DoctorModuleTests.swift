@@ -61,8 +61,7 @@ private final class DoctorRepositoryStub: DoctorRepositoryProtocol {
                 vitals: noteVitals)])
     }
     func start(appointment: UUID, requestKey: UUID) async throws { }
-    func diagnoses(query: String, byCode: Bool) async throws -> [DoctorDiagnosis] { [] }
-    func save(encounter: UUID, note: UUID?, version: Int?, draft: DoctorConsultationDraft, diagnosis: UUID?, requestKey: UUID) async throws {
+    func save(encounter: UUID, note: UUID?, version: Int?, draft: DoctorConsultationDraft, requestKey: UUID) async throws {
         saveKeys.append(requestKey)
         if failSave { throw URLError(.networkConnectionLost) }
         if conflictOnce { conflictOnce = false; noteVersion = (noteVersion ?? 0) + 5; throw HospitalError.conflict("El borrador cambió. Actualiza antes de guardar") }

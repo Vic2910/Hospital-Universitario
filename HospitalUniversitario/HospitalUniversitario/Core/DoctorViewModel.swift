@@ -74,11 +74,6 @@ final class DoctorViewModel: ObservableObject {
     @Published var rxLines: [DoctorRxLine] = []
     @Published var draft = DoctorConsultationDraft()
     @Published var instructions = ""
-    @Published var diagnosisQuery = ""
-    @Published var diagnosisByCode = false
-    @Published var selectedDiagnosis: UUID?
-    @Published private(set) var diagnoses: [DoctorDiagnosis] = []
-    @Published private(set) var searchingDiagnoses = false
     @Published var day = Date()
     @Published var filterDates = false
     @Published var historyFrom = Calendar.current.startOfDay(for: Date())
@@ -157,7 +152,6 @@ final class DoctorViewModel: ObservableObject {
         historyQuery = ""; filterDates = false; day = Date()
         loading = false; loadingChart = false; saving = false; error = nil; confirmation = nil
         startKey = UUID(); saveKey = UUID(); orderKey = UUID()
-        diagnosisQuery = ""; selectedDiagnosis = nil; diagnoses = []; searchingDiagnoses = false
         draftInitialized = false; draftNoteID = nil; draftNoteVersion = nil
         savedDraft = nil; saveState = .idle; conflictNote = nil; lastFailure = nil
         clearPrescription(); statusFilter = "pending"; planningRevision = nil
@@ -257,23 +251,9 @@ final class DoctorViewModel: ObservableObject {
         draft = DoctorConsultationDraft(); instructions = ""; selectedTestID = nil
         error = nil; confirmation = nil; loadingChart = false
         startKey = UUID(); saveKey = UUID(); orderKey = UUID()
-        diagnosisQuery = ""; selectedDiagnosis = nil; diagnoses = []; searchingDiagnoses = false
         draftInitialized = false; draftNoteID = nil; draftNoteVersion = nil
         savedDraft = nil; saveState = .idle; conflictNote = nil; lastFailure = nil
         clearPrescription()
-    }
-
-    func searchDiagnoses() async {
-        let query = diagnosisQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard query.count >= 2, query.count <= 120, !searchingDiagnoses, !saving else { return }
-        let scope = generation, selection = selectionGeneration
-        searchingDiagnoses = true
-        defer { if scope == generation && selection == selectionGeneration { searchingDiagnoses = false } }
-        do {
-            let values = try await repository.diagnoses(query: query, byCode: diagnosisByCode)
-            guard scope == generation, selection == selectionGeneration else { return }
-            diagnoses = values
-        } catch { if scope == generation && selection == selectionGeneration { self.error = Self.describe(error) } }
     }
 
     /// silent: actualización periódica del expediente abierto; no bloquea la pantalla ni borra lo mostrado si falla.
@@ -345,18 +325,6 @@ final class DoctorViewModel: ObservableObject {
         } catch { if scope==generation && request==directoryGeneration { directoryError=Self.describe(error) } }
     }
     func openPatient(_ patient: DoctorAssignedPatient) {
-        if !more {
-            patientStays=nil; patientStaysError=nil
-            do {
-                let stays=try await repository.patientHospitalizations(patient:patient)
-                if scope==generation && selection==selectionGeneration { patientStays=stays }
-            } catch {
-                let detail=String(describing:error)
-                if scope==generation && selection==selectionGeneration {
-                    patientStaysError=detail.contains("PGRST202") || detail.contains("404") || detail.contains("patient_hospitalizations") ? "Consulta de hospitalizaciones pendiente de migración en el servidor." : Self.describe(error)
-                }
-            }
-        }
         guard !saving else { return }
         let appointment=workspace?.appointments.first { $0.patient_id==patient.id && $0.encounter_id==patient.active_encounter_id && patient.active_encounter_id != nil }
         select(appointment?.id); selectedPatient=patient
@@ -377,6 +345,18 @@ final class DoctorViewModel: ObservableObject {
         let scope=generation, selection=selectionGeneration
         patientLabsLoading=true; patientLabsError=nil
         if !more { patientLabs=[]; patientLabPage=nil }
+        if !more {
+            patientStays=nil; patientStaysError=nil
+            do {
+                let stays=try await repository.patientHospitalizations(patient:patient)
+                if scope==generation && selection==selectionGeneration { patientStays=stays }
+            } catch {
+                let detail=String(describing:error)
+                if scope==generation && selection==selectionGeneration {
+                    patientStaysError=detail.contains("PGRST202") || detail.contains("404") || detail.contains("patient_hospitalizations") ? "Consulta de hospitalizaciones pendiente de migración en el servidor." : Self.describe(error)
+                }
+            }
+        }
         defer { if scope==generation && selection==selectionGeneration { patientLabsLoading=false } }
         do {
             let page=try await repository.patientLabs(patient:patient,offset:more ? patientLabPage?.next_offset ?? 0 : 0)
@@ -453,12 +433,11 @@ final class DoctorViewModel: ObservableObject {
         if let issue = vitalIssues.values.first { error = "Revisa los datos físicos: \(issue)"; saveState = .failed("Revisa los datos físicos."); return false }
         let values = draft
         let key = saveKey
-        let diagnosis = selectedDiagnosis
         let noteID = draftNoteID, version = draftNoteVersion, scope = generation, selection = selectionGeneration
         saveState = .saving
         let saved = await mutate(success: "Consulta guardada correctamente.") {
             try await self.repository.save(encounter: encounter.id, note: noteID,
-                version: version, draft: values, diagnosis: diagnosis, requestKey: key)
+                version: version, draft: values, requestKey: key)
             if self.generation == scope { self.saveKey = UUID(); self.draftInitialized = false }
         }
         guard generation == scope, selectionGeneration == selection else { return false }

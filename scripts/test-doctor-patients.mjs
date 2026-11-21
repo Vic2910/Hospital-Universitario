@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import {createApp} from './test-preview.mjs';
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 const key=date=>[date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
-for(const mode of ['design','session']){
-  const ui=createApp(['doctor']);await settle();if(mode==='design'){ui.get('design-doctor').listeners.click();await settle();}else await ui.login();
+// La ficha visual de ejemplo solo existe en modo diseño; con sesión, Pacientes es el directorio conectado (test-doctor-directory).
+for(const mode of ['design']){
+  const ui=createApp(['doctor']);await settle();ui.get('design-doctor').listeners.click();await settle();
   await ui.click('Pacientes');assert.match(ui.app.textContent,/Tus pacientes, su evolución/);
   const matches=()=>ui.app.all().filter(node=>node.className==='patient-match-card');assert.equal(matches().length,3);
   assert.equal(ui.app.all().filter(node=>node.tagName==='input'&&node.type==='search').length,1,'Sin búsqueda genérica duplicada');
@@ -27,4 +28,13 @@ for(const mode of ['design','session']){
   assert.equal(ui.calls.some(call=>/doctor_issue_lab_order|save_consultation/.test(call.url)),false);
   if(mode==='design')assert.equal(ui.calls.some(call=>call.url.startsWith('https:')),false);
   console.log('OK Pacientes '+mode+': DUI/nombre/fecha, coincidencias, ficha interna, historial propio, filtros conservados y seguimiento compartido');
+}
+// Sesión iniciada: Pacientes muestra el directorio conectado (RPC doctor_native_patients), no la ficha de diseño.
+{
+  const ui=createApp(['doctor']);await ui.login();await ui.click('Pacientes');await settle();
+  assert.match(ui.app.textContent,/Encuentra un expediente al instante/);
+  assert.equal(ui.app.textContent.includes('Tus pacientes, su evolución'),false,'Sin la vista de diseño con sesión');
+  assert.equal(ui.app.all().some(node=>node.className==='patient-match-card'),false,'Sin pacientes de ejemplo con sesión');
+  assert.equal(ui.calls.some(call=>/doctor_issue_lab_order|save_consultation/.test(call.url)),false);
+  console.log('OK Pacientes session: directorio conectado, sin datos de ejemplo');
 }

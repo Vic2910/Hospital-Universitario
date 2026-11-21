@@ -161,12 +161,6 @@ struct DoctorLabParameter: Decodable {
     let observation: String?
 }
 
-struct DoctorDiagnosis: Codable, Identifiable, Sendable {
-    let id: UUID
-    let code: String
-    let description: String
-}
-
 struct DoctorAssignedPatient: Codable, Identifiable, Sendable {
     let id: UUID
     let full_name: String

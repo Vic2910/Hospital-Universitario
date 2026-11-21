@@ -14,8 +14,7 @@ protocol DoctorRepositoryProtocol {
     func workspace(facility: UUID, from: Date, to: Date) async throws -> DoctorWorkspace
     func chart(patient: UUID, from: Date?, to: Date?, query: String) async throws -> DoctorPatientChart
     func start(appointment: UUID, requestKey: UUID) async throws
-    func save(encounter: UUID, note: UUID?, version: Int?, draft: DoctorConsultationDraft, diagnosis: UUID?, requestKey: UUID) async throws
-    func diagnoses(query: String, byCode: Bool) async throws -> [DoctorDiagnosis]
+    func save(encounter: UUID, note: UUID?, version: Int?, draft: DoctorConsultationDraft, requestKey: UUID) async throws
     func close(encounter: UUID, note: UUID, noteVersion: Int, encounterVersion: Int) async throws
     func issueOrder(encounter: UUID, test: Int64, instructions: String, requestKey: UUID) async throws
     func prescribe(encounter: UUID, lines: [DoctorRxLine], requestKey: UUID) async throws
@@ -54,10 +53,10 @@ final class DoctorRepository: DoctorRepositoryProtocol {
     }
     func patientLabs(patient: UUID, offset: Int) async throws -> DoctorPatientLabPage {
         try await call("patient_labs", ["p_patient":.string(patient.uuidString),"p_offset":.number(offset)])
+    }
     /// Hospitalizaciones del paciente (doctor_native_patient_hospitalizations, relación asistencial) vía HospitalCore.hospitalizations.
     func patientHospitalizations(patient: UUID) async throws -> PatientHospitalizations {
         try await api.operation("hospitalizations", parameters: ["patient": patient.uuidString])
-    }
     }
 
     private func call<T: Decodable>(_ name: String, _ parameters: [String: DoctorJSON]) async throws -> T {
@@ -84,13 +83,9 @@ final class DoctorRepository: DoctorRepositoryProtocol {
         try await perform("start", ["p_appointment": .string(appointment.uuidString), "p_key": .string(requestKey.uuidString)])
     }
 
-    func save(encounter: UUID, note: UUID?, version: Int?, draft: DoctorConsultationDraft, diagnosis: UUID?, requestKey: UUID) async throws {
+    func save(encounter: UUID, note: UUID?, version: Int?, draft: DoctorConsultationDraft, requestKey: UUID) async throws {
         try await perform("save", ["p_encounter": .string(encounter.uuidString), "p_values": .object(draft.values),
             "p_version": .number(version ?? 0), "p_key": .string(requestKey.uuidString)])
-    }
-
-    func diagnoses(query: String, byCode: Bool) async throws -> [DoctorDiagnosis] {
-        throw HospitalError.message("El catálogo de diagnósticos todavía no está adaptado a Hospital Móviles.")
     }
 
     func close(encounter: UUID, note: UUID, noteVersion: Int, encounterVersion: Int) async throws {
@@ -108,13 +103,13 @@ final class DoctorRepository: DoctorRepositoryProtocol {
 
     func markRead(_ notification: DoctorNotification) async throws {
         try await api.perform("updateItem", parameters: ["p_resource": .string("notifications"),
-
-extension DoctorRepositoryProtocol {
-    /// Implementación por defecto para repositorios de prueba sin hospitalizaciones.
-    func patientHospitalizations(patient: UUID) async throws -> PatientHospitalizations { PatientHospitalizations(active: nil, previous: []) }
-}
             "p_id": .string(notification.id.uuidString),
             "p_values": .object(["read_at": .string(DoctorDate.timestamp(Date()))]),
             "p_expected_version": .number(notification.row_version)])
     }
+}
+
+extension DoctorRepositoryProtocol {
+    /// Implementación por defecto para repositorios de prueba sin hospitalizaciones.
+    func patientHospitalizations(patient: UUID) async throws -> PatientHospitalizations { PatientHospitalizations(active: nil, previous: []) }
 }

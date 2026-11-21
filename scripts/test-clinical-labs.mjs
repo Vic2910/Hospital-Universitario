@@ -49,7 +49,7 @@ const processing=record().all().find(node=>node.className==='clinical-lab-histor
 assert.equal(ui.calls.some(call=>call.url.startsWith('https:')),false);
 console.log('OK Doctor: solicitud independiente en ticket interno, peso/altura, expediente compartido, notas/recetas y filtros');
 
-const patient=createApp();await settle();patient.get('design-patient').listeners.click();await settle();await patient.click('Más');await patient.click(patient.app.all().find(node=>node.tagName==='button'&&node.textContent.startsWith('Laboratorio')).textContent);
+const patient=createApp();await settle();patient.get('design-patient').listeners.click();await settle();await patient.click('Más');await patient.click(patient.app.all().find(node=>node.tagName==='button'&&/^\W*Laboratorio/u.test(node.textContent)).textContent);
 assert.match(patient.app.textContent,/Mis laboratorios/);
 assert.deepEqual([...new Set(patient.app.all().filter(node=>node.className?.startsWith('clinical-lab-state')).map(node=>node.textContent))].sort(),['Completado','En Proceso','Pendiente']);
 assert.equal(patient.app.all().some(node=>node.tagName==='button'&&/Solicitar|Añadir observación|Añadir receta/.test(node.textContent)),false);
@@ -65,11 +65,14 @@ assert.equal(model.applyPublishedResult('unknown',[],'Resultado',new Date().toIS
 model.entryKind='Observación';model.entryText='Nota';model.linkedRequest=created.id;assert.equal(model.saveEntry('patient'),false);assert.equal(model.saveEntry('doctor'),true);model.select('p2');model.entryKind='Observación';model.entryText='Ajena';model.linkedRequest=created.id;assert.equal(model.saveEntry('doctor'),false);
 console.log('OK Modelo: validación, autor, resultados publicados compartidos, versiones antiguas rechazadas y aislamiento de notas');
 
-const signed=createApp(['doctor']);await signed.login();await signed.click('Laboratorios');await signed.input('DUI o nombre del paciente','Ana');await signed.click('Seleccionar a Ana Reyes');await signed.click('Solicitar exámenes');
-const modal=signed.app.all().find(node=>node.className==='clinical-ticket');assert.match(modal.textContent,/Persona de prueba/);assert.equal(modal.textContent.includes('Dr. Luis Ramírez'),false,'Doctor tomado de cuenta activa');
-await signed.input('Tipo de examen','blood','change');await signed.input('Motivo del examen','Motivo local');await signed.input('Peso (kg)','70');await signed.input('Altura (cm)','170');await signed.submit('Solicitar');
-assert.equal(signed.calls.some(call=>call.url.endsWith('/doctor_issue_lab_order')),false);await signed.click('Ver flujo conectado');assert.ok(signed.app.all().some(node=>node.attributes['aria-label']==='Paciente / turno'));
-console.log('OK Sesión: doctor de cuenta activa, diseño visible y módulo conectado conservado');
+// Con sesión, Laboratorios es el módulo conectado (doctor_native_patients / doctor_native_lab_orders), no la vista de diseño.
+const signed=createApp(['doctor']);await signed.login();await signed.click('Laboratorios');await settle();
+assert.match(signed.app.textContent,/Mis órdenes de laboratorio/);assert.ok(signed.button('Actualizar órdenes'));
+assert.ok(signed.app.all().some(node=>node.tagName==='input'&&(node.attributes['aria-label']==='Nombre, DUI o correo'||node.placeholder==='Nombre, DUI o correo')),'Buscador del directorio conectado');
+assert.equal(signed.app.all().some(node=>node.className==='clinical-ticket'),false,'Sin ticket de diseño con sesión');
+assert.equal(signed.app.textContent.includes('Ana Reyes'),false,'Sin pacientes de ejemplo con sesión');
+assert.equal(signed.calls.some(call=>call.url.endsWith('/doctor_issue_lab_order')),false);
+console.log('OK Sesión: módulo de laboratorio conectado, sin datos de diseño');
 
 // Una publicación actualiza la misma lista visible sin duplicar solicitudes.
 const Element=ui.app.constructor,parent=new Element('div');let reactive;

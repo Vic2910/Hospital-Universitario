@@ -20,7 +20,7 @@
       this.day = localDay(new Date()); this.request = {specialty:'',reason:'',period:'manana',day:this.day,from:'08:00',to:'12:00'};
       this.consultation = {subjective:'',objective:'',assessment:'',plan:'',diagnosis_code:''}; this.vitals={}; this.stateFilter='pending'; this.seedDraft = true;
       this.savedNote=null;this.saveState='idle';this.saveError='';this.conflict=null;this.panel='';this.finishConfirm=false;this.leaveConfirm=false;this.medicationQuery='';this.rxReview=false;
-      this.diagnosis = {query:'',by:'description',selected:''}; this.diagnoses = [];
+     
       this.lab = {test:'',instructions:''}; this.rx = {medication:'',unit:'',route:'',dose:'',interval:'',quantity:'',instructions:'',days:'',starts:this.day,ends:''};
       this.profile = {phone:'',given:'',family:'',emergencyPhone:'',relationship:''};
       this.keys = Object.fromEntries(['request','start','save','lab','rx','emergency'].map(key => [key,root.crypto.randomUUID()]));
@@ -90,7 +90,7 @@
       this.recordHistory=false;this.recordVisit='';this.recordLimit=10;this.stopRecordRefresh?.();
       this.consultation = {subjective:'',objective:'',assessment:'',plan:'',diagnosis_code:''}; this.vitals={};
       this.savedNote=null;this.saveState='idle';this.saveError='';this.conflict=null;this.panel='';this.finishConfirm=false;this.leaveConfirm=false;this.medicationQuery='';this.rxReview=false;
-      this.diagnosis = {query:'',by:'description',selected:''}; this.diagnoses = [];
+     
       this.lab = {test:'',instructions:''};
       if(!this.pendingLabs){this.labSelected=new Set();this.labReview=false;}
       this.rx = {medication:'',unit:'',route:'',dose:'',interval:'',quantity:'',instructions:'',days:'',starts:localDay(new Date()),ends:''};
