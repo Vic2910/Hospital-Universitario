@@ -15,6 +15,7 @@ Este inventario sustituye a los recuentos de informes anteriores, que hablaban d
 | 5 | `doctor-mi-horario.sql` | No existe `doctor_native_schedule` | El médico lee su jornada recurrente con almuerzo y descansos |
 | 6 | `notificaciones-idempotentes.sql` | `laboratory_notifications` todavía incluye la revisión en `event_key` | Un aviso por orden y destinatario; republicar no duplica. Opcional después: `notificaciones-duplicadas-limpieza.sql` (revisar su consulta; termina en ROLLBACK) |
 | 7 | `rls-privacidad-clinica.sql` | No existe `doctor_care_access`; las políticas siguen siendo las antiguas | Recepción sin antecedentes ni órdenes de laboratorio; médicos según su autorización asistencial |
+| 8 | `hospitalizaciones-paciente.sql` | **APLICADO el 20 de noviembre** (antes no existían `my_hospitalizations`, `doctor_native_patient_hospitalizations` ni `transfer_bed`) | Habitaciones del paciente, hospitalización en el expediente médico y traslados con trazabilidad |
 
 **Opcional (modo de pruebas):** `doctor-start-anytime.sql`. **[Supabase]** `doctor_native_start` todavía exige 30 minutos de antelación. Los clientes ya permiten abrir la consulta a cualquier hora (`openingLeadMinutes = nil`), pero el servidor la rechaza si falta más de media hora. Al terminar las pruebas: `doctor-start-restore-30min.sql`.
 

@@ -11,7 +11,7 @@
       this.identity = ''; this.role = ''; this.facility = null; this.access = null; this.screen = '';
       this.data = null; this.workspace = null; this.chart = null; this.context = null; this.selected = '';
       this.patientDirectory=[];this.directoryPage=null;this.directoryQuery='';this.directoryError=null;this.selectedPatient=null;this.lastDirectoryQuery=null;clearTimeout(this.searchTimer);
-      this.patientLabs=[];this.patientLabPage=null;this.patientLabsError=null;this.recordOpen=false;
+      this.patientLabs=[];this.patientLabPage=null;this.patientLabsError=null;this.patientStays=null;this.patientStaysError=null;this.recordOpen=false;
       this.labTests=[];this.labCatalogError=null;this.labQuery='';this.labCategory='all';this.labSelected=new Set();this.labReview=false;this.pendingLabs=null;this.labPendingNames=[];this.labPendingPatient=null;
       this.ownLabOrders=[];this.ownLabPage=null;this.ownLabsError=null;
       this.admissions=[];this.admissionsPage=null;this.admissionsError=null;this.admissionForm=false;this.admissionReview=false;
@@ -86,7 +86,7 @@
     get encounter() { return this.context?.history.find(item => item.id === (this.appointment?.encounter_id||this.selectedPatient?.active_encounter_id)); }
     select(id) {
       this.selected = id; this.chart = this.context = null; this.lines = []; this.seedDraft = true;
-      this.selectedPatient=null;this.patientLabs=[];this.patientLabPage=null;this.patientLabsError=null;this.recordOpen=false;
+      this.selectedPatient=null;this.patientLabs=[];this.patientLabPage=null;this.patientLabsError=null;this.patientStays=null;this.patientStaysError=null;this.recordOpen=false;
       this.recordHistory=false;this.recordVisit='';this.recordLimit=10;this.stopRecordRefresh?.();
       this.consultation = {subjective:'',objective:'',assessment:'',plan:'',diagnosis_code:''}; this.vitals={};
       this.savedNote=null;this.saveState='idle';this.saveError='';this.conflict=null;this.panel='';this.finishConfirm=false;this.leaveConfirm=false;this.medicationQuery='';this.rxReview=false;
@@ -119,8 +119,16 @@
         this.patientDirectory=more?[...this.patientDirectory,...page.patients]:page.patients;this.directoryPage=page;
       }catch(error){this.patientDirectory=[];this.directoryPage=null;this.directoryError=error.message;if([401,403].includes(error.status))throw error;}
     }
+    // Hospitalizaciones del paciente para el expediente médico (doctor_native_patient_hospitalizations: exige relación asistencial).
+    async loadPatientStays() {
+      const patient=this.selectedPatient?.id||this.appointment?.patient_id;if(!patient)return;
+      this.patientStaysError=null;
+      try{this.patientStays=root.HospitalCore.hospitalizations.present(await this.api.doctorRPC('patient_hospitalizations',{p_patient:patient}));}
+      catch(error){this.patientStays=null;this.patientStaysError=/PGRST202|404|patient_hospitalizations/.test(String(error.message)+error.status)?'Consulta de hospitalizaciones pendiente de migración en el servidor.':error.message;}
+    }
     async loadPatientLabs(more=false) {
       const patient=this.selectedPatient?.id||this.appointment?.patient_id;if(!patient)return;
+      if(!more)await this.loadPatientStays();
       this.patientLabsError=null;
       try{
         const page=await this.api.doctorRPC('patient_labs',{p_patient:patient,p_offset:more?this.patientLabPage?.next_offset||0:0});
@@ -471,6 +479,20 @@
       const groups=[['Grupo sanguíneo',real(chart.blood_type)?[chart.blood_type]:[]],['Alergias',chart.allergies||[]],['Condiciones',chart.conditions||[]],['Otros antecedentes',others],['Medicamentos registrados',chart.medications||[]]].filter(([,values])=>values.length);
       if(!groups.length)summary.append(this.node('p','Sin antecedentes clínicos registrados.','scope-note'));
       for(const [label,values] of groups)this.detail(summary,label,values.join('\n'));
+      // Hospitalización (mismo episodio que ve el paciente en Habitaciones).
+      const stays=this.node('section',null,'consultation-section clinical-card record-stays');wrap.append(stays);
+      stays.append(this.node('h3','Hospitalización','clinical-section-title'));
+      if(this.patientStaysError)stays.append(this.node('p',this.patientStaysError,'scope-note'));
+      else if(!this.patientStays)stays.append(this.node('p','Cargando hospitalizaciones…','scope-note'));
+      else{
+        const S=this.patientStays,list=[S.active,...S.previous].filter(Boolean);
+        if(!list.length)stays.append(this.node('p','Sin hospitalizaciones registradas.','scope-note'));
+        for(const e of list){
+          const line=[e.room?'Habitación '+e.room:'Habitación por confirmar',e.room_kind].filter(Boolean).join(' · ');
+          const when='Ingreso: '+[e.admitted_date,e.admitted_time].filter(Boolean).join(' · ')+(e.discharged_date?' · Alta: '+[e.discharged_date,e.discharged_time].filter(Boolean).join(' · '):'');
+          stays.append(this.ui.row(line,[when,e.doctor?'Responsable: '+e.doctor:null,e.reason?'Motivo: '+e.reason:null].filter(Boolean).join(' · '),e.status_label));
+        }
+      }
       const actions=this.node('div',null,'record-actions');
       if(patient.active_encounter_id)actions.append(this.ui.button('Continuar consulta',()=>this.ui.go('consultation'),'module-action'));
       actions.append(this.ui.button('Laboratorios',()=>this.ui.go('laboratory'),'module-action'),this.ui.button('Solicitar ingreso',()=>{this.admissionForm=true;this.ui.go('admissions');},'module-action'));

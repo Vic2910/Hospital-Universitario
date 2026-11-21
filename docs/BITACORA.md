@@ -1,5 +1,20 @@
 # Bitácora de trabajo
 
+## 2026-11-20 — Aplicado hospitalizaciones-paciente.sql en Hospital Móviles
+
+- **Autorización:** el usuario revisó el SQL y pidió aplicarlo.
+- **Aplicado [Supabase]:** migración `hospitalizaciones_paciente` (`private.hospitalization_rows`, `my_hospitalizations`, `doctor_native_patient_hospitalizations`, `transfer_bed`). Sin tablas nuevas ni datos modificados.
+- **Verificado [Supabase]:** `anon` no puede ejecutar ninguna función; `authenticated` ejecuta las tres públicas; la función privada no es ejecutable por clientes. La lectura del único ingreso existente devuelve habitación HAB-201 (semiprivada), cama HAB-201-A, Segunda planta, médico y estado hospitalizado; el núcleo JS lo presenta como «Hospitalizado», 14 de noviembre de 2026, 3:27 a. m.
+- **Pendiente:** probar desde la app con la cuenta del paciente y del médico tratante; ejecutar un traslado y un alta reales cuando recepción los necesite (no se crearon datos de prueba); `hospital_settings.name` está vacío, así que el nombre del hospital no se muestra; compilar en Mac.
+
+## 2026-11-20 — Menú «Más» agrupado y Habitaciones con hospitalización real
+
+- **Objetivo:** rediseñar el menú Más del paciente (sin acceso a Notificaciones) y convertir la pantalla existente Habitaciones en la vista de hospitalización actual y anteriores, también en el expediente del médico.
+- **Rutas:** `Shared/hospital-core.js`, `ContentView.swift`, `Core/HospitalStore.swift`, `Core/DoctorRepository.swift`, `Core/DoctorViewModel.swift`, `Doctor/DoctorRecordsView.swift`, `Patient/PatientHospitalizationView.swift` (nuevo, contenido de la ruta `rooms`), `web-preview/app.js`, `modules.js`, `api.js`, `style.css`, `scripts/test-preview.mjs`, `scripts/test-hospitalizations.mjs` (nuevo), `supabase/hospitalizaciones-paciente.sql` (nuevo, NO aplicado), `.claude/launch.json`.
+- **Cambios:** reutiliza `hospital_admissions`/`bed_assignments`/`rooms`; sin tablas nuevas. RPC propuestas `my_hospitalizations`, `doctor_native_patient_hospitalizations` y `transfer_bed`. [Detalle](HABITACIONES_HOSPITALIZACION_2026-11-20.md)
+- **Verificaciones:** test-hospitalizations, test-preview, test-core, test-patient-registration, test-patient-portal, test-patient-record, test-doctor-admissions, test-patient-dashboard, check-project.py y git diff --check aprobados. test-doctor-patients ya fallaba antes del cambio (comprobado con stash). Revisión visual web en modo diseño. Swift no compilado.
+- **Pendiente:** aplicar el SQL con autorización y probar ingreso, traslado y alta reales; compilar y revisar en Mac.
+
 ## 2026-11-20 — Cambio de contraseña desde Perfil (paciente y médico)
 
 - **Objetivo:** que pacientes y médicos cambien su contraseña desde Perfil y entren después con la nueva, incluidos los médicos con contraseña temporal.

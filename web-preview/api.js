@@ -112,7 +112,7 @@
     // public.planning_revision: una fila que sube con cada cambio en appointments (RLS: admin, recepción o médico).
     async planningRevision() { const rows = await this.request('/rest/v1/planning_revision?select=revision&limit=1',undefined,await this.token(),'GET'); return Array.isArray(rows) && rows[0] ? Number(rows[0].revision) : null; }
     async doctorRPC(name,parameters={}) {
-      if(!['workspace','chart','start','save','finish','lab','prescribe','patients','patient_labs','admissions','admission_request','lab_catalog','lab_orders','labs','alerts','schedule'].includes(name))throw new Error('Operación médica no permitida.');
+      if(!['workspace','chart','start','save','finish','lab','prescribe','patients','patient_labs','admissions','admission_request','lab_catalog','lab_orders','labs','alerts','schedule','patient_hospitalizations'].includes(name))throw new Error('Operación médica no permitida.');
       return this.request('/rest/v1/rpc/doctor_native_'+name,parameters,await this.token());
     }
     // Cambio de contraseña desde Perfil (paciente y médico). 1) Se verifica la contraseña actual iniciando sesión con el

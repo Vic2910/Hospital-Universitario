@@ -10,6 +10,7 @@ protocol DoctorRepositoryProtocol {
     func requestAdmission(_ input: DoctorAdmissionInput) async throws
     func patients(query: String, offset: Int) async throws -> DoctorPatientDirectoryPage
     func patientLabs(patient: UUID, offset: Int) async throws -> DoctorPatientLabPage
+    func patientHospitalizations(patient: UUID) async throws -> PatientHospitalizations
     func workspace(facility: UUID, from: Date, to: Date) async throws -> DoctorWorkspace
     func chart(patient: UUID, from: Date?, to: Date?, query: String) async throws -> DoctorPatientChart
     func start(appointment: UUID, requestKey: UUID) async throws
@@ -53,6 +54,10 @@ final class DoctorRepository: DoctorRepositoryProtocol {
     }
     func patientLabs(patient: UUID, offset: Int) async throws -> DoctorPatientLabPage {
         try await call("patient_labs", ["p_patient":.string(patient.uuidString),"p_offset":.number(offset)])
+    /// Hospitalizaciones del paciente (doctor_native_patient_hospitalizations, relación asistencial) vía HospitalCore.hospitalizations.
+    func patientHospitalizations(patient: UUID) async throws -> PatientHospitalizations {
+        try await api.operation("hospitalizations", parameters: ["patient": patient.uuidString])
+    }
     }
 
     private func call<T: Decodable>(_ name: String, _ parameters: [String: DoctorJSON]) async throws -> T {
@@ -103,6 +108,11 @@ final class DoctorRepository: DoctorRepositoryProtocol {
 
     func markRead(_ notification: DoctorNotification) async throws {
         try await api.perform("updateItem", parameters: ["p_resource": .string("notifications"),
+
+extension DoctorRepositoryProtocol {
+    /// Implementación por defecto para repositorios de prueba sin hospitalizaciones.
+    func patientHospitalizations(patient: UUID) async throws -> PatientHospitalizations { PatientHospitalizations(active: nil, previous: []) }
+}
             "p_id": .string(notification.id.uuidString),
             "p_values": .object(["read_at": .string(DoctorDate.timestamp(Date()))]),
             "p_expected_version": .number(notification.row_version)])

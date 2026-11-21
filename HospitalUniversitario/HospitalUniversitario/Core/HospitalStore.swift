@@ -21,6 +21,9 @@ final class HospitalStore: ObservableObject {
     @Published private(set) var profile: UserProfile?
     @Published private(set) var overview: HospitalOverview?
     @Published var screenMessage: String?
+    /// Habitaciones del paciente: hospitalización actual y anteriores (HospitalCore.hospitalizations, RPC my_hospitalizations).
+    @Published private(set) var hospitalizations: PatientHospitalizations?
+    @Published private(set) var hospitalizationError: String?
     @Published private(set) var roomsMore = false
     @Published private(set) var shiftsMore = false
     @Published private(set) var doctor: DoctorViewModel?
@@ -182,6 +185,19 @@ final class HospitalStore: ObservableObject {
                 if screenID == "admissions" { await doctor?.loadAdmissions() }
                 return
             }
+            if role == "patient" && screenID == "rooms" {
+                // Sin expediente vinculado no se consulta ninguna tabla clínica: estado vacío.
+                hospitalizations = nil; hospitalizationError = nil
+                guard fresh.patient_id != nil else { hospitalizations = PatientHospitalizations(active: nil, previous: []); return }
+                do { hospitalizations = try await api.operation("hospitalizations") }
+                catch {
+                    let detail = String(describing: error)
+                    hospitalizationError = detail.contains("my_hospitalizations") || detail.contains("PGRST202") || detail.contains("404")
+                        ? "La consulta de hospitalizaciones aún no está disponible en el servidor (migración pendiente)."
+                        : "No pudimos cargar tu hospitalización. Intenta de nuevo."
+                }
+                return
+            }
             if profile == nil { profile = try await api.operation("profile") }
             let facility = fresh.roles.first(where: { $0.code == role })?.context_id
             switch screenID {
@@ -232,7 +248,7 @@ final class HospitalStore: ObservableObject {
         } catch {
             if role == "doctor" { doctor?.clear() }
             modules?.clear(); patientLaboratory?.clear(); patientNotifications?.clear()
-            rooms = []; shifts = []; doctorWeek = nil; scheduleWeek = nil; summary = nil; overview = nil
+            rooms = []; shifts = []; hospitalizations = nil; hospitalizationError = nil; doctorWeek = nil; scheduleWeek = nil; summary = nil; overview = nil
             nextAppointment = nil
             roomsMore = false; shiftsMore = false
             if let failure = error as? BackendFailure, failure.status == 401 { await api.clearLocal(); reset() }
@@ -262,7 +278,7 @@ final class HospitalStore: ObservableObject {
         selectedRole = nil
         attention?.clear()
         nextAppointment = nil
-        rooms = []; shifts = []; doctorWeek = nil; scheduleWeek = nil; message = nil
+        rooms = []; shifts = []; hospitalizations = nil; hospitalizationError = nil; doctorWeek = nil; scheduleWeek = nil; message = nil
         roomsCursor = nil; shiftsCursor = nil; roomsMore = false; shiftsMore = false
         screenID = "home"; summary = nil; profile = nil; overview = nil; screenMessage = nil
     }
@@ -273,7 +289,7 @@ final class HospitalStore: ObservableObject {
         modules?.clear(); patientLaboratory?.clear(); patientNotifications?.clear()
         access = nil; roles = []; selectedRole = nil
         nextAppointment = nil
-        rooms = []; shifts = []; doctorWeek = nil; scheduleWeek = nil; roomsCursor = nil; shiftsCursor = nil
+        rooms = []; shifts = []; hospitalizations = nil; hospitalizationError = nil; doctorWeek = nil; scheduleWeek = nil; roomsCursor = nil; shiftsCursor = nil
         roomsMore = false; shiftsMore = false
         screenID = "home"; summary = nil; profile = nil; overview = nil
         screenMessage = nil

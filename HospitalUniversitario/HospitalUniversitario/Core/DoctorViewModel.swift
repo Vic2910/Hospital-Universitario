@@ -46,6 +46,9 @@ final class DoctorViewModel: ObservableObject {
     @Published private(set) var patientLabPage: DoctorPatientLabPage?
     @Published private(set) var patientLabsLoading = false
     @Published private(set) var patientLabsError: String?
+    /// Hospitalizaciones del expediente abierto (mismo episodio que el paciente ve en Habitaciones).
+    @Published private(set) var patientStays: PatientHospitalizations?
+    @Published private(set) var patientStaysError: String?
     private var directoryGeneration = UUID()
     @Published private(set) var chart: DoctorPatientChart?
     @Published private(set) var contextChart: DoctorPatientChart?
@@ -247,7 +250,7 @@ final class DoctorViewModel: ObservableObject {
 
     func select(_ appointment: UUID?) {
         guard !saving else { return }
-        selectedPatient = nil; patientLabs = []; patientLabPage = nil; patientLabsError = nil; patientLabsLoading = false
+        selectedPatient = nil; patientLabs = []; patientLabPage = nil; patientLabsError = nil; patientStays = nil; patientStaysError = nil; patientLabsLoading = false
         if pendingLabs == nil { selectedLabIDs = [] }
         selectionGeneration = UUID()
         selectedAppointmentID = appointment; chart = nil; contextChart = nil
@@ -342,6 +345,18 @@ final class DoctorViewModel: ObservableObject {
         } catch { if scope==generation && request==directoryGeneration { directoryError=Self.describe(error) } }
     }
     func openPatient(_ patient: DoctorAssignedPatient) {
+        if !more {
+            patientStays=nil; patientStaysError=nil
+            do {
+                let stays=try await repository.patientHospitalizations(patient:patient)
+                if scope==generation && selection==selectionGeneration { patientStays=stays }
+            } catch {
+                let detail=String(describing:error)
+                if scope==generation && selection==selectionGeneration {
+                    patientStaysError=detail.contains("PGRST202") || detail.contains("404") || detail.contains("patient_hospitalizations") ? "Consulta de hospitalizaciones pendiente de migración en el servidor." : Self.describe(error)
+                }
+            }
+        }
         guard !saving else { return }
         let appointment=workspace?.appointments.first { $0.patient_id==patient.id && $0.encounter_id==patient.active_encounter_id && patient.active_encounter_id != nil }
         select(appointment?.id); selectedPatient=patient

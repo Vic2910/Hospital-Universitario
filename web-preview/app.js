@@ -8,6 +8,7 @@
   let api, modules, patientLabModules, patientClinical, doctorDashboard, doctorConsultations, labDesign, patientHistory, patientPrescriptions, appointmentFlow, catalog, fixtures, access = null, roles = [], role = null, page = 'home', search = '', busy = false, design = false;
   let profile = null, summary = null, overview = null, items = [], queue = [], cursor = null, more = false;
   let screenNote = '';
+  let stays = null, stayError = null, stayOpen = null; // Hospitalizaciones del paciente (HospitalCore.hospitalizations)
   let notificationsOpen = false;
   let attention = newAttention();
   function newAttention() { return {context:null,rows:[],missing:{},symptoms:new Set(),specialty:'',period:'indiferente',reason:'',other:'',key:crypto.randomUUID(),error:null,confirmation:null}; }
@@ -43,7 +44,7 @@
   }
   function matches(value) { return !search || value.toLocaleLowerCase('es').includes(search.toLocaleLowerCase('es')); }
   function definition() { return catalog?.[role]?.find(screen => screen.id === page); }
-  function clearData() { notificationsOpen=false;doctorWeek=null;scheduleWeek=null; patientLabModules?.clear();patientNotices?.clear();patientClinical?.reset(); receptionPreview=false; appointmentFlow?.reset(); patientHistory?.clear(); labConnected = false; labDesign?.reset(); doctorConsultations?.clear(); doctorDashboard?.clear(); resetSchedule(); modules?.clear(); profile = summary = overview = null; items = []; queue = []; cursor = null; more = false; screenNote = ''; }
+  function clearData() { notificationsOpen=false;doctorWeek=null;scheduleWeek=null; patientLabModules?.clear();patientNotices?.clear();patientClinical?.reset(); receptionPreview=false; appointmentFlow?.reset(); patientHistory?.clear(); labConnected = false; labDesign?.reset(); doctorConsultations?.clear(); doctorDashboard?.clear(); resetSchedule(); modules?.clear(); profile = summary = overview = null; stays = null; stayError = null; stayOpen = null; items = []; queue = []; cursor = null; more = false; screenNote = ''; }
   function reset() { passwordDraft={current:'',next:'',confirm:'',visible:false,error:null,success:null}; attention=newAttention(); nextAppointment = null; dashboardError = null; registrationDraft = {}; access = null; roles = []; role = null; page = 'home'; registerOpen = false; clearData(); }
   async function run(action) {
     if (busy) return;
@@ -89,6 +90,12 @@
       if (page === 'home') {
         summary = null;
         if(role==='patient') nextAppointment = (await api.operation('patientDashboard')).next_appointment;
+      } else if (page === 'rooms' && role === 'patient') {
+        // Habitaciones del paciente: hospitalización actual y anteriores (RPC my_hospitalizations). Sin expediente no se consulta.
+        stays = null; stayError = null;
+        if (design) stays = HospitalCore.hospitalizations.present(stayExamples());
+        else if (access?.patient_id) { try { stays = await api.operation('hospitalizations'); } catch (e) { stayError = /my_hospitalizations|PGRST202|404/.test(String(e.message) + e.status) ? 'La consulta de hospitalizaciones aún no está disponible en el servidor (migración pendiente).' : 'No pudimos cargar tu hospitalización. Intenta de nuevo.'; } }
+        else stays = {active:null, previous:[]};
       } else if (page === 'rooms' || page === 'turns') {
         if (!append) { items = []; queue = []; cursor = null; more = false; }
         // Turno de la próxima cita: lo asigna el servidor (assign_appointment_queue); la app solo lo lee.
@@ -808,7 +815,33 @@
     const submit = content.querySelector('#sched-submit');
     if (submit) submit.disabled = !scheduleCanSubmit() || scheduleState.prepared;
   }
+  // Menú «Más» del paciente (paridad ContentView.patientMenu). Notificaciones queda solo en la campana superior.
+  const patientMenuGroups = [
+    {title:'Mi atención', items:[['appointments','\u25A6','Citas activas y solicitudes'],['request','\u271A','Pide una cita o consulta'],['turns','#','Tu turno de atención']]},
+    {title:'Mi salud', items:[['chart','\u25A4','Datos clínicos protegidos'],['history','\u21BA','Consultas finalizadas'],['prescriptions','\u211E','Recetas emitidas'],['laboratory','\u2697','Solicitudes y resultados']]},
+    {title:'Servicios del hospital', items:[['information','i','Ubicación, servicios y contacto'],['rooms','\u25AD','Tu hospitalización y estancias']]},
+    {title:'Mi cuenta', items:[['profile','\u2659','Datos personales y seguridad']]}];
+  function patientMenu(content) {
+    let shown = 0;
+    for (const group of patientMenuGroups) {
+      const rows = group.items.map(([id, icon, note]) => ({id, icon, note, title: id === 'rooms' ? 'Habitaciones' : catalog.patient.find(s => s.id === id)?.title})).filter(i => i.title && (matches(i.title) || matches(i.note)));
+      if (!rows.length) continue; shown += rows.length;
+      const section = el('section', null, 'more-group'); section.append(el('h2', group.title.toUpperCase(), 'more-group-title'));
+      const list = el('div', null, 'more-list');
+      for (const item of rows) {
+        const b = button(null, () => go(item.id), 'more-row'); b.setAttribute('data-screen', item.id); b.setAttribute('aria-label', item.title);
+        const text = el('span', null, 'more-row-text'); text.append(el('strong', item.title), el('small', item.note));
+        b.append(el('span', item.icon, 'more-row-icon'), text, el('span', '\u203A', 'more-row-chevron')); list.append(b);
+      }
+      section.append(list); content.append(section);
+    }
+    if (!shown) empty(content, 'No hay servicios que coincidan con tu búsqueda.');
+    const actions = el('div', null, 'more-actions');
+    if (roles.length > 1) actions.append(button('Cambiar perfil', () => { role = null; clearData(); render(); }, 'text-button'));
+    actions.append(button('Cerrar sesión', logout, 'logout')); content.append(actions);
+  }
   function menu(content) {
+    if (role === 'patient' && page === 'more') return patientMenu(content);
     heading(content, page === 'health' ? 'Tu información de salud' : 'Servicios');
     for (const screen of catalog[role].filter(item => item.id !== 'home' && (page !== 'health' || item.tab === 'health') && matches(item.title))) content.append(button(screen.title + '　›', () => go(screen.id), 'menu-row'));
     if (page === 'more') {
@@ -907,7 +940,62 @@
     }
     content.append(button('Mis citas',()=>go('appointments'),'menu-row'));
   }
+  // Ejemplos locales de diseño (solo modo diseño, nunca Supabase): una estancia activa y una finalizada con traslado.
+  function stayExamples() {
+    return [{id:'ejemplo-activa',status:'hospitalizado',ordered_at:'2026-11-19T14:10:00Z',hospital_name:'Hospital Universitario (ejemplo)',doctor_name:'Dra. Ejemplo Rivas',reason:'Observación posoperatoria (ejemplo)',instructions:'Reposo relativo y control de signos cada 6 h (ejemplo)',
+      assignments:[{room:'VIP-302',room_kind:'vip',bed:'A',floor:'Tercer piso',assigned_at:'2026-11-19T14:40:00Z',released_at:null}]},
+      {id:'ejemplo-anterior',status:'cerrado',ordered_at:'2026-08-18T15:20:00Z',discharged_at:'2026-08-22T17:15:00Z',hospital_name:'Hospital Universitario (ejemplo)',doctor_name:'Dr. Ejemplo Méndez',discharged_by_name:'Dr. Ejemplo Méndez',reason:'Neumonía adquirida en la comunidad (ejemplo)',discharge_notes:'Control en consulta externa en 7 días (ejemplo)',
+      assignments:[{room:'HAB-201',room_kind:'semiprivada',bed:'B',floor:'Segundo piso',assigned_at:'2026-08-18T15:30:00Z',released_at:'2026-08-19T15:00:00Z'},{room:'HAB-204',room_kind:'semiprivada',bed:'A',floor:'Segundo piso',assigned_at:'2026-08-19T15:00:00Z',released_at:'2026-08-22T18:00:00Z'}]}];
+  }
+  function stayFacts(keys) {
+    const grid = el('dl', null, 'stay-facts');
+    for (const [label, value] of keys) if (value) { const d = el('div'); d.append(el('dt', label), el('dd', value)); grid.append(d); }
+    return grid;
+  }
+  function stayHeader(node, e) {
+    node.append(el('small', e.active ? 'TU HOSPITALIZACIÓN ACTUAL' : 'HOSPITALIZACIÓN FINALIZADA'), el('h2', e.room ? 'Habitación ' + e.room : 'Habitación por confirmar'),
+      el('p', [e.room_kind, e.hospital].filter(Boolean).join(' · ')), el('span', e.status_label, 'stay-pill'));
+  }
+  function stayDetail(content, e) {
+    content.append(button('\u2039 Habitaciones', () => { stayOpen = null; renderContent(content); }, 'text-button stay-back'));
+    const head = el('header', null, 'stay-hero' + (e.active ? '' : ' is-past')); stayHeader(head, e); content.append(head);
+    for (const s of e.sections) { const card = el('section', null, 'stay-section'); card.append(el('h3', s.title), stayFacts(s.rows.map(r => [r.label, r.value]))); content.append(card); }
+    if (e.transfers.length) {
+      const card = el('section', null, 'stay-section'); card.append(el('h3', 'Traslados de habitación'));
+      for (const t of e.transfers) card.append(row([t.room ? 'Habitación ' + t.room : 'Habitación', t.room_kind].filter(Boolean).join(' · '), 'Desde ' + t.from + (t.until ? ' · hasta ' + t.until : ' · actual')));
+      content.append(card);
+    }
+    if (design) content.append(el('p', 'Ejemplo de diseño local: no procede de Supabase.', 'scope-note'));
+  }
+  function stayEmpty(title, text) { const box = el('div', null, 'stay-empty'); box.append(el('span', '\u2302', 'stay-empty-icon'), el('h3', title), el('p', text)); return box; }
+  function patientRooms(content) {
+    if (design && !stays) stays = HospitalCore.hospitalizations.present(stayExamples()); // modo diseño no pasa por load()
+    const H = stays, open = stayOpen && H && [H.active, ...H.previous].find(e => e && e.id === stayOpen);
+    if (open) return stayDetail(content, open);
+    if (design) content.append(el('p', 'Modo diseño: hospitalizaciones de ejemplo, no son registros reales.', 'rose-note'));
+    if (busy && !H) { content.append(el('p', 'Cargando tu hospitalización…', 'loading')); return; }
+    if (stayError) { content.append(row(stayError)); content.append(button('Reintentar', () => run(() => load()), 'menu-row')); return; }
+    if (!access?.patient_id && !design) { content.append(stayEmpty('Actualmente no tienes una hospitalización registrada', 'Recepción debe vincular tu expediente para mostrar tus hospitalizaciones.')); return; }
+    const e = H?.active, hit = x => !search || [x.room, x.room_kind, x.admitted_date, x.status_label].some(v => v && matches(v));
+    if (e && hit(e)) {
+      heading(content, 'Tu hospitalización actual');
+      const card = button(null, () => { stayOpen = e.id; renderContent(content); }, 'stay-hero stay-hero-button'); card.id = 'stay-active'; stayHeader(card, e);
+      card.append(stayFacts([['Ingreso', [e.admitted_date, e.admitted_time].filter(Boolean).join(' · ')], ['Médico', [e.doctor, e.specialty].filter(Boolean).join(' · ')], ['Área', e.area], ['Cama', e.bed]]), el('span', 'Ver detalles \u203A', 'stay-more'));
+      content.append(card);
+    } else if (!e) content.append(stayEmpty('Actualmente no tienes una hospitalización registrada', 'Cuando el personal autorizado registre un ingreso, aparecerá aquí con tu habitación y médico responsable.'));
+    const prev = (H?.previous || []).filter(hit);
+    if (prev.length) {
+      heading(content, 'Hospitalizaciones anteriores');
+      for (const p of prev) {
+        const b = button(null, () => { stayOpen = p.id; renderContent(content); }, 'stay-past');
+        const t = el('span', null, 'more-row-text');
+        t.append(el('strong', [p.room ? 'Habitación ' + p.room : 'Habitación', p.room_kind].filter(Boolean).join(' · ')), el('small', 'Ingreso: ' + (p.admitted_date || 'sin fecha') + (p.discharged_date ? ' · Alta: ' + p.discharged_date : '')));
+        b.append(el('span', '\u25AD', 'more-row-icon'), t, el('span', p.status_label, 'badge'), el('span', '\u203A', 'more-row-chevron')); content.append(b);
+      }
+    }
+  }
   function rooms(content) {
+    if (role === 'patient') return patientRooms(content);
     heading(content, 'Habitaciones del hospital');
     const records = design ? [...Array.from({length:5}, (_,i) => ({ code:'VIP-' + (301+i), active:true })), ...Array.from({length:6}, (_,i) => ({ code:'HAB-' + (201+i), active:true }))] : items;
     for (const item of records.filter(item => matches(item.code))) content.append(row(item.code, null, item.active ? 'Activa' : 'Inactiva'));

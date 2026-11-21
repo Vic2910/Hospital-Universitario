@@ -79,7 +79,7 @@ export function createApp(roleCodes = ['doctor'], options = {}) {
   return {
     calls, stored, body, app,
     get(id) { const node = find(node => node.id === id); assert.ok(node,'Missing #' + id); return node; },
-    button(text) { const node = app.all().find(node => node.tagName === 'button' && (node.textContent === text || node.attributes['aria-label'] === text)); assert.ok(node,'Missing button ' + text); return node; },
+    button(text) { const node = app.all().find(node => node.tagName === 'button' && (node.textContent === text || node.attributes['aria-label'] === text || (node.attributes['data-screen'] && node.attributes['aria-label'] + '　›' === text))); assert.ok(node,'Missing button ' + text); return node; },
     async click(text) { const node = this.button(text); assert.equal(node.disabled,false,'Button disabled ' + text); node.listeners.click(); await settle(); },
     async input(label,value,event = 'input') { const node = app.all().find(item => item.attributes['aria-label'] === label); assert.ok(node,'Missing field ' + label); node.value = value; node.listeners[event]?.({target:node}); await settle(); },
     async submit(label,twice = false) { const form = app.all().find(node => node.tagName === 'form' && node.all().some(child => child.tagName === 'button' && child.textContent === label)); assert.ok(form,'Missing form ' + label); const event = {preventDefault(){}}; form.listeners.submit(event); if (twice) form.listeners.submit(event); await settle(); },
@@ -90,10 +90,18 @@ for (const [codes,role] of [[['doctor'],'doctor'],[['patient'],'patient'],[['doc
   const ui=createApp(codes);await ui.login();
   if(codes.length>1) await ui.click('Paciente');
   assert.match(ui.app.textContent,role==='doctor'?/Hola, Persona de prueba/:/¡Hola, Persona de!/);
-  await ui.click('Más');await ui.click((role==='doctor'?'Mi horario':'Mi turno')+'　›');
+  await ui.click('Más');
+  if(role==='patient'){ // Menú «Más» agrupado: sin acceso a Notificaciones (sigue en la campana).
+    for(const g of ['MI ATENCIÓN','MI SALUD','SERVICIOS DEL HOSPITAL','MI CUENTA']) assert.match(ui.app.textContent,new RegExp(g));
+    assert.ok(!ui.app.all().some(n=>n.tagName==='button'&&n.attributes['aria-label']==='Notificaciones'&&n.attributes['data-screen']),'Notificaciones fuera del menú Más');
+    assert.ok(ui.get('notifications-bell'),'La campana sigue disponible');
+  }
+  await ui.click(role==='doctor'?'Mi horario　›':'Mi turno');
   if(role==='doctor') assert.ok(ui.calls.some(c=>c.url.includes('/staff_shifts?')));
   else assert.match(ui.get('notice').textContent+ui.app.textContent,/fila numerada|No tienes un turno/);
-  await ui.click('Más');await ui.click('Habitaciones　›');assert.match(ui.app.textContent,/VIP-301/);
+  await ui.click('Más');await ui.click(role==='doctor'?'Habitaciones　›':'Habitaciones');
+  if(role==='doctor') assert.match(ui.app.textContent,/VIP-301/);
+  else { assert.doesNotMatch(ui.app.textContent,/VIP-301|TU HOSPITALIZACIÓN ACTUAL/,'Sin hospitalización ficticia'); assert.match(ui.get('notice').textContent+ui.app.textContent,/hospitalización/i); }
   await ui.click('Más');await ui.click('Cerrar sesión');assert.ok(ui.get('password'));
   assert.equal(ui.stored.size,0);
   console.log('OK Hospital Móviles: login, roles, horario/citas, habitaciones y cierre ('+role+')');
@@ -104,7 +112,7 @@ console.log('OK Rol inactivo rechazado sin servicios adicionales');
 for (const role of ['patient','doctor']) {
   const ui = createApp(); await settle(); ui.get('design-' + role).listeners.click(); await settle();
   assert.match(ui.get('preview-mode').textContent,/MODO DISEÑO/);
-  for (const screen of catalog[role].filter(item => item.id !== 'home')) {
+  for (const screen of catalog[role].filter(item => item.id !== 'home' && !(role === 'patient' && item.id === 'notifications'))) {
     await ui.click('Más'); await ui.click(screen.title + '　›');
     if(role==='doctor'&&screen.id==='notifications'){assert.ok(ui.app.all().some(node=>node.id==='doctor-notifications-panel'));await ui.click('Cerrar notificaciones');}
     else assert.ok(ui.app.all().some(node => node.tagName === 'h1' && node.textContent === screen.title),screen.id);

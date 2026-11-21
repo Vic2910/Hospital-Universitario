@@ -9,6 +9,7 @@ Hospital Universitario utiliza exclusivamente **Hospital Móviles** (`uvebpsbbwo
 - [Doctor: consulta, avisos e historial propio — 19 de noviembre](DOCTOR_CONSULTA_AVISOS_2026-11-19.md).
 - [Doctor: flujo completo de consulta, agenda por secciones y migraciones pendientes — 19 de noviembre](DOCTOR_FLUJO_CONSULTA_2026-11-19.md).
 - [Doctor: formulario de consulta de seis campos y migración de cierre — 19 de noviembre](DOCTOR_FORMULARIO_SEIS_CAMPOS_2026-11-19.md).
+- [Menú «Más» y Habitaciones con hospitalización — 20 de noviembre](HABITACIONES_HOSPITALIZACION_2026-11-20.md).
 - [Expedientes: búsqueda, expediente sin duplicados e historial por consulta — 20 de noviembre](EXPEDIENTES_2026-11-20.md).
 - [Análisis del módulo Doctor y su conexión con Supabase; agenda de dos filtros — 20 de noviembre](ANALISIS_MODULO_DOCTOR_SUPABASE.md).
 - [Paciente: citas a la vista, avisos propios y solicitud única — 20 de noviembre](PACIENTE_CITAS_AVISOS_SOLICITUD_2026-11-20.md).

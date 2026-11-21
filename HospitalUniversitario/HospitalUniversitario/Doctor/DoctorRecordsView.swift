@@ -132,6 +132,7 @@ struct DoctorRecordsView: View {
             ProgressView("Cargando expediente…").frame(maxWidth: .infinity).padding(.vertical, 20)
         } else if let chart {
             clinicalSummary(chart)
+            hospitalizations
             actions(patient)
             historyButton(chart)
             if showHistory { history(chart) }
@@ -140,6 +141,33 @@ struct DoctorRecordsView: View {
                 text: "No se pudo cargar el expediente. Comprueba la conexión e inténtalo de nuevo.")
             Button("Reintentar", systemImage: "arrow.clockwise") { Task { await model.loadChart() } }.tint(HospitalTheme.wine)
         }
+    }
+
+    /// Hospitalización del paciente (paridad web `record-stays`). Solo campos registrados.
+    private var hospitalizations: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Hospitalización", systemImage: "bed.double").font(.headline).foregroundStyle(HospitalTheme.ink)
+            if let error = model.patientStaysError {
+                Text(error).font(.footnote).foregroundStyle(HospitalTheme.secondary)
+            } else if let stays = model.patientStays {
+                let list = [stays.active].compactMap { $0 } + stays.previous
+                if list.isEmpty { Text("Sin hospitalizaciones registradas.").font(.footnote).foregroundStyle(HospitalTheme.secondary) }
+                ForEach(list) { e in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text([e.roomTitle, e.room_kind].compactMap { $0 }.joined(separator: " · ")).font(.subheadline.weight(.semibold))
+                            Spacer()
+                            HospitalBadge(text: e.status_label, warning: false)
+                        }
+                        Text("Ingreso: " + [e.admitted_date, e.admitted_time].compactMap { $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(HospitalTheme.secondary)
+                        if let date = e.discharged_date { Text("Alta: " + [date, e.discharged_time].compactMap { $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(HospitalTheme.secondary) }
+                        if let doctor = e.doctor { Text("Responsable: \(doctor)").font(.caption).foregroundStyle(HospitalTheme.secondary) }
+                    }.padding(12).background(HospitalTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+            } else {
+                ProgressView("Cargando hospitalizaciones…").font(.footnote)
+            }
+        }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     /// Cabecera única: los datos de identificación no se repiten en otras secciones.

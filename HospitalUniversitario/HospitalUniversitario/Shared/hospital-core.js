@@ -173,6 +173,11 @@
         {patient_id:'eq.'+id(patient),status:'in.(programada,confirmada,en_atencion)',or:'(status.eq.en_atencion,ends_at.gt.'+(p.now || new Date().toISOString())+')'},'starts_at.asc,id.asc',1)];
     }
     if (kind === 'registerPatient') throw new Error('Solo el personal autorizado puede crear pacientes y expedientes.');
+    if (kind === 'hospitalizations') {
+      // Hospitalizaciones reales (supabase/hospitalizaciones-paciente.sql). Paciente: identidad del servidor; médico: relación asistencial.
+      if (p.patient) return [{path:'/rest/v1/rpc/doctor_native_patient_hospitalizations',method:'POST',body:{p_patient:id(p.patient)}}];
+      return patient ? [{path:'/rest/v1/rpc/my_hospitalizations',method:'POST',body:{}}] : [];
+    }
     if (kind === 'rooms') return [query('rooms','id,code,floor_id,kind,active',p.cursor ? {id:'gt.'+id(p.cursor.id)} : {},'id.asc')];
     if (kind === 'doctorWeek') {
       // Horario real asignado por administración (RLS: solo el propio médico): bloques semanales, jornadas y ausencias.
@@ -235,6 +240,7 @@
         specialty:(function(r){r=Array.isArray(r)?r[0]:r;return r&&r.specialties?r.specialties.name:null;})(row.appointment_requests)} : null};
     }
     if(kind==='profile') return {person:{given_names:a.identity.first_name,family_names:a.identity.last_name},auth_email:a.email,contacts:a.identity.phone ? [{kind:'phone',value:a.identity.phone}] : [],professional:null};
+    if(kind==='hospitalizations') return root.HospitalCore.hospitalizations.present(results[0]||[]);
     if(kind==='activity') return {}; // No invented counters; modules retrieve their own authorized rows.
     if(kind==='overview') return {capacity:null,occupied:null,information:rows.filter(function(r){return !r.expires_at || new Date(r.expires_at)>new Date();}).map(function(r){return {id:r.id,title:r.title,body:r.content};}),on_duty:[]};
     if(kind==='doctorWeek') return root.HospitalCore.doctorWeek(results[0]||[],results[1]||[],results[2]||[],p.week||root.HospitalCore.doctorWeekStart(),p.recurring||null);
@@ -560,4 +566,40 @@
   }
   root.HospitalCore.doctorWeek = doctorWeek;
   root.HospitalCore.doctorWeekStart = weekStart;
+  // Hospitalizaciones del paciente (paridad iOS HospitalizationViews ↔ web roomsView). Activa = asignado/hospitalizado;
+  // alta_medica y cerrado pasan a «Hospitalizaciones anteriores». Solo campos registrados: nunca se rellenan vacíos.
+  (function () {
+    var months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    function local(v) { if (!v) return null; var d = new Date(v); return isNaN(d) ? null : new Date(d.getTime() - 6 * 3600000); }
+    function date(v) { var d = local(v); return d ? d.getUTCDate() + ' de ' + months[d.getUTCMonth()] + ' de ' + d.getUTCFullYear() : null; }
+    function time(v) { var d = local(v); if (!d) return null; var h = d.getUTCHours(), m = d.getUTCMinutes(); return ((h % 12) || 12) + ':' + (m < 10 ? '0' : '') + m + (h < 12 ? ' a. m.' : ' p. m.'); }
+    function kindLabel(k) { return ({vip:'VIP', semiprivada:'Semiprivada', privada:'Privada'})[k] || (k ? String(k).charAt(0).toUpperCase() + String(k).slice(1) : null); }
+    function statusLabel(s) { return ({solicitado:'Ingreso solicitado', asignado:'Habitación asignada', hospitalizado:'Hospitalizado', alta_medica:'Alta médica', cerrado:'Alta médica', cancelado:'Cancelado'})[s] || s; }
+    function isActive(s) { return s === 'asignado' || s === 'hospitalizado'; }
+    function text(v) { v = v == null ? '' : String(v).trim(); return v || null; }
+    function rows(list) { return list.filter(function (r) { return r[1]; }).map(function (r) { return {label:r[0], value:r[1]}; }); }
+    function episode(r) {
+      var asg = Array.isArray(r.assignments) ? r.assignments : [], current = asg.filter(function (x) { return !x.released_at; }).pop() || asg[asg.length - 1] || null;
+      var first = asg[0] || null, admitted = first ? first.assigned_at : r.ordered_at, active = isActive(r.status);
+      var discharged = r.discharged_at || null;
+      var room = current ? text(current.room) : null, kind = kindLabel(current ? current.room_kind : r.requested_kind);
+      var e = {id:r.id, status:r.status, status_label:statusLabel(r.status), active:active, hospital:text(r.hospital_name), room:room, room_kind:kind,
+        bed:current ? text(current.bed) : null, area:current ? text(current.floor) : null, doctor:text(r.doctor_name), specialty:text(r.doctor_specialty),
+        admitted_date:date(admitted), admitted_time:time(admitted), discharged_date:date(discharged), discharged_time:time(discharged),
+        reason:text(r.reason), diagnosis:text(r.diagnosis), instructions:text(r.instructions), discharge_notes:text(r.discharge_notes), discharged_by:text(r.discharged_by_name),
+        transfers:asg.length > 1 ? asg.map(function (x) { return {room:text(x.room), room_kind:kindLabel(x.room_kind), bed:text(x.bed), from:[date(x.assigned_at), time(x.assigned_at)].filter(Boolean).join(' · '), until:x.released_at ? [date(x.released_at), time(x.released_at)].filter(Boolean).join(' · ') : null}; }) : []};
+      e.sections = [
+        {title:'Información de ingreso', rows:rows([['Fecha', e.admitted_date], ['Hora', e.admitted_time], ['Médico responsable', e.doctor], ['Especialidad', e.specialty], ['Motivo de hospitalización', e.reason], ['Diagnóstico de ingreso', e.diagnosis]])},
+        {title:'Información de habitación', rows:rows([['Habitación', room], ['Tipo de habitación', kind], ['Cama', e.bed], ['Área o servicio', e.area], ['Fecha de asignación', current ? date(current.assigned_at) : null], ['Estado de ocupación', active && current && !current.released_at ? 'Ocupada' : null]])},
+        {title:'Información médica', rows:rows([['Indicaciones médicas', e.instructions], ['Médico responsable', e.doctor]])},
+        {title:'Alta médica', rows:rows([['Fecha de alta', e.discharged_date], ['Hora de alta', e.discharged_time], ['Responsable del alta', e.discharged_by], ['Notas de alta', e.discharge_notes]])}
+      ].filter(function (s) { return s.rows.length; });
+      return e;
+    }
+    function present(list) {
+      var all = (Array.isArray(list) ? list : []).filter(function (r) { return r && r.id && ['asignado','hospitalizado','alta_medica','cerrado'].indexOf(r.status) >= 0; }).map(episode);
+      return {active:all.filter(function (e) { return e.active; })[0] || null, previous:all.filter(function (e) { return !e.active; })};
+    }
+    root.HospitalCore.hospitalizations = {present:present, statusLabel:statusLabel, kindLabel:kindLabel, isActive:isActive, date:date, time:time};
+  })();
 })(typeof globalThis !== 'undefined' ? globalThis : this);

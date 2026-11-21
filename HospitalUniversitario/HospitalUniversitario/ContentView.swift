@@ -316,7 +316,58 @@ struct ContentView: View {
         }
     }
 
-    private var menu: some View {
+    /// Menú «Más» del paciente agrupado (paridad web `patientMenu`). Notificaciones queda solo en la campana superior.
+    private static let patientMenuGroups: [(String, [(id: String, icon: String, note: String)])] = [
+        ("Mi atención", [("appointments", "calendar", "Citas activas y solicitudes"), ("request", "plus.circle", "Pide una cita o consulta"), ("turns", "number", "Tu turno de atención")]),
+        ("Mi salud", [("chart", "folder", "Datos clínicos protegidos"), ("history", "clock.arrow.circlepath", "Consultas finalizadas"), ("prescriptions", "pills", "Recetas emitidas"), ("laboratory", "testtube.2", "Solicitudes y resultados")]),
+        ("Servicios del hospital", [("information", "info.circle", "Ubicación, servicios y contacto"), ("rooms", "bed.double", "Tu hospitalización y estancias")]),
+        ("Mi cuenta", [("profile", "person.crop.circle", "Datos personales y seguridad")])
+    ]
+
+    private var patientMenu: some View {
+        let groups = Self.patientMenuGroups.map { group in
+            (group.0, group.1.compactMap { item -> (id: String, icon: String, note: String, title: String)? in
+                guard let title = item.id == "rooms" ? "Habitaciones" : store.screens.first(where: { $0.id == item.id })?.title,
+                      matches(title) || matches(item.note) else { return nil }
+                return (item.id, item.icon, item.note, title)
+            })
+        }.filter { !$0.1.isEmpty }
+        return VStack(alignment: .leading, spacing: 18) {
+            ForEach(groups, id: \.0) { group in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(group.0.uppercased()).font(.caption2.weight(.heavy)).tracking(1.3).foregroundStyle(HospitalTheme.wine).padding(.horizontal, 4)
+                    VStack(spacing: 0) {
+                        ForEach(Array(group.1.enumerated()), id: \.element.id) { index, item in
+                            Button { go(item.id) } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: item.icon).font(.system(size: 16, weight: .semibold)).foregroundStyle(HospitalTheme.wine)
+                                        .frame(width: 36, height: 36).background(HospitalTheme.rose, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(item.title).font(.subheadline.weight(.semibold)).foregroundStyle(HospitalTheme.ink)
+                                        Text(item.note).font(.caption).foregroundStyle(HospitalTheme.secondary).lineLimit(1)
+                                    }
+                                    Spacer(minLength: 8)
+                                    Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(HospitalTheme.secondary.opacity(0.7))
+                                }.padding(.horizontal, 14).frame(minHeight: 60).contentShape(Rectangle())
+                            }.buttonStyle(.plain).disabled(store.busy).accessibilityLabel(item.title).accessibilityHint(item.note)
+                            if index < group.1.count - 1 { Divider().padding(.leading, 62) }
+                        }
+                    }.background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+            }
+            if groups.isEmpty { empty("No hay servicios que coincidan con tu búsqueda.") }
+            VStack(spacing: 2) {
+                if store.roles.count > 1 { Button("Cambiar perfil") { store.switchRole() }.disabled(store.busy) }
+                Button("Cerrar sesión") { Task { await store.signOut() } }.disabled(store.busy).frame(maxWidth: .infinity).padding()
+            }.frame(maxWidth: .infinity).tint(HospitalTheme.wine)
+        }
+    }
+
+    @ViewBuilder private var menu: some View {
+        if !isDoctor && store.screenID == "more" { patientMenu } else { legacyMenu }
+    }
+
+    private var legacyMenu: some View {
         VStack(alignment: .leading, spacing: 10) {
             heading(store.screenID == "health" ? "Tu información de salud" : "Servicios")
             ForEach(store.screens.filter { $0.id != "home" && (store.screenID != "health" || $0.tab == "health") && matches($0.title) }) { item in
@@ -439,7 +490,16 @@ struct ContentView: View {
         }
     }
 
-    private var rooms: some View {
+    /// Pantalla existente «Habitaciones» (ruta `rooms`). Paciente: su hospitalización real (paridad web `patientRooms`);
+    /// médico: catálogo de habitaciones como hasta ahora.
+    @ViewBuilder private var rooms: some View {
+        if !isDoctor {
+            PatientHospitalizationView(data: store.hospitalizations, error: store.hospitalizationError, linked: store.access?.patient_id != nil,
+                                       loading: store.busy, search: search) { Task { await store.refreshScreen() } }
+        } else { roomCatalog }
+    }
+
+    private var roomCatalog: some View {
         VStack(alignment: .leading, spacing: 12) {
             heading("Habitaciones del hospital")
             ForEach(store.rooms.filter { matches($0.code) }) { room in
