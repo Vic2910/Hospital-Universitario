@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 56;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -11,6 +11,62 @@
 		A24000000000000000000001 /* hospital-core.js in Resources */ = {isa = PBXBuildFile; fileRef = A24000000000000000000011 /* hospital-core.js */; };
 		A24000000000000000000002 /* contract.json in Resources */ = {isa = PBXBuildFile; fileRef = A24000000000000000000012 /* contract.json */; };
 		A24000000000000000000003 /* screens.json in Resources */ = {isa = PBXBuildFile; fileRef = A24000000000000000000013 /* screens.json */; };
+		4F5979CB8388BAE43157D74D /* ApplicantDemoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 500C8F9EDEBE2D9A1074DBD0 /* ApplicantDemoStore.swift */; };
+		58604AE1F9F3AE4CD7DE09D9 /* ApplicantDemoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEE8886FE38C440A919DF69D /* ApplicantDemoView.swift */; };
+		AB566AC042BE0E91B4D8EB05 /* ApplicantRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FCB4743FCAEE530D95304E9 /* ApplicantRules.swift */; };
+		1D927C04D187DBA1F95F7BBF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C4EE8F2DD58A0928D5C990A7 /* Assets.xcassets */; };
+		1C9C59CF77399EE825F69AF5 /* RegisterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22ECDF8355F2355D6F5C9E98 /* RegisterView.swift */; };
+		65D2E3B155C0AAB5651C6D96 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEF7EFD23BF9F143C682903D /* ContentView.swift */; };
+		B7F5160239D483F808648BB3 /* DoctorModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC4180ACC9EC6F444617A891 /* DoctorModels.swift */; };
+		59C5857DC57993DA3CE1C9A7 /* DoctorRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E18D2BE3164530C9D255D07B /* DoctorRepository.swift */; };
+		B24E929EF615108C085F1E89 /* DoctorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F262A440B3A652DDE154D /* DoctorViewModel.swift */; };
+		27674F138A6FE60B1C6E8358 /* DoctorWeekModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2604DA30B4B167028298A2E3 /* DoctorWeekModels.swift */; };
+		8F325280888A8BC497307032 /* HospitalAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4134C5E0B80DC338205DEA09 /* HospitalAPI.swift */; };
+		B2CFEC2BA8F5B491F031A54D /* HospitalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00FD374B1AD113E6126054E /* HospitalStore.swift */; };
+		AF2E0C70550E31D1BCC4E89F /* MobileModuleModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51C03BDF0615A0FF96DB2CC0 /* MobileModuleModels.swift */; };
+		1EF4E672B1585ECB2C71DB29 /* MobileModuleRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C473FC096B9B25D540E24A9 /* MobileModuleRepository.swift */; };
+		4254515D51284E285A4A6D85 /* MobileModuleViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65EAE1827E9C395872AD084E /* MobileModuleViewModel.swift */; };
+		3596CE60514477FBE43FF55C /* Models.generated.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E9F91C73D2A93CB514441A /* Models.generated.swift */; };
+		CDFC1A72415515643F746F28 /* ScreenCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A02C319BA0091759BBFA242A /* ScreenCatalog.swift */; };
+		828F5B6827CA285B5CB3E17E /* SharedCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE4BB87E6503BCB6190A2560 /* SharedCore.swift */; };
+		A34EB690B935E038FDFBFF17 /* HospitalPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A78C3E0E99EFDFD48D4E07C /* HospitalPalette.swift */; };
+		49BAFAE3C1701FFF719EB3AD /* HospitalTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C9B4A62976C642E9373E4B5 /* HospitalTheme.swift */; };
+		E7A86721B725615A3799E728 /* PasswordChangeCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00B56AE7E3B1D7E48FFAE7B /* PasswordChangeCard.swift */; };
+		D82398440850568F534851E3 /* DoctorConsultationAgendaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E4793300B3E3479BAA46B50 /* DoctorConsultationAgendaView.swift */; };
+		9F5E63F726DB3FF63D1167D8 /* DoctorConsultationFormComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3174C5ADD52429D4A85E53F8 /* DoctorConsultationFormComponents.swift */; };
+		E97B354634E80AD8E21673C9 /* DoctorConsultationTicketView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB7CB1DDB39EE13A7709A8CB /* DoctorConsultationTicketView.swift */; };
+		575051330AF1F817F0252FA9 /* DoctorDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF21E6657BCF4D6B63076498 /* DoctorDashboardView.swift */; };
+		1A172BDB1B53A197B9277611 /* DoctorModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F482FA4F4D2569DBDAF30067 /* DoctorModuleView.swift */; };
+		44111CDF43FBD9E4F2C1074F /* DoctorPatientHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAE63BBF891BACCFB061F46B /* DoctorPatientHistoryView.swift */; };
+		C21A7365FE1B219BEB62D5FC /* DoctorRecordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FBFC481882AC1621610AC9B /* DoctorRecordsView.swift */; };
+		2E1C78AFD74B293DDFAEF2C4 /* DoctorRoomsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CF130F8E64D2172ABE7E167 /* DoctorRoomsView.swift */; };
+		C76256C9D2D4E2514AFBD3DC /* HospitalUniversitarioApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E228479C7A28E4412A974842 /* HospitalUniversitarioApp.swift */; };
+		C5D3A0125F208A965E9B62B0 /* ClinicalLabDesignModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C67780E5C8D90683D6B5B2 /* ClinicalLabDesignModels.swift */; };
+		2A1D684DB870A9B6784B23CF /* ClinicalLabDesignView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 776BC6D1D8F1F588D4023841 /* ClinicalLabDesignView.swift */; };
+		7AE33C7191FE977C94426754 /* ClinicalPatientIdentityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E04B852F7E2296070DFB3F3A /* ClinicalPatientIdentityView.swift */; };
+		3E5F3A241BACAD6F222BB2DB /* MobileModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3B5A46B3655FBDBDAAFF691 /* MobileModuleView.swift */; };
+		8F28B456C7BBCCE99A169D1A /* PatientAmbulanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 455EE77EBFEAC2D8D32506F4 /* PatientAmbulanceView.swift */; };
+		08126D5A17DB7BFD6449691D /* PatientAppointmentComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB9F5D18460CB3605168534F /* PatientAppointmentComponents.swift */; };
+		CC7285556519B8E6D853303A /* PatientAppointmentFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B25AC81515CA1FFD0053BFB4 /* PatientAppointmentFlow.swift */; };
+		55D132CA1C19EC82B559E18F /* PatientAppointmentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48EA0D0A7CC7771C3A5F79E8 /* PatientAppointmentView.swift */; };
+		BB7F90C4D942D038EF13ABC9 /* PatientAttentionLiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16A934DBAA9024D445A2E201 /* PatientAttentionLiveView.swift */; };
+		A3531AB323EC2A1BE3A51EBA /* PatientAttentionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3DC3F9F9390A71BBE9A5BFC /* PatientAttentionModel.swift */; };
+		1442C782A4383549A9DD34EE /* PatientClinicalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF57DC9B38DD12F03BC81CA0 /* PatientClinicalView.swift */; };
+		58A1551509FCBE5B7B3BF73D /* PatientDashboardComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D28635F715BE5FE63FE2C49C /* PatientDashboardComponents.swift */; };
+		F9D97F3E6EE968836B6A1D65 /* PatientDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C6576563118FF4C1DCFCCF3 /* PatientDashboardView.swift */; };
+		F03C6A01C8F3FB33A6CA585E /* PatientHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C3BD0F90498D15B77140545 /* PatientHistoryView.swift */; };
+		7E00EB841E1D713881A7B430 /* PatientHospitalizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3699C070A9DC230122902263 /* PatientHospitalizationView.swift */; };
+		165C199C6DC887C518F29F72 /* PatientPrescriptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2997A77F6B1FEEA6A4F8727 /* PatientPrescriptionsView.swift */; };
+		D7AA7CB6DB4289E4BBA659D7 /* PatientProfileInformationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2792CD32D9EAE149ECAB9E71 /* PatientProfileInformationView.swift */; };
+		D26B3F291764C339DBD11DC8 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 526A7F256C20C9BE8DBDF721 /* Preview Assets.xcassets */; };
+		07A7A843DE902F2A9C040FFB /* ApplicantRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A986893B0DD8EE1B32EA21 /* ApplicantRulesTests.swift */; };
+		AFF963629CC410509C2E92A4 /* DoctorModuleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D8FCCCC7F82BB1438B55A6C /* DoctorModuleTests.swift */; };
+		218EFB0598659A7669E72443 /* HospitalUniversitarioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF64B8DBB2D926CC4383DFAE /* HospitalUniversitarioTests.swift */; };
+		A8D72F10C2062401D90F0223 /* MobileModuleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BB2BE8094615BF0266C3671 /* MobileModuleTests.swift */; };
+		38087D7396FB55AD0EF751D7 /* PasswordChangeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B33970BEE02ECB8E01DD4418 /* PasswordChangeTests.swift */; };
+		FD5AB967822243E32FF41ADD /* PatientAttentionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 159F99B0C65F5709DFB0BA99 /* PatientAttentionTests.swift */; };
+		9DF01B7C2257E2304FBAE7E2 /* HospitalUniversitarioUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637D5CE59D1C9E8EF0F29A08 /* HospitalUniversitarioUITests.swift */; };
+		FBEFF02AA10641E0257CB514 /* HospitalUniversitarioUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D85B5B16CE5659F8F9AA52F /* HospitalUniversitarioUITestsLaunchTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -38,34 +94,64 @@
 		DB957CD43083F98F00D009E8 /* HospitalUniversitario.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HospitalUniversitario.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DB957CE53083F99000D009E8 /* HospitalUniversitarioTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HospitalUniversitarioTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DB957CEF3083F99100D009E8 /* HospitalUniversitarioUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HospitalUniversitarioUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		500C8F9EDEBE2D9A1074DBD0 /* ApplicantDemoStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicantDemoStore.swift; sourceTree = "<group>"; };
+		CEE8886FE38C440A919DF69D /* ApplicantDemoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicantDemoView.swift; sourceTree = "<group>"; };
+		5FCB4743FCAEE530D95304E9 /* ApplicantRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicantRules.swift; sourceTree = "<group>"; };
+		C4EE8F2DD58A0928D5C990A7 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		22ECDF8355F2355D6F5C9E98 /* RegisterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegisterView.swift; sourceTree = "<group>"; };
+		DEF7EFD23BF9F143C682903D /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		CC4180ACC9EC6F444617A891 /* DoctorModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorModels.swift; sourceTree = "<group>"; };
+		E18D2BE3164530C9D255D07B /* DoctorRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorRepository.swift; sourceTree = "<group>"; };
+		E71F262A440B3A652DDE154D /* DoctorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorViewModel.swift; sourceTree = "<group>"; };
+		2604DA30B4B167028298A2E3 /* DoctorWeekModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorWeekModels.swift; sourceTree = "<group>"; };
+		4134C5E0B80DC338205DEA09 /* HospitalAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HospitalAPI.swift; sourceTree = "<group>"; };
+		A00FD374B1AD113E6126054E /* HospitalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HospitalStore.swift; sourceTree = "<group>"; };
+		51C03BDF0615A0FF96DB2CC0 /* MobileModuleModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileModuleModels.swift; sourceTree = "<group>"; };
+		6C473FC096B9B25D540E24A9 /* MobileModuleRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileModuleRepository.swift; sourceTree = "<group>"; };
+		65EAE1827E9C395872AD084E /* MobileModuleViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileModuleViewModel.swift; sourceTree = "<group>"; };
+		41E9F91C73D2A93CB514441A /* Models.generated.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.generated.swift; sourceTree = "<group>"; };
+		A02C319BA0091759BBFA242A /* ScreenCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCatalog.swift; sourceTree = "<group>"; };
+		CE4BB87E6503BCB6190A2560 /* SharedCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedCore.swift; sourceTree = "<group>"; };
+		2A78C3E0E99EFDFD48D4E07C /* HospitalPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HospitalPalette.swift; sourceTree = "<group>"; };
+		2C9B4A62976C642E9373E4B5 /* HospitalTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HospitalTheme.swift; sourceTree = "<group>"; };
+		F00B56AE7E3B1D7E48FFAE7B /* PasswordChangeCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordChangeCard.swift; sourceTree = "<group>"; };
+		3E4793300B3E3479BAA46B50 /* DoctorConsultationAgendaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorConsultationAgendaView.swift; sourceTree = "<group>"; };
+		3174C5ADD52429D4A85E53F8 /* DoctorConsultationFormComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorConsultationFormComponents.swift; sourceTree = "<group>"; };
+		AB7CB1DDB39EE13A7709A8CB /* DoctorConsultationTicketView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorConsultationTicketView.swift; sourceTree = "<group>"; };
+		FF21E6657BCF4D6B63076498 /* DoctorDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorDashboardView.swift; sourceTree = "<group>"; };
+		F482FA4F4D2569DBDAF30067 /* DoctorModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorModuleView.swift; sourceTree = "<group>"; };
+		BAE63BBF891BACCFB061F46B /* DoctorPatientHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorPatientHistoryView.swift; sourceTree = "<group>"; };
+		3FBFC481882AC1621610AC9B /* DoctorRecordsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorRecordsView.swift; sourceTree = "<group>"; };
+		8CF130F8E64D2172ABE7E167 /* DoctorRoomsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorRoomsView.swift; sourceTree = "<group>"; };
+		29CD35FF5C515CBDA00D4524 /* HospitalUniversitario.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HospitalUniversitario.entitlements; sourceTree = "<group>"; };
+		E228479C7A28E4412A974842 /* HospitalUniversitarioApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HospitalUniversitarioApp.swift; sourceTree = "<group>"; };
+		B2C67780E5C8D90683D6B5B2 /* ClinicalLabDesignModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicalLabDesignModels.swift; sourceTree = "<group>"; };
+		776BC6D1D8F1F588D4023841 /* ClinicalLabDesignView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicalLabDesignView.swift; sourceTree = "<group>"; };
+		E04B852F7E2296070DFB3F3A /* ClinicalPatientIdentityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicalPatientIdentityView.swift; sourceTree = "<group>"; };
+		D3B5A46B3655FBDBDAAFF691 /* MobileModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileModuleView.swift; sourceTree = "<group>"; };
+		455EE77EBFEAC2D8D32506F4 /* PatientAmbulanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientAmbulanceView.swift; sourceTree = "<group>"; };
+		DB9F5D18460CB3605168534F /* PatientAppointmentComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientAppointmentComponents.swift; sourceTree = "<group>"; };
+		B25AC81515CA1FFD0053BFB4 /* PatientAppointmentFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientAppointmentFlow.swift; sourceTree = "<group>"; };
+		48EA0D0A7CC7771C3A5F79E8 /* PatientAppointmentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientAppointmentView.swift; sourceTree = "<group>"; };
+		16A934DBAA9024D445A2E201 /* PatientAttentionLiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientAttentionLiveView.swift; sourceTree = "<group>"; };
+		F3DC3F9F9390A71BBE9A5BFC /* PatientAttentionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientAttentionModel.swift; sourceTree = "<group>"; };
+		BF57DC9B38DD12F03BC81CA0 /* PatientClinicalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientClinicalView.swift; sourceTree = "<group>"; };
+		D28635F715BE5FE63FE2C49C /* PatientDashboardComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientDashboardComponents.swift; sourceTree = "<group>"; };
+		5C6576563118FF4C1DCFCCF3 /* PatientDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientDashboardView.swift; sourceTree = "<group>"; };
+		9C3BD0F90498D15B77140545 /* PatientHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientHistoryView.swift; sourceTree = "<group>"; };
+		3699C070A9DC230122902263 /* PatientHospitalizationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientHospitalizationView.swift; sourceTree = "<group>"; };
+		F2997A77F6B1FEEA6A4F8727 /* PatientPrescriptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientPrescriptionsView.swift; sourceTree = "<group>"; };
+		2792CD32D9EAE149ECAB9E71 /* PatientProfileInformationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientProfileInformationView.swift; sourceTree = "<group>"; };
+		526A7F256C20C9BE8DBDF721 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		75A986893B0DD8EE1B32EA21 /* ApplicantRulesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicantRulesTests.swift; sourceTree = "<group>"; };
+		7D8FCCCC7F82BB1438B55A6C /* DoctorModuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorModuleTests.swift; sourceTree = "<group>"; };
+		EF64B8DBB2D926CC4383DFAE /* HospitalUniversitarioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HospitalUniversitarioTests.swift; sourceTree = "<group>"; };
+		3BB2BE8094615BF0266C3671 /* MobileModuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileModuleTests.swift; sourceTree = "<group>"; };
+		B33970BEE02ECB8E01DD4418 /* PasswordChangeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordChangeTests.swift; sourceTree = "<group>"; };
+		159F99B0C65F5709DFB0BA99 /* PatientAttentionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientAttentionTests.swift; sourceTree = "<group>"; };
+		637D5CE59D1C9E8EF0F29A08 /* HospitalUniversitarioUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HospitalUniversitarioUITests.swift; sourceTree = "<group>"; };
+		6D85B5B16CE5659F8F9AA52F /* HospitalUniversitarioUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HospitalUniversitarioUITestsLaunchTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
-
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		A24000000000000000000020 /* Explicit shared resource membership */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (Shared/hospital-core.js, Shared/contract.json, Shared/screens.json,);
-			target = DB957CD33083F98E00D009E8 /* HospitalUniversitario */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		DB957CD63083F98F00D009E8 /* HospitalUniversitario */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (A24000000000000000000020 /* Explicit shared resource membership */,);
-			path = HospitalUniversitario;
-			sourceTree = "<group>";
-		};
-		DB957CE83083F99000D009E8 /* HospitalUniversitarioTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = HospitalUniversitarioTests;
-			sourceTree = "<group>";
-		};
-		DB957CF23083F99100D009E8 /* HospitalUniversitarioUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = HospitalUniversitarioUITests;
-			sourceTree = "<group>";
-		};
-/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		DB957CD13083F98E00D009E8 /* Frameworks */ = {
@@ -114,6 +200,159 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		4196557937D66A19226C4DAD /* Applicant */ = {
+			isa = PBXGroup;
+			children = (
+				500C8F9EDEBE2D9A1074DBD0,
+				CEE8886FE38C440A919DF69D,
+				5FCB4743FCAEE530D95304E9,
+			);
+			path = Applicant;
+			sourceTree = "<group>";
+		};
+		D716AA312A6ABC5D280C8975 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				22ECDF8355F2355D6F5C9E98,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		243BB24D5B5ADEB49446B1E6 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				CC4180ACC9EC6F444617A891,
+				E18D2BE3164530C9D255D07B,
+				E71F262A440B3A652DDE154D,
+				2604DA30B4B167028298A2E3,
+				4134C5E0B80DC338205DEA09,
+				A00FD374B1AD113E6126054E,
+				51C03BDF0615A0FF96DB2CC0,
+				6C473FC096B9B25D540E24A9,
+				65EAE1827E9C395872AD084E,
+				41E9F91C73D2A93CB514441A,
+				A02C319BA0091759BBFA242A,
+				CE4BB87E6503BCB6190A2560,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		13654A4B9023B68171D04459 /* Design */ = {
+			isa = PBXGroup;
+			children = (
+				2A78C3E0E99EFDFD48D4E07C,
+				2C9B4A62976C642E9373E4B5,
+				F00B56AE7E3B1D7E48FFAE7B,
+			);
+			path = Design;
+			sourceTree = "<group>";
+		};
+		D2BE53A5263C1CDF429BDAA2 /* Doctor */ = {
+			isa = PBXGroup;
+			children = (
+				3E4793300B3E3479BAA46B50,
+				3174C5ADD52429D4A85E53F8,
+				AB7CB1DDB39EE13A7709A8CB,
+				FF21E6657BCF4D6B63076498,
+				F482FA4F4D2569DBDAF30067,
+				BAE63BBF891BACCFB061F46B,
+				3FBFC481882AC1621610AC9B,
+				8CF130F8E64D2172ABE7E167,
+			);
+			path = Doctor;
+			sourceTree = "<group>";
+		};
+		0EA304A57E545288B09B63EF /* Modules */ = {
+			isa = PBXGroup;
+			children = (
+				B2C67780E5C8D90683D6B5B2,
+				776BC6D1D8F1F588D4023841,
+				E04B852F7E2296070DFB3F3A,
+				D3B5A46B3655FBDBDAAFF691,
+			);
+			path = Modules;
+			sourceTree = "<group>";
+		};
+		6977A80242218D47107AA833 /* Patient */ = {
+			isa = PBXGroup;
+			children = (
+				455EE77EBFEAC2D8D32506F4,
+				DB9F5D18460CB3605168534F,
+				B25AC81515CA1FFD0053BFB4,
+				48EA0D0A7CC7771C3A5F79E8,
+				16A934DBAA9024D445A2E201,
+				F3DC3F9F9390A71BBE9A5BFC,
+				BF57DC9B38DD12F03BC81CA0,
+				D28635F715BE5FE63FE2C49C,
+				5C6576563118FF4C1DCFCCF3,
+				9C3BD0F90498D15B77140545,
+				3699C070A9DC230122902263,
+				F2997A77F6B1FEEA6A4F8727,
+				2792CD32D9EAE149ECAB9E71,
+			);
+			path = Patient;
+			sourceTree = "<group>";
+		};
+		DFF2E86F108EBE53BC85D265 /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				526A7F256C20C9BE8DBDF721,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		D1AED55E9674D5C8C6E0571C /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				A24000000000000000000012,
+				A24000000000000000000011,
+				A24000000000000000000013,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		DB957CD63083F98F00D009E8 /* HospitalUniversitario */ = {
+			isa = PBXGroup;
+			children = (
+				4196557937D66A19226C4DAD,
+				C4EE8F2DD58A0928D5C990A7,
+				D716AA312A6ABC5D280C8975,
+				DEF7EFD23BF9F143C682903D,
+				243BB24D5B5ADEB49446B1E6,
+				13654A4B9023B68171D04459,
+				D2BE53A5263C1CDF429BDAA2,
+				29CD35FF5C515CBDA00D4524,
+				E228479C7A28E4412A974842,
+				0EA304A57E545288B09B63EF,
+				6977A80242218D47107AA833,
+				DFF2E86F108EBE53BC85D265,
+				D1AED55E9674D5C8C6E0571C,
+			);
+			path = HospitalUniversitario;
+			sourceTree = "<group>";
+		};
+		DB957CE83083F99000D009E8 /* HospitalUniversitarioTests */ = {
+			isa = PBXGroup;
+			children = (
+				75A986893B0DD8EE1B32EA21,
+				7D8FCCCC7F82BB1438B55A6C,
+				EF64B8DBB2D926CC4383DFAE,
+				3BB2BE8094615BF0266C3671,
+				B33970BEE02ECB8E01DD4418,
+				159F99B0C65F5709DFB0BA99,
+			);
+			path = HospitalUniversitarioTests;
+			sourceTree = "<group>";
+		};
+		DB957CF23083F99100D009E8 /* HospitalUniversitarioUITests */ = {
+			isa = PBXGroup;
+			children = (
+				637D5CE59D1C9E8EF0F29A08,
+				6D85B5B16CE5659F8F9AA52F,
+			);
+			path = HospitalUniversitarioUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -128,9 +367,6 @@
 			buildRules = (
 			);
 			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				DB957CD63083F98F00D009E8 /* HospitalUniversitario */,
 			);
 			name = HospitalUniversitario;
 			packageProductDependencies = (
@@ -153,9 +389,6 @@
 			dependencies = (
 				DB957CE73083F99000D009E8 /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				DB957CE83083F99000D009E8 /* HospitalUniversitarioTests */,
-			);
 			name = HospitalUniversitarioTests;
 			packageProductDependencies = (
 			);
@@ -176,9 +409,6 @@
 			dependencies = (
 				DB957CF13083F99100D009E8 /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				DB957CF23083F99100D009E8 /* HospitalUniversitarioUITests */,
-			);
 			name = HospitalUniversitarioUITests;
 			packageProductDependencies = (
 			);
@@ -193,18 +423,18 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1620;
-				LastUpgradeCheck = 1620;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					DB957CD33083F98E00D009E8 = {
-						CreatedOnToolsVersion = 16.2;
+						CreatedOnToolsVersion = 15.0;
 					};
 					DB957CE43083F99000D009E8 = {
-						CreatedOnToolsVersion = 16.2;
+						CreatedOnToolsVersion = 15.0;
 						TestTargetID = DB957CD33083F98E00D009E8;
 					};
 					DB957CEE3083F99100D009E8 = {
-						CreatedOnToolsVersion = 16.2;
+						CreatedOnToolsVersion = 15.0;
 						TestTargetID = DB957CD33083F98E00D009E8;
 					};
 				};
@@ -217,8 +447,6 @@
 				Base,
 			);
 			mainGroup = DB957CCB3083F98E00D009E8;
-			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
 			packageReferences = (D02800000000000000000003 /* supabase-swift */,);
 			productRefGroup = DB957CD53083F98F00D009E8 /* Products */;
 			projectDirPath = "";
@@ -236,6 +464,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1D927C04D187DBA1F95F7BBF /* Assets.xcassets in Resources */,
+				D26B3F291764C339DBD11DC8 /* Preview Assets.xcassets in Resources */,
 				A24000000000000000000001 /* hospital-core.js in Resources */,
 				A24000000000000000000002 /* contract.json in Resources */,
 				A24000000000000000000003 /* screens.json in Resources */,
@@ -263,6 +493,52 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4F5979CB8388BAE43157D74D /* ApplicantDemoStore.swift in Sources */,
+				58604AE1F9F3AE4CD7DE09D9 /* ApplicantDemoView.swift in Sources */,
+				AB566AC042BE0E91B4D8EB05 /* ApplicantRules.swift in Sources */,
+				1C9C59CF77399EE825F69AF5 /* RegisterView.swift in Sources */,
+				65D2E3B155C0AAB5651C6D96 /* ContentView.swift in Sources */,
+				B7F5160239D483F808648BB3 /* DoctorModels.swift in Sources */,
+				59C5857DC57993DA3CE1C9A7 /* DoctorRepository.swift in Sources */,
+				B24E929EF615108C085F1E89 /* DoctorViewModel.swift in Sources */,
+				27674F138A6FE60B1C6E8358 /* DoctorWeekModels.swift in Sources */,
+				8F325280888A8BC497307032 /* HospitalAPI.swift in Sources */,
+				B2CFEC2BA8F5B491F031A54D /* HospitalStore.swift in Sources */,
+				AF2E0C70550E31D1BCC4E89F /* MobileModuleModels.swift in Sources */,
+				1EF4E672B1585ECB2C71DB29 /* MobileModuleRepository.swift in Sources */,
+				4254515D51284E285A4A6D85 /* MobileModuleViewModel.swift in Sources */,
+				3596CE60514477FBE43FF55C /* Models.generated.swift in Sources */,
+				CDFC1A72415515643F746F28 /* ScreenCatalog.swift in Sources */,
+				828F5B6827CA285B5CB3E17E /* SharedCore.swift in Sources */,
+				A34EB690B935E038FDFBFF17 /* HospitalPalette.swift in Sources */,
+				49BAFAE3C1701FFF719EB3AD /* HospitalTheme.swift in Sources */,
+				E7A86721B725615A3799E728 /* PasswordChangeCard.swift in Sources */,
+				D82398440850568F534851E3 /* DoctorConsultationAgendaView.swift in Sources */,
+				9F5E63F726DB3FF63D1167D8 /* DoctorConsultationFormComponents.swift in Sources */,
+				E97B354634E80AD8E21673C9 /* DoctorConsultationTicketView.swift in Sources */,
+				575051330AF1F817F0252FA9 /* DoctorDashboardView.swift in Sources */,
+				1A172BDB1B53A197B9277611 /* DoctorModuleView.swift in Sources */,
+				44111CDF43FBD9E4F2C1074F /* DoctorPatientHistoryView.swift in Sources */,
+				C21A7365FE1B219BEB62D5FC /* DoctorRecordsView.swift in Sources */,
+				2E1C78AFD74B293DDFAEF2C4 /* DoctorRoomsView.swift in Sources */,
+				C76256C9D2D4E2514AFBD3DC /* HospitalUniversitarioApp.swift in Sources */,
+				C5D3A0125F208A965E9B62B0 /* ClinicalLabDesignModels.swift in Sources */,
+				2A1D684DB870A9B6784B23CF /* ClinicalLabDesignView.swift in Sources */,
+				7AE33C7191FE977C94426754 /* ClinicalPatientIdentityView.swift in Sources */,
+				3E5F3A241BACAD6F222BB2DB /* MobileModuleView.swift in Sources */,
+				8F28B456C7BBCCE99A169D1A /* PatientAmbulanceView.swift in Sources */,
+				08126D5A17DB7BFD6449691D /* PatientAppointmentComponents.swift in Sources */,
+				CC7285556519B8E6D853303A /* PatientAppointmentFlow.swift in Sources */,
+				55D132CA1C19EC82B559E18F /* PatientAppointmentView.swift in Sources */,
+				BB7F90C4D942D038EF13ABC9 /* PatientAttentionLiveView.swift in Sources */,
+				A3531AB323EC2A1BE3A51EBA /* PatientAttentionModel.swift in Sources */,
+				1442C782A4383549A9DD34EE /* PatientClinicalView.swift in Sources */,
+				58A1551509FCBE5B7B3BF73D /* PatientDashboardComponents.swift in Sources */,
+				F9D97F3E6EE968836B6A1D65 /* PatientDashboardView.swift in Sources */,
+				F03C6A01C8F3FB33A6CA585E /* PatientHistoryView.swift in Sources */,
+				7E00EB841E1D713881A7B430 /* PatientHospitalizationView.swift in Sources */,
+				165C199C6DC887C518F29F72 /* PatientPrescriptionsView.swift in Sources */,
+				D7AA7CB6DB4289E4BBA659D7 /* PatientProfileInformationView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -270,6 +546,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				07A7A843DE902F2A9C040FFB /* ApplicantRulesTests.swift in Sources */,
+				AFF963629CC410509C2E92A4 /* DoctorModuleTests.swift in Sources */,
+				218EFB0598659A7669E72443 /* HospitalUniversitarioTests.swift in Sources */,
+				A8D72F10C2062401D90F0223 /* MobileModuleTests.swift in Sources */,
+				38087D7396FB55AD0EF751D7 /* PasswordChangeTests.swift in Sources */,
+				FD5AB967822243E32FF41ADD /* PatientAttentionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -277,6 +559,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9DF01B7C2257E2304FBAE7E2 /* HospitalUniversitarioUITests.swift in Sources */,
+				FBEFF02AA10641E0257CB514 /* HospitalUniversitarioUITestsLaunchTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -431,10 +715,10 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 15.2;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.unicaes.victorarevalo.HospitalUniversitario;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -443,7 +727,6 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				XROS_DEPLOYMENT_TARGET = 2.2;
 			};
 			name = Debug;
 		};
@@ -468,10 +751,10 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 15.2;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.unicaes.victorarevalo.HospitalUniversitario;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -480,7 +763,6 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				XROS_DEPLOYMENT_TARGET = 2.2;
 			};
 			name = Release;
 		};
@@ -491,8 +773,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
-				MACOSX_DEPLOYMENT_TARGET = 15.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.unicaes.victorarevalo.HospitalUniversitarioTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -502,7 +784,6 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HospitalUniversitario.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HospitalUniversitario";
-				XROS_DEPLOYMENT_TARGET = 2.2;
 			};
 			name = Debug;
 		};
@@ -513,8 +794,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
-				MACOSX_DEPLOYMENT_TARGET = 15.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.unicaes.victorarevalo.HospitalUniversitarioTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -524,7 +805,6 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HospitalUniversitario.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HospitalUniversitario";
-				XROS_DEPLOYMENT_TARGET = 2.2;
 			};
 			name = Release;
 		};
@@ -534,8 +814,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
-				MACOSX_DEPLOYMENT_TARGET = 15.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.unicaes.victorarevalo.HospitalUniversitarioUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -545,7 +825,6 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = HospitalUniversitario;
-				XROS_DEPLOYMENT_TARGET = 2.2;
 			};
 			name = Debug;
 		};
@@ -555,8 +834,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
-				MACOSX_DEPLOYMENT_TARGET = 15.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.unicaes.victorarevalo.HospitalUniversitarioUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -566,7 +845,6 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = HospitalUniversitario;
-				XROS_DEPLOYMENT_TARGET = 2.2;
 			};
 			name = Release;
 		};
