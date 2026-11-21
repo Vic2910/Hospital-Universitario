@@ -119,6 +119,12 @@
       if(kind==='units')return this.request('/rest/v1/ambulances?select=code,status,active&active=eq.true&order=id',undefined,token,'GET');
       throw new Error('Operación de ambulancia no permitida.');
     }
+    // Ambulancia del paciente y Habitaciones del médico (paridad con HospitalAPI.patientAmbulance / doctorRPC de iOS).
+    async careRPC(name,parameters={}) {
+      if(!['patient_request_ambulance','patient_ambulance_requests','patient_cancel_ambulance','doctor_native_rooms','doctor_native_room_candidates',
+        'doctor_native_hospitalize','doctor_native_assign_bed','doctor_native_discharge'].includes(name))throw new Error('Operación no permitida.');
+      return this.request('/rest/v1/rpc/'+name,parameters,await this.token());
+    }
     async doctorRPC(name,parameters={}) {
       if(!['workspace','chart','start','save','finish','lab','prescribe','patients','patient_labs','admissions','admission_request','lab_catalog','lab_orders','labs','alerts','schedule','patient_hospitalizations'].includes(name))throw new Error('Operación médica no permitida.');
       return this.request('/rest/v1/rpc/doctor_native_'+name,parameters,await this.token());

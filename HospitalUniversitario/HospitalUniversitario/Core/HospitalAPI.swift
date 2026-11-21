@@ -75,11 +75,11 @@ final class HospitalAPI {
         let (data, response) = try await transport.data(for: request)
         guard let response = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         guard (200..<300).contains(response.statusCode) else {
-            if path.hasPrefix("/rest/v1/rpc/"), (path.contains("attention") || path.contains("doctor_native_")),
+            if path.hasPrefix("/rest/v1/rpc/"), (path.contains("attention") || path.contains("doctor_native_") || path.contains("ambulance")),
                let problem = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let code = problem["code"] as? String, ["22023", "42501", "40001"].contains(code),
                let message = problem["message"] as? String {
-                if code == "40001" && path.contains("doctor_native_") { throw HospitalError.conflict(message) }
+                if code == "40001" && (path.contains("doctor_native_") || path.contains("ambulance")) { throw HospitalError.conflict(message) }
                 throw HospitalError.message(message)
             }
             throw BackendFailure(status: response.statusCode)
@@ -125,7 +125,7 @@ final class HospitalAPI {
         }
     }
     func doctorRPC<T: Decodable>(_ name: String, parameters: [String: Any] = [:]) async throws -> T {
-        guard ["workspace", "chart", "start", "save", "lab", "prescribe", "finish", "patients", "patient_labs", "admissions", "admission_request", "lab_catalog", "lab_orders", "labs", "alerts"].contains(name) else {
+        guard ["workspace", "chart", "start", "save", "lab", "prescribe", "finish", "patients", "patient_labs", "admissions", "admission_request", "lab_catalog", "lab_orders", "labs", "alerts", "rooms", "room_candidates", "assign_bed", "hospitalize", "discharge"].contains(name) else {
             throw HospitalError.message("Operación médica no permitida.")
         }
         let value = try await request("/rest/v1/rpc/doctor_native_" + name, body: parameters, method: "POST")
@@ -146,6 +146,16 @@ final class HospitalAPI {
         default:
             throw HospitalError.message("Operación de ambulancia no permitida.")
         }
+        let data = try JSONSerialization.data(withJSONObject: value, options: .fragmentsAllowed)
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+    /// Ambulancia del paciente (supabase/paciente-ambulancia-habitaciones-medico.sql). La solicitud se serializa en el
+    /// servidor con un lock global: si dos pacientes piden a la vez, el segundo recibe su posición en cola.
+    func patientAmbulance<T: Decodable>(_ kind: String, parameters: [String: Any] = [:]) async throws -> T {
+        guard let name = ["request": "patient_request_ambulance", "list": "patient_ambulance_requests", "cancel": "patient_cancel_ambulance"][kind] else {
+            throw HospitalError.message("Operación de ambulancia no permitida.")
+        }
+        let value = try await request("/rest/v1/rpc/" + name, body: parameters, method: "POST")
         let data = try JSONSerialization.data(withJSONObject: value, options: .fragmentsAllowed)
         return try JSONDecoder().decode(T.self, from: data)
     }

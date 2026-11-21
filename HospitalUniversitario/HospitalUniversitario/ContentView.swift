@@ -148,7 +148,7 @@ struct ContentView: View {
         if !isDoctor && store.screenID == "home" { return "Mi espacio de salud" }
         if store.screenID == "home" { return "Hola, \(store.name == "Bienvenido" ? (isDoctor ? "Doctor" : "Paciente") : store.name)" }
         if !isDoctor && ["request", "schedule", "health"].contains(store.screenID) { return "Solicitar atención" }
-        return screen?.title ?? (store.screenID == "rooms" ? "Habitaciones" : store.screenID == "health" ? "Mi salud" : "Más")
+        return screen?.title ?? (store.screenID == "rooms" ? "Habitaciones" : store.screenID == "ambulance" ? "Ambulancia" : store.screenID == "health" ? "Mi salud" : "Más")
     }
 
     private var portal: some View {
@@ -252,6 +252,8 @@ struct ContentView: View {
             case "more", "health": menu
             case "turns": if isDoctor { schedule } else { queue }
             case "rooms": rooms
+            case "ambulance":
+                if !isDoctor, let api = store.api { PatientAmbulanceView(api: api, linked: store.access?.patient_id != nil) } else { menu }
             case "profile": profile
             case "information": information
             default: menu
@@ -318,7 +320,7 @@ struct ContentView: View {
 
     /// Menú «Más» del paciente agrupado (paridad web `patientMenu`). Notificaciones queda solo en la campana superior.
     private static let patientMenuGroups: [(String, [(id: String, icon: String, note: String)])] = [
-        ("Mi atención", [("appointments", "calendar", "Citas activas y solicitudes"), ("request", "plus.circle", "Pide una cita o consulta"), ("turns", "number", "Tu turno de atención")]),
+        ("Mi atención", [("appointments", "calendar", "Citas activas y solicitudes"), ("request", "plus.circle", "Pide una cita o consulta"), ("turns", "number", "Tu turno de atención"), ("ambulance", "cross.case.fill", "Solicita un traslado en ambulancia")]),
         ("Mi salud", [("chart", "folder", "Datos clínicos protegidos"), ("history", "clock.arrow.circlepath", "Consultas finalizadas"), ("prescriptions", "pills", "Recetas emitidas"), ("laboratory", "testtube.2", "Solicitudes y resultados")]),
         ("Servicios del hospital", [("information", "info.circle", "Ubicación, servicios y contacto"), ("rooms", "bed.double", "Tu hospitalización y estancias")]),
         ("Mi cuenta", [("profile", "person.crop.circle", "Datos personales y seguridad")])
@@ -327,7 +329,7 @@ struct ContentView: View {
     private var patientMenu: some View {
         let groups = Self.patientMenuGroups.map { group in
             (group.0, group.1.compactMap { item -> (id: String, icon: String, note: String, title: String)? in
-                guard let title = item.id == "rooms" ? "Habitaciones" : store.screens.first(where: { $0.id == item.id })?.title,
+                guard let title = item.id == "rooms" ? "Habitaciones" : item.id == "ambulance" ? "Ambulancia" : store.screens.first(where: { $0.id == item.id })?.title,
                       matches(title) || matches(item.note) else { return nil }
                 return (item.id, item.icon, item.note, title)
             })
@@ -376,6 +378,7 @@ struct ContentView: View {
                 }.buttonStyle(.plain).disabled(store.busy)
             }
             if matches("Habitaciones") { shortcut("Habitaciones", icon: "bed.double", id: "rooms") }
+            if !isDoctor && matches("Ambulancia") { shortcut("Ambulancia", icon: "cross.case.fill", id: "ambulance") }
             if store.roles.count > 1 { Button("Cambiar perfil") { store.switchRole() }.disabled(store.busy) }
             Button("Cerrar sesión") { Task { await store.signOut() } }.disabled(store.busy).frame(maxWidth: .infinity).padding()
         }
@@ -496,6 +499,8 @@ struct ContentView: View {
         if !isDoctor {
             PatientHospitalizationView(data: store.hospitalizations, error: store.hospitalizationError, linked: store.access?.patient_id != nil,
                                        loading: store.busy, search: search) { Task { await store.refreshScreen() } }
+        } else if let api = store.api {
+            DoctorRoomsView(api: api, search: search)
         } else { roomCatalog }
     }
 
@@ -545,7 +550,7 @@ struct ContentView: View {
 
     private var bottomBar: some View {
         let tabs: [(String, String, String)] = isDoctor ? [("home","Inicio","house"),("patients","Pacientes","person"),("consultation","Consultas","cross.fill"),("laboratory","Laboratorios","testtube.2"),("more","Más","line.3.horizontal")] : [("home","Inicio","house"),("appointments","Mis citas","calendar"),("health","Salud","heart"),("profile","Perfil","person"),("more","Más","line.3.horizontal")]
-        let active = !isDoctor && ["request", "schedule", "health"].contains(store.screenID) ? "health" : ["more", "health", "rooms"].contains(store.screenID) ? (store.screenID == "health" ? "health" : "more") : screen?.tab ?? "home"
+        let active = !isDoctor && ["request", "schedule", "health"].contains(store.screenID) ? "health" : ["more", "health", "rooms"].contains(store.screenID) || (!isDoctor && store.screenID == "ambulance") ? (store.screenID == "health" ? "health" : "more") : screen?.tab ?? "home"
         return HStack(spacing: 0) {
             ForEach(tabs.indices, id: \.self) { index in
                 let (id, label, icon) = tabs[index]

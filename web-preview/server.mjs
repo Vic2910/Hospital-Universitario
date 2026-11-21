@@ -10,6 +10,7 @@ const files = new Map([
   ['/patient-prescriptions.js', [new URL('./patient-prescriptions.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/patient-appointments.js', [new URL('./patient-appointments.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/applicant.js', [new URL('./applicant.js', import.meta.url), 'text/javascript; charset=utf-8']],
+  ['/care-services.js', [new URL('./care-services.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/app.js', [new URL('./app.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/api.js', [new URL('./api.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/modules.js', [new URL('./modules.js', import.meta.url), 'text/javascript; charset=utf-8']],

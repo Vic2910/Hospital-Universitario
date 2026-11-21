@@ -72,6 +72,8 @@ struct PatientDashboardView: View {
                 PatientQuickAccessCard(icono: "cross.case", titulo: "Solicitar atención") { navigate("request") }
                 PatientQuickAccessCard(icono: "testtube.2", titulo: "Laboratorios") { navigate("laboratory") }
                 PatientQuickAccessCard(icono: "pills", titulo: "Recetas") { navigate("prescriptions") }
+                PatientQuickAccessCard(icono: "cross.case.fill", titulo: "Ambulancia") { navigate("ambulance") }
+                PatientQuickAccessCard(icono: "bed.double", titulo: "Habitaciones") { navigate("rooms") }
             }
         }
     }

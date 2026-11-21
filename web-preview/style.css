@@ -540,3 +540,34 @@ button.primary.admission-new{border-radius:16px;min-height:56px;font-size:14px;f
 .stay-section{background:#fff;border-radius:16px;padding:14px;display:grid;gap:10px;flex-shrink:0}.stay-section h3{font-size:13px;color:var(--wine)}.stay-section .card{background:var(--paper)}
 .stay-past{display:flex;align-items:center;gap:10px;width:100%;background:#fff;border-radius:14px;padding:12px;text-align:left;flex-shrink:0}.stay-past .badge{min-width:0}
 .stay-empty{background:#fff;border-radius:18px;padding:28px 18px;text-align:center;display:grid;gap:8px;justify-items:center;flex-shrink:0}.stay-empty-icon{font-size:26px;width:56px;height:56px;border-radius:50%;background:var(--rose);color:var(--wine);display:grid;place-content:center}.stay-empty h3{font-size:14px}.stay-empty p{font-size:12px;color:var(--muted);line-height:1.5}.stay-back{justify-self:start;align-self:flex-start;padding-left:0}
+
+/* Ambulancia del paciente y Habitaciones del médico (care-services.js) */
+.care-hero{background:var(--wine,#770727);color:#fff;border-radius:24px;padding:20px;margin-bottom:14px}
+.care-hero small{font-weight:800;letter-spacing:.12em;opacity:.85;font-size:11px}
+.care-hero h2{margin:6px 0 4px;font-size:20px}
+.care-hero p{margin:0;opacity:.9;font-size:14px}
+.care-stats{display:flex;gap:22px;margin-top:8px}
+.care-stats div{display:flex;flex-direction:column}
+.care-stats strong{font-size:24px}
+.care-stats span{font-size:12px;opacity:.9}
+.care-card{display:flex;flex-direction:column;gap:8px;align-items:stretch}
+.care-card h3{margin:0;font-size:15px}
+.care-card p{margin:0}
+.care-click{cursor:pointer}
+.care-click:hover{outline:1px solid var(--wine,#770727)}
+.care-selected{outline:2px solid var(--wine,#770727)}
+.care-disabled{opacity:.6}
+.care-muted{color:#757e91;font-size:13px}
+.care-strong{font-weight:600}
+.care-field{display:flex;flex-direction:column;gap:4px;font-size:13px;color:#757e91}
+.care-field input,.care-field textarea{font:inherit;color:#242936;padding:10px 12px;border:1px solid #e6e8ee;border-radius:12px;background:#f8f8fa}
+.care-field textarea{min-height:64px;resize:vertical}
+.care-check{display:flex;gap:8px;align-items:center;font-size:14px}
+.care-actions{display:flex;gap:12px;flex-wrap:wrap}
+.care-tabs{display:flex;gap:6px;background:#eceef3;border-radius:12px;padding:4px;margin-bottom:12px}
+.care-tab{flex:1;border:0;background:transparent;padding:8px;border-radius:9px;font:inherit;cursor:pointer}
+.care-tab.active{background:#fff;font-weight:600}
+.care-notice{color:#21804d;background:#e3f6ea;padding:10px 12px;border-radius:12px;font-size:13px}
+.care-error{color:#c0262d;background:#fdecec;padding:10px 12px;border-radius:12px;font-size:13px}
+.care-danger{color:#c0262d}
+.care-danger-fill{background:#c0262d}

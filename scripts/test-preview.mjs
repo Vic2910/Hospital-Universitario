@@ -67,6 +67,7 @@ export function createApp(roleCodes = ['doctor'], options = {}) {
     if (url.endsWith('/rpc/my_attention_context')) return response({person:{...accountMetadata,dui:'01234567-8',email:'persona@example.test'},specialties:[{id:1,name:'Medicina general',available:true}],symptoms:[{id:1,name:'Fiebre'},{id:2,name:'Otro'}]});
     if (url.endsWith('/rpc/my_attention_requests')) return response([]);
     if (url.endsWith('/rpc/submit_my_attention_request')) return response(params.p_key);
+    if (url.endsWith('/rpc/doctor_native_rooms')) return response({rooms:[{id:uuid,code:'VIP-301',kind:'vip',floor:'Piso 3',active:true,beds:[{id:uuid,code:'VIP-301-A',state:'disponible',available:true,mine:false,occupant:null}]}],hospitalized:[],checked_at:'2026-11-21T00:00:00Z'});
     if (url.includes('/rest/v1/rooms?')) return response([{id:uuid,floor_id:1,kind:'vip',code:'VIP-301',active:true}]);
     if (url.includes('/rest/v1/staff_shifts?')) return response([{id:uuid,staff_id:uuid,starts_at:'2026-11-13T07:00:00Z',ends_at:'2026-11-13T15:00:00Z',shift_type:'ordinario',status:'programado'}]);
     if (url.includes('/rest/v1/specialties?')) return response([{id:1,name:'Medicina general'}]);
@@ -74,7 +75,7 @@ export function createApp(roleCodes = ['doctor'], options = {}) {
     throw new Error('Unexpected request: ' + url);
   };
   const context = {Date,Intl,console,URL,crypto:webcrypto,AbortSignal,fetch,setInterval(){},clearInterval(){},setTimeout,clearTimeout,sessionStorage:storage,document:{body,hidden:false,querySelector:selector => find(node => node.id === selector.slice(1)),createElement:tag => new Element(tag),addEventListener(){}}};
-  for (const path of ['HospitalUniversitario/HospitalUniversitario/Shared/hospital-core.js','web-preview/api.js','web-preview/modules.js','web-preview/doctor-dashboard.js','web-preview/clinical-labs.js','web-preview/patient-history.js','web-preview/patient-prescriptions.js','web-preview/patient-appointments.js','web-preview/applicant.js','web-preview/app.js']) runInNewContext(read(path),context);
+  for (const path of ['HospitalUniversitario/HospitalUniversitario/Shared/hospital-core.js','web-preview/api.js','web-preview/modules.js','web-preview/doctor-dashboard.js','web-preview/clinical-labs.js','web-preview/patient-history.js','web-preview/patient-prescriptions.js','web-preview/patient-appointments.js','web-preview/applicant.js','web-preview/care-services.js','web-preview/app.js']) runInNewContext(read(path),context);
   const app = find(node => node.id === 'app');
   return {
     calls, stored, body, app,

@@ -34,7 +34,7 @@ final class HospitalStore: ObservableObject {
     @Published private(set) var attention: PatientAttentionModel?
     private var roomsCursor: ResourceCursor?
     private var shiftsCursor: ResourceCursor?
-    private var api: HospitalAPI?
+    private(set) var api: HospitalAPI?
     private var restored = false
 
     init() {
