@@ -22,6 +22,23 @@ struct PatientPrescriptionRecord: Identifiable, Codable {
         .init(id: "rx-demo-2", issuedAt: "2026-10-01T14:25:00-06:00", dateLabel: "1 oct 2026", pickup: "Retirada", medicines: [
             .init(name: "CLARITROMICINA 500 MG / TABLETA", dose: "1 tableta", frequency: "12 horas", route: "Oral", duration: "10 días", quantity: "20 tabletas", observations: "Datos ilustrativos de la referencia visual.")])
     ]
+    /// Paridad con HospitalPatientPrescriptions.parseLine (web): separa «1 Tabletas · cada 8 horas · oral · 5 días · 15 unidades · indicaciones».
+    static func parseLine(name: String, value: String) -> PatientPrescriptionMedicine {
+        var dose = missing, frequency = missing, route = missing, duration = missing, quantity = missing, rest: [String] = []
+        func matches(_ text: String, _ pattern: String) -> Bool { text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil }
+        func strip(_ text: String, _ pattern: String) -> String { text.replacingOccurrences(of: pattern, with: "", options: [.regularExpression, .caseInsensitive]) }
+        let routes = "^(v[ií]a\\s+)?(oral|intravenosa|intramuscular|subcut[aá]nea|t[oó]pica|sublingual|inhalada|rectal|of[tá]lmica|[oó]tica|nasal|vaginal|transd[eé]rmica|cut[aá]nea)$"
+        for raw in value.split(separator: "·") {
+            let part = raw.trimmingCharacters(in: .whitespacesAndNewlines); if part.isEmpty { continue }
+            if frequency == missing && matches(part, "^cada\\s+\\d") { frequency = strip(part, "^cada\\s+").replacingOccurrences(of: "\\bh$", with: "horas", options: .regularExpression) }
+            else if route == missing && matches(part, routes) { let r = strip(part, "^v[ií]a\\s+"); route = r.prefix(1).uppercased() + r.dropFirst() }
+            else if duration == missing && matches(part, "^(durante\\s+)?\\d+([.,]\\d+)?\\s*d[ií]as?$") { duration = strip(part, "^durante\\s+") }
+            else if quantity == missing && matches(part, "^(cantidad:?\\s*)?\\d+([.,]\\d+)?\\s*(unidades?|en total)$") { quantity = strip(part, "^cantidad:?\\s*") }
+            else if dose == missing && rest.isEmpty && matches(part, "^\\d+([.,]\\d+)?\\s*\\S") { dose = part }
+            else { rest.append(part) }
+        }
+        return .init(name: name, dose: dose, frequency: frequency, route: route, duration: duration, quantity: quantity, observations: rest.isEmpty ? missing : rest.joined(separator: " · "))
+    }
     static func from(_ item: MobileItem) -> Self {
         let state = item.details.first { $0.label.localizedCaseInsensitiveCompare("Estado de retiro") == .orderedSame }?.value.lowercased() ?? item.status.lowercased()
         let normalized = state.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -32,7 +49,7 @@ struct PatientPrescriptionRecord: Identifiable, Codable {
                 duration: $0.duration ?? missing, quantity: $0.quantity ?? missing, observations: $0.observations ?? missing)
         }
         let rows = !structured.isEmpty ? structured : item.details.filter { $0.label.localizedCaseInsensitiveCompare("Estado de retiro") != .orderedSame }.map {
-            PatientPrescriptionMedicine(name: $0.label, dose: missing, frequency: missing, route: missing, duration: missing, quantity: missing, observations: $0.value.isEmpty ? missing : $0.value)
+            parseLine(name: $0.label, value: $0.value)
         }
         return .init(id: item.id.uuidString, issuedAt: item.event_at, dateLabel: DoctorDate.parse(item.event_at).map { format.string(from: $0) } ?? missing,
             pickup: pickup, medicines: rows.isEmpty ? [.init(name: item.title, dose: missing, frequency: missing, route: missing, duration: missing, quantity: missing, observations: item.subtitle ?? missing)] : rows)

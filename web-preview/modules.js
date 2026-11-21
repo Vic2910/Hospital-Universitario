@@ -795,7 +795,7 @@
       const editor=this.node('div',null,'consultation-editor');parent.append(editor);
       const status=this.node('div',null,'consultation-save-state');status.setAttribute('role','status');
       const statusText=this.node('span');status.append(statusText);
-      const refreshStatus=()=>{statusText.textContent=this.saveState==='saving'?'Guardando…':this.saveState==='failed'?'Error al guardar · Lo escrito sigue en pantalla.':this.pendingChanges?'Cambios pendientes de guardar':this.saveState==='saved'?'Guardado correctamente':'Sin cambios pendientes';status.setAttribute('data-state',this.pendingChanges&&this.saveState!=='failed'?'pending':this.saveState);};
+      const refreshStatus=()=>{statusText.textContent=this.saveState==='saving'?'Guardando…':this.saveState==='failed'?'Error al guardar · Lo escrito sigue en pantalla.':this.pendingChanges?'Cambios pendientes de guardar':this.saveState==='saved'?'Guardado correctamente':'Sin cambios pendientes';status.setAttribute('data-state',this.pendingChanges&&this.saveState!=='failed'?'pending':this.saveState);status.hidden=!this.pendingChanges&&!['saving','failed','saved'].includes(this.saveState);};
       refreshStatus();this.command(status,'Guardar avances',()=>this.saveNote());editor.append(status);
       editor.addEventListener('input',refreshStatus);
       if(this.conflict){

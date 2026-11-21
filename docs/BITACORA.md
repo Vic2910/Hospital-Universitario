@@ -1,5 +1,12 @@
 # Bitácora de trabajo
 
+## 2026-11-20 — Recetas «No hay datos reales», selector de unidad y barra de guardado
+
+- **Recetas:** cuando el registro no trae `medicines` estructurados, el texto «1 Tabletas · cada 8 horas · oral · …» se separa en Dosis, Cada, Vía, Durante y Cantidad (`PatientPrescriptionRecord.parseLine` ↔ `HospitalPatientPrescriptions.parseLine`); el resto queda en Observaciones. Durante/Cantidad siguen como «No hay datos reales» si el texto no los incluye.
+- **Unidad de dosis:** selector con `DoctorClinicalRules.doseUnits` / `HospitalCore.doctorClinical.doseUnits` también en el formulario de receta de `ClinicalLabDesignView.swift` y `clinical-labs.js`.
+- **Barra de guardado:** «Sin cambios pendientes» ya no se muestra; la barra aparece solo con cambios, guardando, guardado o error (`DoctorModuleView.swift`, `modules.js`, CSS). `test-doctor-preview-live.mjs` ajustado.
+- **Verificaciones:** `test-preview.mjs` y `check-project.py` OK; parser JS probado con el texto real. Swift no compilado (requiere Mac); `test-doctor-preview-live.mjs` no ejecutado.
+
 ## 2026-11-21 — Correcciones del flujo Doctor → Paciente → Farmacia
 
 - **Recetas del paciente [hallazgo en Supabase]:** la receta se guardaba bien (dosis, unidad, frecuencia, vía, duración, cantidad y observaciones en `prescription_items`), pero `hospital-core.js` las unía en un solo texto y «Mis recetas» lo mostraba como observación. Ahora el núcleo publica `medicines` con cada campo y `PatientPrescriptionsView` (Swift) y `patient-prescriptions.js` los usan; también pide `duration_days` y «entregada» se muestra como retirada.

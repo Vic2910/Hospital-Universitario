@@ -6,13 +6,25 @@
       {id:'rx-demo-1',issuedAt:'2026-10-30T09:00:00-06:00',dateLabel:'30 oct 2026',pickup:'Pendiente',medicines:[{name:'MEDICAMENTO DE EJEMPLO',dose:'1 unidad',frequency:'24 horas',route:'Oral',duration:'5 días',quantity:'5 unidades',observations:'Ejemplo de receta pendiente de retirar.'}]},
       {id:'rx-demo-2',issuedAt:'2026-10-01T14:25:00-06:00',dateLabel:'1 oct 2026',pickup:'Retirada',medicines:[{name:'CLARITROMICINA 500 MG / TABLETA',dose:'1 tableta',frequency:'12 horas',route:'Oral',duration:'10 días',quantity:'20 tabletas',observations:'Datos ilustrativos de la referencia visual.'}]}
     ];
+    // Paridad con PatientPrescriptionRecord.parseLine (Swift): separa «1 Tabletas · cada 8 horas · oral · 5 días · 15 unidades · indicaciones».
+    static parseLine(name,value){
+      const out={name,dose:missing,frequency:missing,route:missing,duration:missing,quantity:missing},rest=[];
+      for(const raw of String(value||'').split('·')){const part=raw.trim();if(!part)continue;const low=part.toLocaleLowerCase('es');
+        if(out.frequency===missing&&/^cada\s+\d/.test(low))out.frequency=part.replace(/^cada\s+/i,'').replace(/\bh$/,'horas');
+        else if(out.route===missing&&/^(v[ií]a\s+)?(oral|intravenosa|intramuscular|subcut[aá]nea|t[oó]pica|sublingual|inhalada|rectal|of[tá]lmica|[oó]tica|nasal|vaginal|transd[eé]rmica|cut[aá]nea)$/.test(low))out.route=part.replace(/^v[ií]a\s+/i,'').replace(/^./,c=>c.toLocaleUpperCase('es'));
+        else if(out.duration===missing&&/^(durante\s+)?\d+([.,]\d+)?\s*d[ií]as?$/.test(low))out.duration=part.replace(/^durante\s+/i,'');
+        else if(out.quantity===missing&&/^(cantidad:?\s*)?\d+([.,]\d+)?\s*(unidades?|en total)$/.test(low))out.quantity=part.replace(/^cantidad:?\s*/i,'');
+        else if(out.dose===missing&&/^\d+([.,]\d+)?\s*\S/.test(low)&&!rest.length)out.dose=part;
+        else rest.push(part);}
+      out.observations=rest.join(' · ')||missing;return out;
+    }
     static fromItems(items){return items.map(item=>{
       const fields=item.details||[],state=(fields.find(field=>field.label.toLocaleLowerCase('es')==='estado de retiro')?.value||item.status||'').trim().toLowerCase();
       const pickup=['retirada','entregada','dispensed','collected','withdrawn'].includes(state)?'Retirada':['pendiente','pickup_pending','pending'].includes(state)?'Pendiente':'Retiro por confirmar';
       const date=new Date(item.event_at),dateLabel=Number.isFinite(date.getTime())?new Intl.DateTimeFormat('es-GT',{timeZone:'America/Guatemala',day:'numeric',month:'short',year:'numeric'}).format(date):missing;
       // Paridad con PatientPrescriptionsView.from (Swift): campos separados cuando el núcleo los publica.
       const structured=(item.medicines||[]).map(m=>({name:m.name,dose:m.dose||missing,frequency:m.frequency||missing,route:m.route||missing,duration:m.duration||missing,quantity:m.quantity||missing,observations:m.observations||missing}));
-      const medicines=structured.length?structured:fields.filter(field=>field.label.toLocaleLowerCase('es')!=='estado de retiro').map(field=>({name:field.label,dose:missing,frequency:missing,route:missing,duration:missing,quantity:missing,observations:field.value||missing}));
+      const medicines=structured.length?structured:fields.filter(field=>field.label.toLocaleLowerCase('es')!=='estado de retiro').map(field=>HospitalPatientPrescriptions.parseLine(field.label,field.value));
       return{id:item.id,issuedAt:item.event_at,dateLabel,pickup,medicines:medicines.length?medicines:[{name:item.title,dose:missing,frequency:missing,route:missing,duration:missing,quantity:missing,observations:item.subtitle||missing}]};
     });}
     constructor(ui){this.ui=ui;}

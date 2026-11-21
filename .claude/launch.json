@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--preserve-symlinks", "--preserve-symlinks-main", "web-preview/server.mjs"],
+      "port": 4173
+    }
+  ]
+}

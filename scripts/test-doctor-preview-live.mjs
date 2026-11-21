@@ -34,7 +34,7 @@ assert.equal(field('Síntomas actuales').value,'','Los síntomas del paciente no
 assert.match(ui.app.textContent,/Reportados por el paciente · solo lectura/);assert.match(ui.app.textContent,/Fiebre/,'Síntomas originales visibles');
 assert.equal(ui.app.all().some(n=>['input','textarea'].includes(n.tagName)&&n.value==='Fiebre'),false,'Los síntomas originales no son editables');
 assert.match(ui.app.textContent,/Motivo original autorizado/,'Motivo de la solicitud visible');assert.match(ui.app.textContent,/Datos de la cita/);
-assert.match(ui.app.textContent,/Médico autorizado/);assert.match(ui.app.textContent,/Sin cambios pendientes/,'Abrir no crea cambios: nada se precarga');assert.match(ui.app.textContent,/Consultorio/);assert.match(ui.app.textContent,/35 años/);
+assert.match(ui.app.textContent,/Médico autorizado/);assert.equal(ui.app.textContent.includes('Sin cambios pendientes'),false,'Abrir no crea cambios: la barra de guardado queda oculta');assert.match(ui.app.textContent,/Consultorio/);assert.match(ui.app.textContent,/35 años/);
 // Datos físicos y las cuatro notas que exige el servidor (doctor_native_finish), con plan propio.
 for(const label of ['Peso (kg)','Altura (cm)','Temperatura (°C)','Síntomas actuales','Exploración y observaciones','Diagnóstico','Plan de tratamiento'])assert.ok(field(label),'Campo '+label);
 for(const gone of ['Presión sistólica (mmHg)','Presión diastólica (mmHg)','Frecuencia cardíaca (lpm)','Código del diagnóstico principal (opcional)'])assert.equal(field(gone),undefined,'Sin campo '+gone);

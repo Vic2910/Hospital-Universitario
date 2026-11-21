@@ -693,7 +693,8 @@ struct DoctorModuleView: View {
             if let blocker { HospitalNotice(text: blocker) }
         } else if let encounter = model.activeConsultation {
             if model.canEditConsultation {
-                saveStatusBar
+                // Solo visible con cambios, guardando o error: «Sin cambios pendientes» tapaba el formulario.
+                if model.hasUnsavedChanges || model.saveState != .idle { saveStatusBar }
                 if let server = model.conflictNote { conflictCard(server) }
                 ConsultationAppointmentCard(appointment: appointment, doctorName: workspace.doctor_name, openedAt: DoctorDate.parse(encounter.started_at))
                 DisclosureGroup { patientChart(workspace, showPicker: false).padding(.top, 12) } label: {

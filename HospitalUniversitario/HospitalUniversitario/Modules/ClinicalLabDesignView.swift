@@ -219,7 +219,7 @@ struct ClinicalLabDesignView: View {
                 Text("Borrador local. No emite una receta clínica.").font(.footnote)
                 TextField("Medicamento", text: $medication).textFieldStyle(.roundedBorder)
                 TextField("Dosis", text: $rxDose).keyboardType(.decimalPad).textFieldStyle(.roundedBorder)
-                TextField("Unidad de dosis", text: $rxUnit).textFieldStyle(.roundedBorder)
+                Picker("Unidad de dosis", selection: $rxUnit) { Text("Selecciona una unidad").tag(""); ForEach(DoctorClinicalRules.doseUnits, id: \.self) { Text($0).tag($0) } }.pickerStyle(.menu)
                 TextField("Cada cuántas horas", text: $rxFrequency).keyboardType(.decimalPad).textFieldStyle(.roundedBorder)
                 TextField("Vía", text: $rxRoute).textFieldStyle(.roundedBorder)
                 TextField("Durante (días)", text: $rxDuration).keyboardType(.numberPad).textFieldStyle(.roundedBorder)
